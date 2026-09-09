@@ -2,9 +2,7 @@
 
 ## 2.3.2
 
-- Fixed solid textures after disabling the mod in pause menus
-- Fixed split image after graphics reset
-- Preserve texcoord attrib during passes
+- (hopefully) fixed solid textures after disabling the mod in pause menus and other bugs
 
 ## 2.3.1
 

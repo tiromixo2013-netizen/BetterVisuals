@@ -19,10 +19,7 @@ namespace bv::render {
 
     bool PostProcessPipeline::initialize() {
         if (m_framebuffers[0] != 0) {
-            if (glIsFramebuffer(m_framebuffers[0]) == GL_TRUE) {
-                return true;
-            }
-            destroyResources();
+            return true;
         }
 
         glGenTextures(static_cast<GLsizei>(m_textures.size()), m_textures.data());
