@@ -686,7 +686,45 @@ namespace {
 namespace {
     std::atomic<bool> g_eglSwapHookReached = false;
     std::atomic<bool> g_eglSwapContextMismatchLogged = false;
+    std::atomic<bool> g_eglPresentationDiagnosticsLogged = false;
     std::atomic<bool> g_frameHistoryEnabled = false;
+
+    bool hasEglExtension(char const* extensions, std::string_view name) {
+        if (!extensions || name.empty()) return false;
+        std::string_view list(extensions);
+        std::size_t position = 0;
+        while ((position = list.find(name, position)) != std::string_view::npos) {
+            auto const leftBoundary = position == 0 || list[position - 1] == ' ';
+            auto const end = position + name.size();
+            auto const rightBoundary = end == list.size() || list[end] == ' ';
+            if (leftBoundary && rightBoundary) return true;
+            position = end;
+        }
+        return false;
+    }
+
+    void logAndroidPresentationCapabilities(EGLDisplay display) {
+        if (g_eglPresentationDiagnosticsLogged.exchange(true, std::memory_order_relaxed)) {
+            return;
+        }
+
+        auto const extensions = eglQueryString(display, EGL_EXTENSIONS);
+        auto const hasPresentationTime =
+            hasEglExtension(extensions, "EGL_ANDROID_presentation_time");
+        auto const hasFrameTimestamps =
+            hasEglExtension(extensions, "EGL_ANDROID_get_frame_timestamps");
+        auto const presentationTimeProc =
+            eglGetProcAddress("eglPresentationTimeANDROID") != nullptr;
+        auto const frameTimestampsProc =
+            eglGetProcAddress("eglGetFrameTimestampsANDROID") != nullptr;
+
+        log::info(
+            "[FrameGeneration] EGL pacing capabilities: presentation-time extension={}, "
+            "entry-point={}, frame-timestamps extension={}, entry-point={}",
+            hasPresentationTime, presentationTimeProc,
+            hasFrameTimestamps, frameTimestampsProc
+        );
+    }
 
     // Two GPU-resident snapshots of the final EGL window surface, plus an
     // experimental motion-matched midpoint texture. Display pacing is separate.
@@ -838,7 +876,11 @@ namespace {
         if (result == EGL_TRUE && isGamePresentationContext &&
             !g_eglSwapHookReached.exchange(true, std::memory_order_relaxed)) {
             log::info("[FrameGeneration] Android EGL swap reached on the active GL context");
-        } else if (result == EGL_TRUE && !isGamePresentationContext &&
+        }
+        if (result == EGL_TRUE && isGamePresentationContext) {
+            logAndroidPresentationCapabilities(display);
+        }
+        if (result == EGL_TRUE && !isGamePresentationContext &&
             !g_eglSwapContextMismatchLogged.exchange(true, std::memory_order_relaxed)) {
             log::warn("[FrameGeneration] EGL swap observed without matching current GL context; frame processing remains disabled");
         }
