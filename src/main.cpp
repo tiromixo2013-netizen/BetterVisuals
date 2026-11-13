@@ -108,10 +108,6 @@ namespace {
     // source-resolution ratios for the FSR 1 quality presets.
     std::atomic<float> g_fsrPresetScale = 0.f;
     std::atomic<float> g_renderScale = 1.f;
-    std::atomic<bool> g_adaptiveResolutionEnabled = false;
-    std::atomic<float> g_adaptiveResolutionScale = 1.f;
-    int g_adaptiveSlowFrames = 0;
-    int g_adaptiveFastFrames = 0;
     std::atomic<bool> g_casEnabled = false;
     std::atomic<float> g_casSharpness = 0.f;
     std::atomic<float> g_fsrReconstructionBlend = 1.f;
@@ -310,60 +306,6 @@ namespace {
         );
     }
 
-    void recordAdaptiveFrameTime(float elapsedMs) {
-        if (!g_adaptiveResolutionEnabled.load(std::memory_order_relaxed)) {
-            return;
-        }
-
-        // CPU/driver-submission heuristic only; never stalls or waits on the GPU.
-        if (elapsedMs > 19.0f) {
-            ++g_adaptiveSlowFrames;
-            g_adaptiveFastFrames = 0;
-        }
-        else if (elapsedMs < 14.5f) {
-            ++g_adaptiveFastFrames;
-            g_adaptiveSlowFrames = 0;
-        }
-        else {
-            g_adaptiveSlowFrames = 0;
-            g_adaptiveFastFrames = 0;
-        }
-
-        auto scale = g_adaptiveResolutionScale.load(std::memory_order_relaxed);
-        if (g_adaptiveSlowFrames >= 8) {
-            scale = std::max(0.50f, scale - 0.05f);
-            g_adaptiveSlowFrames = 0;
-            g_adaptiveFastFrames = 0;
-            g_adaptiveResolutionScale.store(scale, std::memory_order_relaxed);
-        }
-        else if (g_adaptiveFastFrames >= 90) {
-            scale = std::min(1.0f, scale + 0.025f);
-            g_adaptiveSlowFrames = 0;
-            g_adaptiveFastFrames = 0;
-            g_adaptiveResolutionScale.store(scale, std::memory_order_relaxed);
-        }
-    }
-
-    class AdaptiveResolutionFrameTimer {
-    public:
-        AdaptiveResolutionFrameTimer()
-          : m_enabled(g_adaptiveResolutionEnabled.load(std::memory_order_relaxed)),
-            m_start(m_enabled ? std::chrono::steady_clock::now()
-                              : std::chrono::steady_clock::time_point{}) {}
-
-        ~AdaptiveResolutionFrameTimer() {
-            if (m_enabled) {
-                auto const elapsed = std::chrono::duration<float, std::milli>(
-                    std::chrono::steady_clock::now() - m_start
-                ).count();
-                recordAdaptiveFrameTime(elapsed);
-            }
-        }
-
-    private:
-        bool m_enabled;
-        std::chrono::steady_clock::time_point m_start;
-    };
 
     PostProcessConfig selectedPostProcessConfig() {
         bool const fun = g_funEnabled.load(std::memory_order_relaxed);
@@ -573,7 +515,6 @@ namespace {
     }
 
     void renderSceneWithPostProcessing(auto&& visitNext) {
-        AdaptiveResolutionFrameTimer adaptiveTimer;
         auto const config = selectedPostProcessConfig();
         GLint callerFramebuffer = 0;
         std::array<GLint, 4> callerViewport = {};
@@ -593,10 +534,8 @@ namespace {
         // The quality preset selects the base input resolution. Render Scale is
         // an independent multiplier on top of that base (100% = unchanged).
         // FSR 1 is an upscaler, so never ask EASU to downscale above native.
-        auto const adaptiveScale = g_adaptiveResolutionEnabled.load(std::memory_order_relaxed) ?
-            g_adaptiveResolutionScale.load(std::memory_order_relaxed) : 1.f;
         auto const requestedScale =
-            (fsrPresetScale > 0.f ? fsrPresetScale : 1.f) * configuredScale * adaptiveScale;
+            (fsrPresetScale > 0.f ? fsrPresetScale : 1.f) * configuredScale;
         auto const renderScale = std::clamp(
             requestedScale, 0.25f, config.upscaling == UpscaleMethod::Fsr ? 1.f : 1.2f
         );
@@ -749,14 +688,6 @@ $on_mod(Loaded) {
     applyFullScene(Mod::get()->getSettingValue<bool>("full-scene-effects"));
     listenForSettingChanges<bool>("full-scene-effects", applyFullScene);
     bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.2f, 1.f);
-    auto applyAdaptiveResolution = [](bool enabled) {
-        g_adaptiveResolutionEnabled.store(enabled, std::memory_order_relaxed);
-        g_adaptiveResolutionScale.store(1.f, std::memory_order_relaxed);
-        g_adaptiveSlowFrames = 0;
-        g_adaptiveFastFrames = 0;
-    };
-    applyAdaptiveResolution(Mod::get()->getSettingValue<bool>("adaptive-resolution"));
-    listenForSettingChanges<bool>("adaptive-resolution", applyAdaptiveResolution);
     bindStringSetting("upscale-method", updateUpscaleMethod);
     bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
