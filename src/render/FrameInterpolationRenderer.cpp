@@ -148,6 +148,7 @@ void main() {
     ).rgb;
     gl_FragColor = vec4((fromPrevious + fromCurrent) * 0.5, 1.0);
 }
+)glsl";
 
 } // namespace
 
