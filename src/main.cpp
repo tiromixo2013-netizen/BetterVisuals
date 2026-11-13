@@ -549,12 +549,16 @@ namespace {
             visitNext();
             return;
         }
-        auto const internalWidth = std::min(
-            scaledDimension(width, effectiveScale), static_cast<GLsizei>(maxTextureSize)
+        // Apply the hardware texture limit as one uniform scale factor.
+        // Clamping width and height independently distorts the scene aspect ratio
+        // whenever only one dimension exceeds GL_MAX_TEXTURE_SIZE.
+        auto const maxDimensionScale = std::min(
+            static_cast<float>(maxTextureSize) / static_cast<float>(width),
+            static_cast<float>(maxTextureSize) / static_cast<float>(height)
         );
-        auto const internalHeight = std::min(
-            scaledDimension(height, effectiveScale), static_cast<GLsizei>(maxTextureSize)
-        );
+        auto const boundedScale = std::min(effectiveScale, maxDimensionScale);
+        auto const internalWidth = scaledDimension(width, boundedScale);
+        auto const internalHeight = scaledDimension(height, boundedScale);
         auto const needsPresentation = internalWidth != width || internalHeight != height;
         auto const needsDownsample = internalWidth > width || internalHeight > height;
         if (effectCount == 0 && !needsPresentation) {
