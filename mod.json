@@ -77,10 +77,10 @@
 		"render-scale": {
 			"type": "float",
 			"name": "Render Scale",
-			"description": "Render at a lower internal resolution, upscale to the current window size.",
+			"description": "Multiplier applied after the FSR quality preset (100% keeps the preset resolution). The final FSR input is capped at native resolution.",
 			"default": 1,
 			"min": 0.25,
-			"max": 1,
+			"max": 1.2,
 			"control": {
 				"arrows": true,
 				"arrow-step": 0.05,
@@ -256,7 +256,7 @@
 		"fsr-quality-preset": {
 			"type": "string",
 			"name": "FSR 1 Quality Preset",
-			"description": "Sets the internal render resolution used by FSR 1. Custom uses the Render Scale slider.",
+			"description": "Selects the base FSR 1 input resolution. Render Scale is then applied as an independent multiplier.",
 			"default": "Custom",
 			"one-of": [
 				"Custom",
