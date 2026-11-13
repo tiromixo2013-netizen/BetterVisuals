@@ -688,8 +688,8 @@ namespace {
     std::atomic<bool> g_eglSwapContextMismatchLogged = false;
     std::atomic<bool> g_frameHistoryEnabled = false;
 
-    // Two GPU-resident snapshots of the final EGL window surface. This is
-    // capture/history only; no synthetic frame is generated or presented here.
+    // Two GPU-resident snapshots of the final EGL window surface, plus an
+    // experimental motion-matched midpoint texture. Display pacing is separate.
     class AndroidFrameHistory final {
     public:
         void capture(EGLDisplay display, EGLSurface surface, EGLContext context) {
