@@ -41,7 +41,7 @@ def main() -> None:
     assert "config.upscaling == UpscaleMethod::Fsr" in source
     assert "g_fsrPresetScale.load" in source
     assert "(fsrPresetScale > 0.f ? fsrPresetScale : 1.f) * configuredScale" in source
-    assert "std::clamp(requestedScale, 0.25f, 1.f)" in source
+    assert "requestedScale, 0.25f, config.upscaling == UpscaleMethod::Fsr ? 1.f : 1.2f" in source
     assert "auto const aaScale = fsrPresetScale > 0.f ? 1.f : ssaaFactor(config.aa)" in source
     assert 'bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.2f, 1.f)' in source
     assert "GL_MAX_TEXTURE_SIZE" in source
