@@ -937,8 +937,8 @@ namespace {
     // experimental motion-matched midpoint texture. Display pacing is separate.
     class AndroidFrameHistory final {
     public:
-        void capture(EGLDisplay display, EGLSurface surface, EGLContext context) {
-            if (context == EGL_NO_CONTEXT) return;
+        bool capture(EGLDisplay display, EGLSurface surface, EGLContext context) {
+            if (context == EGL_NO_CONTEXT) return false;
             // CPU timer measures submission only; GPU time is queried separately.
             auto const cpuSubmitStart = std::chrono::steady_clock::now();
 
@@ -947,16 +947,17 @@ namespace {
             if (eglQuerySurface(display, surface, EGL_WIDTH, &width) != EGL_TRUE ||
                 eglQuerySurface(display, surface, EGL_HEIGHT, &height) != EGL_TRUE ||
                 width <= 0 || height <= 0) {
-                return;
+                return false;
             }
             GLint maxTextureSize = 0;
             glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
             if (maxTextureSize <= 0 || width > maxTextureSize || height > maxTextureSize) {
-                return;
+                return false;
             }
-            if (!retirePreviousFence(display)) return;
+            if (!retirePreviousFence(display)) return false;
 
             if (m_context != context) {
+                m_pendingTexture = 0;
                 // GL names from a lost context are invalid in the new context;
                 // do not attempt to delete them through the replacement context.
                 m_textures = {};
@@ -970,6 +971,7 @@ namespace {
             }
 
             if (width != m_width || height != m_height) {
+                m_pendingTexture = 0;
                 if (m_textures[0] || m_textures[1]) {
                     glDeleteTextures(static_cast<GLsizei>(m_textures.size()), m_textures.data());
                 }
@@ -1016,6 +1018,7 @@ namespace {
             }
 
             bool captured = false;
+            bool generated = false;
             if (m_textures[0] && m_textures[1] && m_width == width && m_height == height) {
                 // eglSwapBuffers presents the EGL window surface (default FB).
                 // Copy before the original swap invalidates/recycles its contents.
@@ -1038,14 +1041,14 @@ namespace {
                     auto const previousIndex = m_writeIndex;
                     auto const currentIndex = 1 - m_writeIndex;
                     if (m_interpolator.prepare(width, height) &&
-                        m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex]) &&
-                        m_interpolator.present()) {
-                        // Draw the midpoint into the current EGL back buffer before
-                        // the game's normal swap. This does not add a second swap.
-                        createCompletionFence(display);
+                        m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])) {
+                        // Keep the interpolated frame off-screen until the native
+                        // frame boundary is handled by the EGL swap detour.
+                        m_pendingTexture = m_textures[currentIndex];
+                        generated = true;
                         if (!m_pairLogged) {
                             m_pairLogged = true;
-                            log::info("[FrameGeneration] GPU midpoint generated and drawn to EGL back buffer");
+                            log::info("[FrameGeneration] GPU midpoint generated; queued for alternating presentation");
                         }
                     }
                     else if (!m_generationWarningLogged) {
@@ -1070,6 +1073,17 @@ namespace {
                 );
                 m_cpuSubmitMicros = 0;
             }
+            return generated;
+        }
+
+        bool presentMidpoint() {
+            return m_interpolator.present();
+        }
+        bool presentNativeFrame() {
+            return m_pendingTexture != 0 && m_interpolator.presentTexture(m_pendingTexture);
+        }
+        void finishPresentation(EGLDisplay display) {
+            createCompletionFence(display);
         }
 
     private:
@@ -1105,6 +1119,7 @@ namespace {
         std::uint64_t m_profiledCaptures = 0;
         std::uint64_t m_cpuSubmitMicros = 0;
         std::array<GLuint, 2> m_textures = {};
+        GLuint m_pendingTexture = 0;
         bv::render::FrameInterpolationRenderer m_interpolator;
         AndroidGpuTimer m_gpuTimer;
         EGLSyncKHR m_gpuFence = EGL_NO_SYNC_KHR;
@@ -1120,8 +1135,6 @@ namespace {
 
     AndroidFrameHistory g_androidFrameHistory;
     EGLBoolean betterVisualsEglSwapBuffers(EGLDisplay display, EGLSurface surface) {
-        // Confirm this is the active game GL context before treating this as
-        // a valid frame boundary. Never issue GL work from an unknown context.
         auto const context = eglGetCurrentContext();
         auto const currentDisplay = eglGetCurrentDisplay();
         auto const currentDrawSurface = eglGetCurrentSurface(EGL_DRAW);
@@ -1134,15 +1147,45 @@ namespace {
             applyAndroidSwapPolicy(display);
         }
 
-        // Capture the completed window-surface image before the original swap.
-        // Kept opt-in because full-resolution GPU copies can be expensive on mobile.
-        if (isGamePresentationContext &&
-            g_frameHistoryEnabled.load(std::memory_order_relaxed)) {
-            g_androidFrameHistory.capture(display, surface, context);
+        EGLBoolean result = EGL_FALSE;
+        bool const frameGenerationEnabled =
+            isGamePresentationContext &&
+            g_frameHistoryEnabled.load(std::memory_order_relaxed);
+
+        if (frameGenerationEnabled) {
+            bool const generated = g_androidFrameHistory.capture(display, surface, context);
+            if (generated && g_androidFrameHistory.presentMidpoint()) {
+                // TulipHook's ARM64 handler advances its per-thread chain index
+                // for nested calls. Calling eglSwapBuffers here therefore invokes
+                // the next hook/original function, not this detour recursively.
+                // Present order is: previous native frame (already on screen),
+                // generated midpoint, then the just-captured native frame.
+                auto const midpointSwap = eglSwapBuffers(display, surface);
+                if (midpointSwap != EGL_TRUE) {
+                    result = midpointSwap;
+                }
+                else if (g_androidFrameHistory.presentNativeFrame()) {
+                    g_androidFrameHistory.finishPresentation(display);
+                    result = eglSwapBuffers(display, surface);
+                }
+                else {
+                    log::warn("[FrameGeneration] Native-frame restore failed after midpoint swap");
+                    result = EGL_FALSE;
+                }
+            }
+            else {
+                // If interpolation is unavailable for this pair, keep the
+                // original native frame rather than presenting a stale midpoint.
+                if (generated) {
+                    (void)g_androidFrameHistory.presentNativeFrame();
+                }
+                result = eglSwapBuffers(display, surface);
+            }
+        }
+        else {
+            result = eglSwapBuffers(display, surface);
         }
 
-        // Geode's manual-hook chain forwards this call to the original EGL entry.
-        auto const result = eglSwapBuffers(display, surface);
         if (result == EGL_TRUE && isGamePresentationContext &&
             !g_eglSwapHookReached.exchange(true, std::memory_order_relaxed)) {
             log::info("[FrameGeneration] Android EGL swap reached on the active GL context");
