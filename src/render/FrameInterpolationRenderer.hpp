@@ -17,6 +17,7 @@ namespace bv::render {
         bool prepare(GLsizei width, GLsizei height);
         bool generate(GLuint previousFrame, GLuint currentFrame);
         bool present();
+        bool presentTexture(GLuint texture);
         GLuint outputTexture() const { return m_outputTexture; }
         void reset();
         void abandonContext();
