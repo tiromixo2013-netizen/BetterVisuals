@@ -74,6 +74,13 @@
 			"type": "title",
 			"name": "Rendering"
 		},
+		"frame-history-capture": {
+			"type": "bool",
+			"name": "Experimental Frame History Capture (Android)",
+			"description": "Stores the last two completed EGL surface frames on the GPU for future motion analysis. Capture only; does not generate or display extra frames. May reduce performance.",
+			"default": false,
+			"platforms": ["android"]
+		},
 		"render-scale": {
 			"type": "float",
 			"name": "Render Scale",
