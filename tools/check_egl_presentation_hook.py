@@ -13,7 +13,7 @@ def main() -> None:
     assert "eglGetCurrentSurface(EGL_DRAW)" in source
     assert "frame processing remains disabled" in source
     detour = source.split("EGLBoolean betterVisualsEglSwapBuffers", 1)[1].split("\n    }", 1)[0]
-    assert detour.count("eglSwapBuffers(display, surface)") == 2
+    assert detour.count("eglSwapBuffers(display, surface)") == 4  # midpoint, native restore, and two fallback paths
     assert "presentMidpoint()" in detour
     assert "presentNativeFrame()" in detour
     assert "per-thread chain index" in detour
