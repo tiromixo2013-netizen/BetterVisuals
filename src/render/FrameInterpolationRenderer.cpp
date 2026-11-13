@@ -81,7 +81,7 @@ void main() {
     if (c < best) { second = best; best = c; offset = vec2(0.0, searchStep.y); }
     else { second = min(second, c); }
 
-    // Reject weak, ambiguous and search-limit matches. Falling back to the
+    // Reject weak and ambiguous matches. Falling back to the
     // current frame creates no blended double image in uncertain regions.
     if (best > 0.08 || (second - best) < 0.003) {
         gl_FragColor = vec4(current, 1.0);
