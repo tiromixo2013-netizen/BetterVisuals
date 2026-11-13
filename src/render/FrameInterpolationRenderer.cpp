@@ -40,12 +40,9 @@ uniform sampler2D u_previous;
 uniform sampler2D u_current;
 uniform vec2 u_invResolution;
 
-float luma(vec3 c) {
-    return dot(c, vec3(0.299, 0.587, 0.114));
-}
-
 float matchCost(vec3 a, vec3 b) {
-    return abs(luma(a) - luma(b));
+    vec3 delta = abs(a - b);
+    return max(delta.r, max(delta.g, delta.b));
 }
 
 void considerCandidate(
