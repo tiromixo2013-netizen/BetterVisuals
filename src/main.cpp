@@ -110,7 +110,7 @@ namespace {
     std::atomic<float> g_renderScale = 1.f;
     std::atomic<bool> g_casEnabled = false;
     std::atomic<float> g_casSharpness = 0.f;
-    std::atomic<float> g_fsrSharpness = 0.5f;
+    std::atomic<float> g_fsrReconstructionBlend = 1.f;
     std::atomic<bool> g_bloomEnabled = false;
     std::atomic<float> g_bloomThreshold = 0.7f;
     std::atomic<float> g_bloomIntensity = 0.3f;
@@ -647,7 +647,7 @@ namespace {
                     g_ssaaRenderer.apply(sourceTexture);
                 }
                 else if (config.upscaling == UpscaleMethod::Fsr) {
-                    g_fsrRenderer.apply(sourceTexture, g_fsrSharpness.load(std::memory_order_relaxed));
+                    g_fsrRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
                 }
                 else {
                     g_renderScaleRenderer.apply(sourceTexture);
@@ -694,7 +694,7 @@ $on_mod(Loaded) {
     });
     bindBoolSetting("cas-enabled", g_casEnabled);
     bindDoubleSetting("cas-sharpness", g_casSharpness, 0.f, 1.f, 0.f);
-    bindDoubleSetting("fsr-sharpness", g_fsrSharpness, 0.f, 1.f, 0.5f);
+    bindDoubleSetting("fsr-sharpness", g_fsrReconstructionBlend, 0.f, 1.f, 1.f);
     bindBoolSetting("bloom-enabled", g_bloomEnabled);
     bindDoubleSetting("bloom-threshold", g_bloomThreshold, 0.f, 1.f, 0.7f);
     bindDoubleSetting("bloom-intensity", g_bloomIntensity, 0.f, 1.5f, 0.3f);
