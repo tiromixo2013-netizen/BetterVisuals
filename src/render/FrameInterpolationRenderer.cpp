@@ -150,6 +150,98 @@ void main() {
 }
 )glsl";
 
+    VertexAttributeState captureFramePassAttribute(GLuint index) {
+        VertexAttributeState state;
+        glGetVertexAttribiv(index, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &state.enabled);
+        glGetVertexAttribiv(index, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, &state.buffer);
+        glGetVertexAttribiv(index, GL_VERTEX_ATTRIB_ARRAY_SIZE, &state.size);
+        glGetVertexAttribiv(index, GL_VERTEX_ATTRIB_ARRAY_STRIDE, &state.stride);
+        glGetVertexAttribiv(index, GL_VERTEX_ATTRIB_ARRAY_TYPE, &state.type);
+        glGetVertexAttribiv(index, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED, &state.normalized);
+        glGetVertexAttribPointerv(index, GL_VERTEX_ATTRIB_ARRAY_POINTER, &state.pointer);
+        return state;
+    }
+
+    void restoreFramePassAttribute(GLuint index, VertexAttributeState const& state) {
+        glBindBuffer(GL_ARRAY_BUFFER, state.buffer);
+        glVertexAttribPointer(
+            index, state.size, state.type, static_cast<GLboolean>(state.normalized),
+            state.stride, state.pointer
+        );
+        if (state.enabled == GL_TRUE) glEnableVertexAttribArray(index);
+        else glDisableVertexAttribArray(index);
+    }
+
+    // The full GlStateGuard also queries blend equations, stencil functions,
+    // clear values and renderbuffer state. Frame interpolation changes none of
+    // those, so this smaller guard avoids dozens of driver queries per frame.
+    class FramePassStateGuard final {
+    public:
+        FramePassStateGuard() {
+            glGetIntegerv(GL_CURRENT_PROGRAM, &m_program);
+            glGetIntegerv(GL_ACTIVE_TEXTURE, &m_activeTexture);
+            glActiveTexture(GL_TEXTURE0);
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &m_textures[0]);
+            glActiveTexture(GL_TEXTURE1);
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &m_textures[1]);
+            glActiveTexture(static_cast<GLenum>(m_activeTexture));
+            glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &m_arrayBuffer);
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &m_framebuffer);
+            glGetIntegerv(GL_VIEWPORT, m_viewport);
+            glGetBooleanv(GL_COLOR_WRITEMASK, m_colorMask);
+            m_blend = glIsEnabled(GL_BLEND);
+            m_depthTest = glIsEnabled(GL_DEPTH_TEST);
+            m_stencilTest = glIsEnabled(GL_STENCIL_TEST);
+            m_scissorTest = glIsEnabled(GL_SCISSOR_TEST);
+            m_cullFace = glIsEnabled(GL_CULL_FACE);
+            m_attributes[0] = captureFramePassAttribute(FullscreenQuad::kPositionAttribute);
+            m_attributes[1] = captureFramePassAttribute(FullscreenQuad::kTexCoordAttribute);
+        }
+
+        ~FramePassStateGuard() {
+            restoreFramePassAttribute(FullscreenQuad::kPositionAttribute, m_attributes[0]);
+            restoreFramePassAttribute(FullscreenQuad::kTexCoordAttribute, m_attributes[1]);
+            glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(m_arrayBuffer));
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(m_textures[0]));
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(m_textures[1]));
+            glActiveTexture(static_cast<GLenum>(m_activeTexture));
+            glUseProgram(static_cast<GLuint>(m_program));
+            glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(m_framebuffer));
+            glViewport(m_viewport[0], m_viewport[1], m_viewport[2], m_viewport[3]);
+            glColorMask(m_colorMask[0], m_colorMask[1], m_colorMask[2], m_colorMask[3]);
+            restoreCapability(GL_BLEND, m_blend);
+            restoreCapability(GL_DEPTH_TEST, m_depthTest);
+            restoreCapability(GL_STENCIL_TEST, m_stencilTest);
+            restoreCapability(GL_SCISSOR_TEST, m_scissorTest);
+            restoreCapability(GL_CULL_FACE, m_cullFace);
+        }
+
+        FramePassStateGuard(FramePassStateGuard const&) = delete;
+        FramePassStateGuard& operator=(FramePassStateGuard const&) = delete;
+
+    private:
+        GLint m_program = 0;
+        GLint m_activeTexture = GL_TEXTURE0;
+        GLint m_textures[2] = {};
+        GLint m_arrayBuffer = 0;
+        GLint m_framebuffer = 0;
+        GLint m_viewport[4] = {};
+        GLboolean m_colorMask[4] = {};
+        GLboolean m_blend = GL_FALSE;
+        GLboolean m_depthTest = GL_FALSE;
+        GLboolean m_stencilTest = GL_FALSE;
+        GLboolean m_scissorTest = GL_FALSE;
+        GLboolean m_cullFace = GL_FALSE;
+        std::array<VertexAttributeState, 2> m_attributes = {};
+    };
+
+    void restoreCapability(GLenum capability, GLboolean enabled) {
+        if (enabled == GL_TRUE) glEnable(capability);
+        else glDisable(capability);
+    }
+
 } // namespace
 
 namespace bv::render {
@@ -246,7 +338,7 @@ namespace bv::render {
             m_width <= 0 || m_height <= 0) {
             return false;
         }
-        GlStateGuard state;
+        FramePassStateGuard state;
         glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
         glViewport(0, 0, m_width, m_height);
         glDisable(GL_BLEND);
@@ -277,7 +369,7 @@ namespace bv::render {
 
     bool FrameInterpolationRenderer::presentTexture(GLuint texture) {
         if (!texture || !m_presentProgram || m_surfaceWidth <= 0 || m_surfaceHeight <= 0) return false;
-        GlStateGuard state;
+        FramePassStateGuard state;
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, m_surfaceWidth, m_surfaceHeight);
         glDisable(GL_BLEND);
