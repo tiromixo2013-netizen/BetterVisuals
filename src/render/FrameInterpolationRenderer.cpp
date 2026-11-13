@@ -51,34 +51,34 @@ float matchCost(vec3 a, vec3 b) {
 
 void main() {
     vec3 current = texture2D(u_current, v_uv).rgb;
-    vec2 step = 2.0 * u_invResolution;
+    vec2 searchStep = 2.0 * u_invResolution;
 
     float best = matchCost(current, texture2D(u_previous, v_uv).rgb);
     float second = 1.0;
     vec2 offset = vec2(0.0);
 
     float c = matchCost(current, texture2D(
-        u_previous, clamp(v_uv + vec2(-step.x, 0.0), 0.0, 1.0)
+        u_previous, clamp(v_uv + vec2(-searchStep.x, 0.0), 0.0, 1.0)
     ).rgb);
-    if (c < best) { second = best; best = c; offset = vec2(-step.x, 0.0); }
+    if (c < best) { second = best; best = c; offset = vec2(-searchStep.x, 0.0); }
     else { second = min(second, c); }
 
     c = matchCost(current, texture2D(
-        u_previous, clamp(v_uv + vec2(step.x, 0.0), 0.0, 1.0)
+        u_previous, clamp(v_uv + vec2(searchStep.x, 0.0), 0.0, 1.0)
     ).rgb);
-    if (c < best) { second = best; best = c; offset = vec2(step.x, 0.0); }
+    if (c < best) { second = best; best = c; offset = vec2(searchStep.x, 0.0); }
     else { second = min(second, c); }
 
     c = matchCost(current, texture2D(
-        u_previous, clamp(v_uv + vec2(0.0, -step.y), 0.0, 1.0)
+        u_previous, clamp(v_uv + vec2(0.0, -searchStep.y), 0.0, 1.0)
     ).rgb);
-    if (c < best) { second = best; best = c; offset = vec2(0.0, -step.y); }
+    if (c < best) { second = best; best = c; offset = vec2(0.0, -searchStep.y); }
     else { second = min(second, c); }
 
     c = matchCost(current, texture2D(
-        u_previous, clamp(v_uv + vec2(0.0, step.y), 0.0, 1.0)
+        u_previous, clamp(v_uv + vec2(0.0, searchStep.y), 0.0, 1.0)
     ).rgb);
-    if (c < best) { second = best; best = c; offset = vec2(0.0, step.y); }
+    if (c < best) { second = best; best = c; offset = vec2(0.0, searchStep.y); }
     else { second = min(second, c); }
 
     // Reject weak, ambiguous and search-limit matches. Falling back to the
