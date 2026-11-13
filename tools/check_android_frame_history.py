@@ -20,7 +20,7 @@ required_source = (
     "previousTexture",
     "g_frameHistoryEnabled.load(std::memory_order_relaxed)",
     "g_androidFrameHistory.capture(display, surface, context)",
-    "does not generate or display extra frames",
+    "no synthetic frame is generated or presented here",
 )
 for token in required_source:
     assert token in source, f"missing frame-history safeguard or stage: {token}"
