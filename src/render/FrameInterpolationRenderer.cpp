@@ -164,6 +164,20 @@ namespace bv::render {
         destroyResources();
     }
 
+    void FrameInterpolationRenderer::abandonContext() {
+        // The old GL context is gone; never delete its object names in a new context.
+        m_framebuffer = 0;
+        m_outputTexture = 0;
+        m_program = 0;
+        m_previousUniform = -1;
+        m_currentUniform = -1;
+        m_invResolutionUniform = -1;
+        m_width = 0;
+        m_height = 0;
+        // FullscreenQuad::reset would issue GL calls against the replacement context.
+        // Its stale VBO name is intentionally abandoned with the lost context.
+    }
+
     void FrameInterpolationRenderer::destroyResources() {
         m_quad.reset();
         if (m_framebuffer) glDeleteFramebuffers(1, &m_framebuffer);
