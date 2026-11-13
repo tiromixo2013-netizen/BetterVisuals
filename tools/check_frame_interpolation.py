@@ -21,7 +21,7 @@ for token in (
     "uniform sampler2D u_previous",
     "uniform sampler2D u_current",
     "matchCost",
-    "vec2 step = 2.0 * u_invResolution",
+    "vec2 searchStep = 2.0 * u_invResolution",
     "one-sided reprojection",
     "float second = 1.0",
     "gl_FragColor = vec4(midpoint, 1.0)",
