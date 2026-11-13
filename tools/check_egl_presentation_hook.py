@@ -8,6 +8,10 @@ def main() -> None:
 
     assert "#ifdef GEODE_IS_ANDROID\n    #include <EGL/egl.h>\n#endif" in source
     assert "EGLBoolean betterVisualsEglSwapBuffers(EGLDisplay display, EGLSurface surface)" in source
+    assert "eglGetCurrentContext()" in source
+    assert "eglGetCurrentDisplay()" in source
+    assert "eglGetCurrentSurface(EGL_DRAW)" in source
+    assert "frame processing remains disabled" in source
     detour = source.split("EGLBoolean betterVisualsEglSwapBuffers", 1)[1].split("\n    }", 1)[0]
     assert detour.count("eglSwapBuffers(display, surface)") == 1
     assert "Mod::get()->hook(" in source
