@@ -21,12 +21,9 @@ void main() {
 }
 )glsl";
 
-    // Bidirectional 3x3 block matching estimates local motion and checks that
-    // the reverse correspondence closes the motion cycle before reconstruction.
-    // The output runs at half surface resolution to bound fragment work on
-    // mobile GPUs; the native frame remains full resolution.
-    // This is conservative local flow, not production optical flow: large or
-    // ambiguous motion falls back to the native current-frame pixel.
+    // Lightweight bidirectional cross matching estimates local motion and
+    // checks reverse consistency before reconstruction. The output runs at
+    // half surface resolution; uncertain motion falls back to the current frame.
     constexpr char kPresentFragment[] = R"glsl(
 varying vec2 v_uv;
 uniform sampler2D u_texture;
@@ -204,8 +201,8 @@ void main() {
         }
 
         ~FramePassStateGuard() {
-            restoreFramePassAttribute(FullscreenQuad::kPositionAttribute, m_attributes[0]);
-            restoreFramePassAttribute(FullscreenQuad::kTexCoordAttribute, m_attributes[1]);
+            restoreFramePassAttribute(bv::render::FullscreenQuad::kPositionAttribute, m_attributes[0]);
+            restoreFramePassAttribute(bv::render::FullscreenQuad::kTexCoordAttribute, m_attributes[1]);
             glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(m_arrayBuffer));
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(m_textures[0]));
