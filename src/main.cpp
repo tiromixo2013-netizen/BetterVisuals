@@ -701,6 +701,11 @@ namespace {
                 width <= 0 || height <= 0) {
                 return;
             }
+            GLint maxTextureSize = 0;
+            glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+            if (maxTextureSize <= 0 || width > maxTextureSize || height > maxTextureSize) {
+                return;
+            }
 
             if (m_context != context) {
                 // GL names from a lost context are invalid in the new context;
