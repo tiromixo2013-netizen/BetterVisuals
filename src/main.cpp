@@ -27,7 +27,6 @@
 #include <atomic>
 #include <cassert>
 #include <chrono>
-#include <cstdint>
 #include <cmath>
 #include <optional>
 #include <string_view>
@@ -733,43 +732,6 @@ class $modify(BetterVisualsDirectorHook, CCDirector) {
         applyCaptureViewport();
     }
 
-#ifdef GEODE_IS_ANDROID
-    // Diagnostic only: measure actual scene-draw cadence on-device.
-    // drawScene is reached from the Android nativeRender path before GLSurfaceView swaps.
-    // This deliberately does not skip updates, alter delta time, or synthesize frames.
-    void drawScene() {
-        using Clock = std::chrono::steady_clock;
-        static auto lastFrame = Clock::now();
-        static auto windowStart = lastFrame;
-        static std::uint64_t frameCount = 0;
-        static double minIntervalMs = 1.0e9;
-        static double maxIntervalMs = 0.0;
-
-        auto const now = Clock::now();
-        auto const intervalMs =
-            std::chrono::duration<double, std::milli>(now - lastFrame).count();
-        lastFrame = now;
-        ++frameCount;
-        minIntervalMs = std::min(minIntervalMs, intervalMs);
-        maxIntervalMs = std::max(maxIntervalMs, intervalMs);
-
-        auto const windowSeconds =
-            std::chrono::duration<double>(now - windowStart).count();
-        if (windowSeconds >= 5.0) {
-            auto const callsPerSecond = static_cast<double>(frameCount) / windowSeconds;
-            log::info(
-                "[FramePacing] Android drawScene: {:.1f} draws/s; interval {:.2f}-{:.2f} ms",
-                callsPerSecond, minIntervalMs, maxIntervalMs
-            );
-            frameCount = 0;
-            minIntervalMs = 1.0e9;
-            maxIntervalMs = 0.0;
-            windowStart = now;
-        }
-
-        CCDirector::drawScene();
-    }
-#endif
 };
 
 #ifdef GEODE_IS_MOBILE
