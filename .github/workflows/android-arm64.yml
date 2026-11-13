@@ -20,6 +20,11 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Run rendering source checks
+        run: |
+          python3 tools/check_frame_interpolation.py
+          python3 tools/check_sgsr_alpha.py
+
       - name: Build Android64 Geode mod
         id: build
         uses: geode-sdk/build-geode-mod@main
