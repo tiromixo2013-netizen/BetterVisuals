@@ -35,5 +35,4 @@ for token in (
 ):
     assert token in header, f"missing renderer API: {token}"
 
-assert "does not" not in renderer.lower() or "does not" in renderer.lower()
 print("Android GPU midpoint reconstruction source checks passed (static checks only).")
