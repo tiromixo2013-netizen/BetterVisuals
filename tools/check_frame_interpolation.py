@@ -24,7 +24,13 @@ for token in (
     "fromPrevious",
     "fromCurrent",
     "gl_FragColor = vec4((fromPrevious + fromCurrent) * 0.5, 1.0)",
+    "previousFrame == currentFrame",
+    "glDisable(GL_CULL_FACE)",
+    "glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)",
+    "Do not consume the caller's pre-existing GL error state",
+    "return true;",
 ):
+
     assert token in renderer, f"missing motion reconstruction stage: {token}"
 
 for token in (
@@ -34,5 +40,7 @@ for token in (
     "void abandonContext()",
 ):
     assert token in header, f"missing renderer API: {token}"
+
+assert "return glGetError()" not in renderer, "renderer must not consume caller GL errors"
 
 print("Android GPU midpoint reconstruction source checks passed (static checks only).")
