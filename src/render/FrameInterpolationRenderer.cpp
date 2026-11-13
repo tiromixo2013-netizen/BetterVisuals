@@ -23,8 +23,9 @@ void main() {
     // A compact 3x3 block-matching search estimates a local displacement
     // from the current frame back into the previous frame. The midpoint is
     // reconstructed by sampling both frames halfway along that displacement.
-    // This is intentionally conservative and is not a claim of production
-    // quality optical flow: occlusions and large motion remain difficult.
+    // The output runs at half surface resolution to reduce fragment work by 4x
+    // on mobile GPUs; the native frame remains full resolution.
+    // This is not production-quality optical flow: occlusions and large motion remain difficult.
     constexpr char kPresentFragment[] = R"glsl(
 varying vec2 v_uv;
 uniform sampler2D u_texture;
@@ -54,33 +55,13 @@ void main() {
     float secondBestCost = 1.0;
     vec2 bestOffset = vec2(0.0);
 
-    // Reduced-cost coarse-to-fine search. Nine coarse candidates span the
-    // same +/-4-pixel window, followed by four cardinal 1-pixel refinements.
-    // This cuts per-output-pixel motion-search texture reads from 34 to 13
-    // while retaining sub-pixel-grid (1 px) refinement and conservative rejection.
+    // Nine coarse candidates span +/-4 source pixels. The output grid is half
+    // resolution, so one output pixel corresponds to two source pixels.
+    // Removing the four refinement reads keeps the mobile shader bounded at
+    // nine search reads plus the two midpoint samples.
     for (int y = -1; y <= 1; ++y) {
         for (int x = -1; x <= 1; ++x) {
-            vec2 offset = vec2(float(x), float(y)) * (4.0 * u_invResolution);
-            vec3 candidate = texture2D(
-                u_previous, clamp(v_uv + offset, 0.0, 1.0)
-            ).rgb;
-            float cost = matchCost(current, candidate);
-            if (cost < bestCost) {
-                secondBestCost = bestCost;
-                bestCost = cost;
-                bestOffset = offset;
-            }
-            else if (cost < secondBestCost) {
-                secondBestCost = cost;
-            }
-        }
-    }
-
-    vec2 coarseBest = bestOffset;
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            if (abs(x) + abs(y) != 1) continue;
-            vec2 offset = coarseBest + vec2(float(x), float(y)) * u_invResolution;
+            vec2 offset = vec2(float(x), float(y)) * (2.0 * u_invResolution);
             vec3 candidate = texture2D(
                 u_previous, clamp(v_uv + offset, 0.0, 1.0)
             ).rgb;
@@ -129,7 +110,7 @@ namespace bv::render {
         if (width <= 0 || height <= 0) return false;
         // Avoid the expensive full GL-state snapshot on every frame when the
         // renderer is already prepared for the current surface dimensions.
-        if (width == m_width && height == m_height &&
+        if (width == m_surfaceWidth && height == m_surfaceHeight &&
             m_program && m_presentProgram && m_outputTexture && m_framebuffer) {
             return true;
         }
@@ -177,12 +158,14 @@ namespace bv::render {
             return false;
         }
 
+        auto const outputWidth = std::max<GLsizei>(1, (width + 1) / 2);
+        auto const outputHeight = std::max<GLsizei>(1, (height + 1) / 2);
         glBindTexture(GL_TEXTURE_2D, m_outputTexture);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, outputWidth, outputHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
         glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
         glFramebufferTexture2D(
@@ -194,15 +177,17 @@ namespace bv::render {
             return false;
         }
 
-        m_width = width;
-        m_height = height;
+        m_width = outputWidth;
+        m_height = outputHeight;
+        m_surfaceWidth = width;
+        m_surfaceHeight = height;
         glUseProgram(m_program);
         glUniform1i(m_previousUniform, 0);
         glUniform1i(m_currentUniform, 1);
         glUniform2f(
             m_invResolutionUniform,
-            1.f / static_cast<GLfloat>(width),
-            1.f / static_cast<GLfloat>(height)
+            1.f / static_cast<GLfloat>(outputWidth),
+            1.f / static_cast<GLfloat>(outputHeight)
         );
         return true;
     }
@@ -243,10 +228,10 @@ namespace bv::render {
     }
 
     bool FrameInterpolationRenderer::presentTexture(GLuint texture) {
-        if (!texture || !m_presentProgram || m_width <= 0 || m_height <= 0) return false;
+        if (!texture || !m_presentProgram || m_surfaceWidth <= 0 || m_surfaceHeight <= 0) return false;
         GlStateGuard state;
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, m_width, m_height);
+        glViewport(0, 0, m_surfaceWidth, m_surfaceHeight);
         glDisable(GL_BLEND);
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_STENCIL_TEST);
@@ -278,6 +263,8 @@ namespace bv::render {
         m_presentTextureUniform = -1;
         m_width = 0;
         m_height = 0;
+        m_surfaceWidth = 0;
+        m_surfaceHeight = 0;
         m_quad.abandonContext();
     }
 
@@ -296,6 +283,8 @@ namespace bv::render {
         m_invResolutionUniform = -1;
         m_width = 0;
         m_height = 0;
+        m_surfaceWidth = 0;
+        m_surfaceHeight = 0;
     }
 
 } // namespace bv::render
