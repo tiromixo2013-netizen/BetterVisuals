@@ -685,7 +685,115 @@ namespace {
 namespace {
     std::atomic<bool> g_eglSwapHookReached = false;
     std::atomic<bool> g_eglSwapContextMismatchLogged = false;
+    std::atomic<bool> g_frameHistoryEnabled = false;
 
+    // Two GPU-resident snapshots of the final EGL window surface. This is
+    // capture/history only; no synthetic frame is generated or presented here.
+    class AndroidFrameHistory final {
+    public:
+        void capture(EGLDisplay display, EGLSurface surface, EGLContext context) {
+            if (context == EGL_NO_CONTEXT) return;
+
+            EGLint width = 0;
+            EGLint height = 0;
+            if (eglQuerySurface(display, surface, EGL_WIDTH, &width) != EGL_TRUE ||
+                eglQuerySurface(display, surface, EGL_HEIGHT, &height) != EGL_TRUE ||
+                width <= 0 || height <= 0) {
+                return;
+            }
+
+            if (m_context != context) {
+                // GL names from a lost context are invalid in the new context;
+                // do not attempt to delete them through the replacement context.
+                m_textures = {};
+                m_width = 0;
+                m_height = 0;
+                m_writeIndex = 0;
+                m_validFrames = 0;
+                m_context = context;
+            }
+
+            if (width != m_width || height != m_height) {
+                if (m_textures[0] || m_textures[1]) {
+                    glDeleteTextures(static_cast<GLsizei>(m_textures.size()), m_textures.data());
+                }
+                m_textures = {};
+                m_width = 0;
+                m_height = 0;
+                m_writeIndex = 0;
+                m_validFrames = 0;
+            }
+
+            GLint previousFramebuffer = 0;
+            GLint previousActiveTexture = GL_TEXTURE0;
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+            glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+            glActiveTexture(GL_TEXTURE0);
+            GLint previousTexture = 0;
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+
+            if (!m_textures[0] && !m_textures[1]) {
+                glGenTextures(static_cast<GLsizei>(m_textures.size()), m_textures.data());
+                if (!m_textures[0] || !m_textures[1]) {
+                    if (m_textures[0] || m_textures[1]) {
+                        glDeleteTextures(static_cast<GLsizei>(m_textures.size()), m_textures.data());
+                    }
+                    m_textures = {};
+                }
+                else {
+                    for (auto texture : m_textures) {
+                        glBindTexture(GL_TEXTURE_2D, texture);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                        glTexImage2D(
+                            GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
+                            GL_RGBA, GL_UNSIGNED_BYTE, nullptr
+                        );
+                    }
+                    m_width = width;
+                    m_height = height;
+                }
+            }
+
+            bool captured = false;
+            if (m_textures[0] && m_textures[1] && m_width == width && m_height == height) {
+                // eglSwapBuffers presents the EGL window surface (default FB).
+                // Copy before the original swap invalidates/recycles its contents.
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                glBindTexture(GL_TEXTURE_2D, m_textures[m_writeIndex]);
+                glCopyTexSubImage2D(
+                    GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height
+                );
+                captured = true;
+            }
+
+            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+            glActiveTexture(static_cast<GLenum>(previousActiveTexture));
+            glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
+
+            if (captured) {
+                m_writeIndex = 1 - m_writeIndex;
+                if (m_validFrames < 2) ++m_validFrames;
+                if (m_validFrames == 2 && !m_pairLogged) {
+                    m_pairLogged = true;
+                    log::info("[FrameGeneration] Two consecutive EGL surface frames captured into GPU history");
+                }
+            }
+        }
+
+    private:
+        std::array<GLuint, 2> m_textures = {};
+        EGLContext m_context = EGL_NO_CONTEXT;
+        EGLint m_width = 0;
+        EGLint m_height = 0;
+        std::size_t m_writeIndex = 0;
+        std::size_t m_validFrames = 0;
+        bool m_pairLogged = false;
+    };
+
+    AndroidFrameHistory g_androidFrameHistory;
     EGLBoolean betterVisualsEglSwapBuffers(EGLDisplay display, EGLSurface surface) {
         // Confirm this is the active game GL context before treating this as
         // a valid frame boundary. Never issue GL work from an unknown context.
@@ -696,6 +804,13 @@ namespace {
             context != EGL_NO_CONTEXT &&
             currentDisplay == display &&
             currentDrawSurface == surface;
+
+        // Capture the completed window-surface image before the original swap.
+        // Kept opt-in because full-resolution GPU copies can be expensive on mobile.
+        if (isGamePresentationContext &&
+            g_frameHistoryEnabled.load(std::memory_order_relaxed)) {
+            g_androidFrameHistory.capture(display, surface, context);
+        }
 
         // Geode's manual-hook chain forwards this call to the original EGL entry.
         auto const result = eglSwapBuffers(display, surface);
@@ -737,6 +852,9 @@ $on_mod(Loaded) {
 #endif
     bindBoolSetting("enabled", g_modEnabled);
     bindBoolSetting("enable-fun", g_funEnabled);
+#ifdef GEODE_IS_ANDROID
+    bindBoolSetting("frame-history-capture", g_frameHistoryEnabled);
+#endif
 
     auto applyFullScene = [](bool on) {
         g_fullSceneEnabled.store(on, std::memory_order_relaxed);
