@@ -103,7 +103,7 @@
 			"type": "float",
 			"name": "FSR Reconstruction Blend",
 			"description": "Blends bilinear sampling with full edge-adaptive EASU reconstruction: 0 is bilinear, 1 is full EASU.",
-			"default": 0.5,
+			"default": 1,
 			"min": 0,
 			"max": 1,
 			"control": {
