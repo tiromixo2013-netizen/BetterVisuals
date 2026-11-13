@@ -202,7 +202,11 @@ namespace bv::render {
     }
 
     bool FrameInterpolationRenderer::present() {
-        if (!m_outputTexture || !m_presentProgram || m_width <= 0 || m_height <= 0) return false;
+        return presentTexture(m_outputTexture);
+    }
+
+    bool FrameInterpolationRenderer::presentTexture(GLuint texture) {
+        if (!texture || !m_presentProgram || m_width <= 0 || m_height <= 0) return false;
         GlStateGuard state;
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, m_width, m_height);
@@ -215,7 +219,7 @@ namespace bv::render {
         glUseProgram(m_presentProgram);
         glUniform1i(m_presentTextureUniform, 0);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_outputTexture);
+        glBindTexture(GL_TEXTURE_2D, texture);
         m_quad.bind();
         FullscreenQuad::draw();
         return true;
