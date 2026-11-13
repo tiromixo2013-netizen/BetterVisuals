@@ -15,28 +15,19 @@ for token in (
 ):
     assert token in main, f"missing Android integration: {token}"
 
-assert renderer.count("considerCandidate(") >= 11, "expected five forward and five reverse candidates"
+assert renderer.count("matchCost(") >= 6, "expected five candidate comparisons and one helper declaration"
 
 for token in (
     "uniform sampler2D u_previous",
     "uniform sampler2D u_current",
-    "bestOffset",
-    "void considerCandidate(",
-    "vec2 searchStep = 2.0 * u_invResolution",
-    "Five-tap reverse check",
-    "2.0 * u_invResolution",
     "matchCost",
+    "vec2 step = 2.0 * u_invResolution",
+    "one-sided reprojection",
+    "bool atSearchLimit",
+    "float second = 1.0",
+    "gl_FragColor = vec4(midpoint, 1.0)",
     "bestCost",
     "u_invResolution",
-    "fromPrevious",
-    "fromCurrent",
-    "previousMatch",
-    "reverseBestCost",
-    "reverseBestOffset",
-    "motionCycleError",
-    "consistencyLimit",
-    "inconsistentMotion",
-    "gl_FragColor = vec4((fromPrevious + fromCurrent) * 0.5, 1.0)",
     "previousFrame == currentFrame",
     "glDisable(GL_CULL_FACE)",
     "glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)",
