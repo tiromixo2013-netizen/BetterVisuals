@@ -33,8 +33,12 @@ namespace bv::render {
         GLint m_currentUniform = -1;
         GLint m_invResolutionUniform = -1;
         GLint m_presentTextureUniform = -1;
+        // Internal midpoint is rendered at half the surface dimensions to cut
+        // the per-pixel motion-search workload on mobile GPUs.
         GLsizei m_width = 0;
         GLsizei m_height = 0;
+        GLsizei m_surfaceWidth = 0;
+        GLsizei m_surfaceHeight = 0;
         FullscreenQuad m_quad;
     };
 
