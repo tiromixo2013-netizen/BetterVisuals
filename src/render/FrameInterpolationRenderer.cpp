@@ -20,7 +20,7 @@ void main() {
 }
 )glsl";
 
-    // A small bounded block-matching search estimates a local displacement
+    // A compact 3x3 block-matching search estimates a local displacement
     // from the current frame back into the previous frame. The midpoint is
     // reconstructed by sampling both frames halfway along that displacement.
     // This is intentionally conservative and is not a claim of production
@@ -40,8 +40,8 @@ void main() {
     float bestCost = 1.0;
     vec2 bestOffset = vec2(0.0);
 
-    for (int y = -2; y <= 2; ++y) {
-        for (int x = -2; x <= 2; ++x) {
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
             vec2 offset = vec2(float(x), float(y)) * u_invResolution;
             vec3 candidate = texture2D(u_previous, clamp(v_uv + offset, 0.0, 1.0)).rgb;
             float cost = abs(luma(current) - luma(candidate));
