@@ -299,7 +299,7 @@
 			"type": "string",
 			"name": "SGSR 1 Quality Preset",
 			"description": "Selects the SGSR 1 input resolution independently from the FSR 1 preset. Render Scale remains an additional multiplier. Custom uses the Render Scale slider without a preset ratio.",
-			"default": "Quality",
+			"default": "Custom",
 			"one-of": [
 				"Custom",
 				"Ultra Quality",
