@@ -16,6 +16,9 @@
 #include <Geode/modify/MenuLayer.hpp>
 #include <Geode/platform/cplatform.h>
 #include <Geode/ui/PopupManager.hpp>
+#ifdef GEODE_IS_ANDROID
+    #include <EGL/egl.h>
+#endif
 #ifdef GEODE_IS_WINDOWS
     #include <Geode/modify/CCEGLView.hpp>
 #endif
@@ -678,7 +681,46 @@ namespace {
 
 } // namespace
 
+#ifdef GEODE_IS_ANDROID
+namespace {
+    std::atomic<bool> g_eglSwapHookReached = false;
+
+    EGLBoolean betterVisualsEglSwapBuffers(EGLDisplay display, EGLSurface surface) {
+        // Geode's manual-hook chain calls the original when the hooked symbol
+        // is invoked from this detour on the same thread.
+        auto const result = eglSwapBuffers(display, surface);
+        if (result == EGL_TRUE && !g_eglSwapHookReached.exchange(true, std::memory_order_relaxed)) {
+            log::info("[FrameGeneration] Android EGL presentation hook reached");
+        }
+        return result;
+    }
+
+    void installAndroidEglSwapHook() {
+        auto const address = reinterpret_cast<void*>(eglSwapBuffers);
+        if (!address) {
+            log::warn("[FrameGeneration] eglSwapBuffers symbol is unavailable; presentation hook skipped");
+            return;
+        }
+
+        auto result = Mod::get()->hook(
+            address,
+            &betterVisualsEglSwapBuffers,
+            "Android eglSwapBuffers presentation probe",
+            tulip::hook::TulipConvention::Cdecl
+        );
+        if (result.isErr()) {
+            log::warn("[FrameGeneration] Unable to install EGL presentation hook: {}", result.unwrapErr());
+            return;
+        }
+        log::info("[FrameGeneration] Android EGL presentation hook installed");
+    }
+}
+#endif
+
 $on_mod(Loaded) {
+#ifdef GEODE_IS_ANDROID
+    installAndroidEglSwapHook();
+#endif
     bindBoolSetting("enabled", g_modEnabled);
     bindBoolSetting("enable-fun", g_funEnabled);
 
