@@ -20,10 +20,15 @@ namespace bv::render::gl {
         GLint internalFormat, GLsizei width, GLsizei height, GLenum format, void const* data
     ) {
         clearErrors();
+        GLint previousUnpackAlignment = 4;
+        glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexImage2D(
             GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data
         );
-        return glGetError() == GL_NO_ERROR;
+        auto const uploadError = glGetError();
+        glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
+        return uploadError == GL_NO_ERROR;
     }
 
     inline bool allocateTexture(GLuint texture, GLsizei width, GLsizei height) {
