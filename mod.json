@@ -76,8 +76,8 @@
 		},
 		"frame-history-capture": {
 			"type": "bool",
-			"name": "Experimental Frame History Capture (Android)",
-			"description": "Stores the last two completed EGL surface frames on the GPU for future motion analysis. Capture only; does not generate or display extra frames. May reduce performance.",
+			"name": "Experimental Frame Generation (Android)",
+			"description": "Captures two frames and synthesizes a motion-matched midpoint texture on the GPU. Experimental; it does not yet schedule or present an extra display frame and may reduce performance.",
 			"default": false,
 			"platforms": ["android"]
 		},
