@@ -4,6 +4,7 @@
 #include "render/PostProcessPipeline.hpp"
 #include "render/PostProcessRenderer.hpp"
 #include "render/SmaaRenderer.hpp"
+#include "render/SgsrRenderer.hpp"
 #include "shaders/PostProcessShaders.hpp"
 #include "shaders/aa/SmaaShader.hpp"
 
@@ -62,6 +63,7 @@ namespace {
         Nearest,
         Bilinear,
         Fsr,
+        Sgsr,
     };
 
     struct PostProcessConfig {
@@ -117,6 +119,7 @@ namespace {
     // Zero selects the Custom base (1.0); positive values are the base
     // source-resolution ratios for the FSR 1 quality presets.
     std::atomic<float> g_fsrPresetScale = 0.f;
+    std::atomic<float> g_sgsrPresetScale = 0.f;
     std::atomic<float> g_renderScale = 1.f;
     std::atomic<bool> g_casEnabled = false;
     std::atomic<float> g_casSharpness = 0.f;
@@ -144,6 +147,7 @@ namespace {
     bv::render::PostProcessRenderer g_ssaaRenderer;
     bv::render::PostProcessRenderer g_renderScaleRenderer;
     bv::render::PostProcessRenderer g_fsrRenderer;
+    bv::render::SgsrRenderer g_sgsrRenderer;
     bv::render::PostProcessRenderer g_casRenderer;
     bv::render::BloomRenderer g_bloomRenderer;
     bv::render::PostProcessRenderer g_grayscaleRenderer;
@@ -186,6 +190,7 @@ namespace {
         g_ssaaRenderer.reset();
         g_renderScaleRenderer.reset();
         g_fsrRenderer.reset();
+        g_sgsrRenderer.reset();
         g_casRenderer.reset();
         g_bloomRenderer.reset();
         g_grayscaleRenderer.reset();
@@ -260,6 +265,10 @@ namespace {
             g_upscaleMethod.store(UpscaleMethod::Fsr, std::memory_order_relaxed);
             return;
         }
+        if (value == "SGSR 1") {
+            g_upscaleMethod.store(UpscaleMethod::Sgsr, std::memory_order_relaxed);
+            return;
+        }
 
         if (value != "Nearest") {
             log::warn("Unknown upscale method '{}', using nearest neighbour", value);
@@ -278,6 +287,19 @@ namespace {
             log::warn("Unknown FSR 1 quality preset '{}', using Custom", value);
         }
         g_fsrPresetScale.store(scale, std::memory_order_relaxed);
+    }
+
+    void updateSgsrQualityPreset(std::string_view value) {
+        float scale = 0.f;
+        if (value == "Ultra Quality") scale = 0.77f;
+        else if (value == "Quality") scale = 0.67f;
+        else if (value == "Balanced") scale = 0.59f;
+        else if (value == "Performance") scale = 0.50f;
+        else if (value == "Ultra Performance") scale = 0.33f;
+        else if (value != "Custom") {
+            log::warn("Unknown SGSR 1 quality preset '{}', using Custom", value);
+        }
+        g_sgsrPresetScale.store(scale, std::memory_order_relaxed);
     }
 
     void bindBoolSetting(char const* name, std::atomic<bool>& value) {
@@ -541,18 +563,21 @@ namespace {
         auto const configuredScale = g_renderScale.load(std::memory_order_relaxed);
         auto const fsrPresetScale = config.upscaling == UpscaleMethod::Fsr ?
             g_fsrPresetScale.load(std::memory_order_relaxed) : 0.f;
+        auto const sgsrPresetScale = config.upscaling == UpscaleMethod::Sgsr ?
+            g_sgsrPresetScale.load(std::memory_order_relaxed) : 0.f;
+        auto const presetScale = fsrPresetScale > 0.f ? fsrPresetScale : sgsrPresetScale;
         // The quality preset selects the base input resolution. Render Scale is
         // an independent multiplier on top of that base (100% = unchanged).
         // FSR 1 is an upscaler, so never ask EASU to downscale above native.
         auto const requestedScale =
-            (fsrPresetScale > 0.f ? fsrPresetScale : 1.f) * configuredScale;
-        auto const renderScale = std::clamp(
-            requestedScale, 0.25f, config.upscaling == UpscaleMethod::Fsr ? 1.f : 1.2f
-        );
+            (presetScale > 0.f ? presetScale : 1.f) * configuredScale;
+        auto const usesSpatialUpscaler =
+            config.upscaling == UpscaleMethod::Fsr || config.upscaling == UpscaleMethod::Sgsr;
+        auto const renderScale = std::clamp(requestedScale, 0.25f, usesSpatialUpscaler ? 1.f : 1.2f);
         // A selected FSR quality preset owns the base resolution. SSAA's
         // supersampling multiplier would otherwise push it above native and
         // route presentation through the SSAA downsampler instead of EASU.
-        auto const aaScale = fsrPresetScale > 0.f ? 1.f : ssaaFactor(config.aa);
+        auto const aaScale = presetScale > 0.f ? 1.f : ssaaFactor(config.aa);
         auto const effectiveScale = renderScale * aaScale;
         GLint maxTextureSize = 0;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
@@ -665,6 +690,11 @@ namespace {
                 }
                 else if (config.upscaling == UpscaleMethod::Fsr) {
                     g_fsrRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
+                }
+                else if (config.upscaling == UpscaleMethod::Sgsr) {
+                    if (!g_sgsrRenderer.apply(sourceTexture, internalWidth, internalHeight, width, height)) {
+                        g_renderScaleRenderer.apply(sourceTexture);
+                    }
                 }
                 else {
                     g_renderScaleRenderer.apply(sourceTexture);
@@ -933,6 +963,7 @@ $on_mod(Loaded) {
     bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.2f, 1.f);
     bindStringSetting("upscale-method", updateUpscaleMethod);
     bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
+    bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {
         auto const wasSsaa = ssaaFactor(g_antiAliasingMethod.load(std::memory_order_relaxed)) > 1.f;
