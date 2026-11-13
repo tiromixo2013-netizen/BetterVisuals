@@ -44,7 +44,8 @@ vec2 weightY(float dx, float dy, float c, float stdDev) {
     return vec2(w, w * c);
 }
 void main() {
-    vec3 color = textureLod(u_texture, v_uv, 0.0).rgb;
+    vec4 sourceSample = textureLod(u_texture, v_uv, 0.0);
+    vec3 color = sourceSample.rgb;
     highp vec2 imgCoord = (v_uv * u_viewportInfo.zw) + vec2(-0.5, 0.5);
     highp vec2 imgCoordPixel = floor(imgCoord);
     highp vec2 coord = imgCoordPixel * u_viewportInfo.xy;
@@ -85,7 +86,9 @@ void main() {
         float deltaY = clamp(finalY - centerY, -23.0 / 255.0, 23.0 / 255.0);
         color = clamp(color + vec3(deltaY), 0.0, 1.0);
     }
-    outColor = vec4(color, 1.0);
+    // Preserve the scene alpha channel; forcing alpha to 1 made transparent
+    // sprites and edges opaque after SGSR reconstruction.
+    outColor = vec4(color, sourceSample.a);
 }
 )glsl";
 
