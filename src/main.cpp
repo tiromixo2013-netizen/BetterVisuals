@@ -605,6 +605,15 @@ namespace {
                 auto const sourceTexture = g_postProcessPipeline.currentTexture();
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, sourceTexture);
+
+                // Texture parameters belong to the texture object, not the
+                // active texture unit. Preserve the actual values instead of
+                // assuming every render target uses GL_LINEAR.
+                GLint previousMinFilter = GL_LINEAR;
+                GLint previousMagFilter = GL_LINEAR;
+                glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, &previousMinFilter);
+                glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, &previousMagFilter);
+
                 auto const linearSampling =
                     needsDownsample || config.upscaling == UpscaleMethod::Bilinear;
                 glTexParameteri(
@@ -624,8 +633,10 @@ namespace {
                 else {
                     g_renderScaleRenderer.apply(sourceTexture);
                 }
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+                glBindTexture(GL_TEXTURE_2D, sourceTexture);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, previousMinFilter);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, previousMagFilter);
             }
         }
         glBindFramebuffer(GL_FRAMEBUFFER, callerTarget.framebuffer);
