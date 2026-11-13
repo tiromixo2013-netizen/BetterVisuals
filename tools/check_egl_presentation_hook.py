@@ -13,14 +13,17 @@ def main() -> None:
     assert "eglGetCurrentSurface(EGL_DRAW)" in source
     assert "frame processing remains disabled" in source
     detour = source.split("EGLBoolean betterVisualsEglSwapBuffers", 1)[1].split("\n    }", 1)[0]
-    assert detour.count("eglSwapBuffers(display, surface)") == 1
+    assert detour.count("eglSwapBuffers(display, surface)") == 2
+    assert "presentMidpoint()" in detour
+    assert "presentNativeFrame()" in detour
+    assert "per-thread chain index" in detour
     assert "Mod::get()->hook(" in source
     assert "tulip::hook::TulipConvention::Cdecl" in source
     assert "installAndroidEglSwapHook();" in source
     assert "if (ANDROID)\n    target_link_libraries(${PROJECT_NAME} EGL)\nendif()" in cmake
 
-    # This is a presentation-hook probe only. It must not claim to generate frames.
-    assert "generated frame" not in detour.lower()
+    # The hook now presents one generated midpoint and then restores the native frame.
+    assert "generated midpoint" in detour.lower()
     print("Android EGL presentation-hook source checks passed.")
 
 
