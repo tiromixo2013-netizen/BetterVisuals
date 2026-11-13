@@ -22,7 +22,7 @@ for token in (
     "uniform sampler2D u_current",
     "matchCost",
     "vec2 searchStep = 2.0 * u_invResolution",
-    "one-sided reprojection",
+    "One-sided reprojection",
     "float second = 1.0",
     "gl_FragColor = vec4(midpoint, 1.0)",
     "best > 0.08",
