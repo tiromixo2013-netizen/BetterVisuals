@@ -536,7 +536,11 @@ namespace {
         auto const requestedScale =
             (fsrPresetScale > 0.f ? fsrPresetScale : 1.f) * configuredScale;
         auto const renderScale = std::clamp(requestedScale, 0.25f, 1.f);
-        auto const effectiveScale = renderScale * ssaaFactor(config.aa);
+        // A selected FSR quality preset owns the base resolution. SSAA's
+        // supersampling multiplier would otherwise push it above native and
+        // route presentation through the SSAA downsampler instead of EASU.
+        auto const aaScale = fsrPresetScale > 0.f ? 1.f : ssaaFactor(config.aa);
+        auto const effectiveScale = renderScale * aaScale;
         GLint maxTextureSize = 0;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
         if (maxTextureSize <= 0) {
