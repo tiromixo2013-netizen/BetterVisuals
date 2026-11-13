@@ -18,6 +18,11 @@ def main() -> None:
     assert preset["default"] == "Custom"
     assert preset["one-of"] == expected
 
+    render_scale = settings["render-scale"]
+    assert render_scale["default"] == 1
+    assert render_scale["min"] == 0.25
+    assert render_scale["max"] == 1.2
+
     source = Path("src/main.cpp").read_text(encoding="utf-8")
     expected_scales = {
         "Ultra Quality": "0.77f",
@@ -32,7 +37,10 @@ def main() -> None:
 
     assert "config.upscaling == UpscaleMethod::Fsr" in source
     assert "g_fsrPresetScale.load" in source
-    print("FSR 1 quality preset self-check passed.")
+    assert "(fsrPresetScale > 0.f ? fsrPresetScale : 1.f) * configuredScale" in source
+    assert "std::clamp(requestedScale, 0.25f, 1.f)" in source
+    assert "GL_MAX_TEXTURE_SIZE" in source
+    print("FSR preset base × Render Scale multiplier checks passed.")
 
 
 if __name__ == "__main__":
