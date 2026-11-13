@@ -797,6 +797,9 @@ namespace {
     public:
         void capture(EGLDisplay display, EGLSurface surface, EGLContext context) {
             if (context == EGL_NO_CONTEXT) return;
+            // CPU time here measures command submission/orchestration only. GL work
+            // remains asynchronous on the GPU; deliberately do not wait with glFinish().
+            auto const cpuSubmitStart = std::chrono::steady_clock::now();
 
             EGLint width = 0;
             EGLint height = 0;
@@ -903,9 +906,26 @@ namespace {
                     }
                 }
             }
+
+            ++m_profiledCaptures;
+            auto const elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - cpuSubmitStart
+            ).count();
+            m_cpuSubmitMicros += static_cast<std::uint64_t>(std::max<std::int64_t>(0, elapsedUs));
+            if ((m_profiledCaptures % 120) == 0) {
+                auto const averageUs = m_cpuSubmitMicros / 120;
+                log::info(
+                    "[FrameGeneration][CPU] avg capture + GPU-submit overhead over 120 frames: {} us; "
+                    "GPU execution is asynchronous and is not measured by this CPU timer",
+                    averageUs
+                );
+                m_cpuSubmitMicros = 0;
+            }
         }
 
     private:
+        std::uint64_t m_profiledCaptures = 0;
+        std::uint64_t m_cpuSubmitMicros = 0;
         std::array<GLuint, 2> m_textures = {};
         bv::render::FrameInterpolationRenderer m_interpolator;
         EGLContext m_context = EGL_NO_CONTEXT;
