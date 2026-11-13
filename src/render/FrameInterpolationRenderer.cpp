@@ -41,17 +41,31 @@ float luma(vec3 c) {
     return dot(c, vec3(0.299, 0.587, 0.114));
 }
 
+float matchCost(vec3 a, vec3 b) {
+    vec3 delta = abs(a - b);
+    float colorCost = dot(delta, vec3(0.299, 0.587, 0.114));
+    float luminanceCost = abs(luma(a) - luma(b));
+    return 0.65 * luminanceCost + 0.35 * colorCost;
+}
+
 void main() {
     vec3 current = texture2D(u_current, v_uv).rgb;
     float bestCost = 1.0;
     float secondBestCost = 1.0;
     vec2 bestOffset = vec2(0.0);
 
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            vec2 offset = vec2(float(x), float(y)) * u_invResolution;
-            vec3 candidate = texture2D(u_previous, clamp(v_uv + offset, 0.0, 1.0)).rgb;
-            float cost = abs(luma(current) - luma(candidate));
+    // Coarse-to-fine search: first cover an 8-pixel window at 2-pixel
+    // intervals, then refine around the best candidate at pixel precision.
+    // This is substantially more useful for fast 2D gameplay motion than
+    // the former +/-1-pixel-only search, without a large full-resolution
+    // brute-force radius.
+    for (int y = -2; y <= 2; ++y) {
+        for (int x = -2; x <= 2; ++x) {
+            vec2 offset = vec2(float(x), float(y)) * (2.0 * u_invResolution);
+            vec3 candidate = texture2D(
+                u_previous, clamp(v_uv + offset, 0.0, 1.0)
+            ).rgb;
+            float cost = matchCost(current, candidate);
             if (cost < bestCost) {
                 secondBestCost = bestCost;
                 bestCost = cost;
@@ -63,12 +77,28 @@ void main() {
         }
     }
 
-    // A weak or ambiguous match is not a motion vector. Blending the two
-    // frames anyway creates the exact double-image/ghost trail seen on UI,
-    // menus, and high-contrast game objects. Keep the current pixel instead.
-    // The margin rejects flat/repeating regions where several offsets look
-    // equally plausible; only confident matches are temporally reconstructed.
-    if (bestCost > 0.06 || (secondBestCost - bestCost) < 0.003) {
+    vec2 coarseBest = bestOffset;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            vec2 offset = coarseBest + vec2(float(x), float(y)) * u_invResolution;
+            vec3 candidate = texture2D(
+                u_previous, clamp(v_uv + offset, 0.0, 1.0)
+            ).rgb;
+            float cost = matchCost(current, candidate);
+            if (cost < bestCost) {
+                secondBestCost = bestCost;
+                bestCost = cost;
+                bestOffset = offset;
+            }
+            else if (cost < secondBestCost) {
+                secondBestCost = cost;
+            }
+        }
+    }
+
+    // Reject uncertain, occluded, flat, or newly exposed pixels instead of
+    // blending unrelated samples into a visible double image.
+    if (bestCost > 0.08 || (secondBestCost - bestCost) < 0.0025) {
         gl_FragColor = vec4(current, 1.0);
         return;
     }
