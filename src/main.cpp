@@ -1080,7 +1080,11 @@ namespace {
             return m_interpolator.present();
         }
         bool presentNativeFrame() {
-            return m_pendingTexture != 0 && m_interpolator.presentTexture(m_pendingTexture);
+            if (!m_pendingTexture) return false;
+            auto const texture = m_pendingTexture;
+            auto const presented = m_interpolator.presentTexture(texture);
+            if (presented) m_pendingTexture = 0;
+            return presented;
         }
         void finishPresentation(EGLDisplay display) {
             createCompletionFence(display);
