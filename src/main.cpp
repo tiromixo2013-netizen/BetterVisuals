@@ -20,6 +20,7 @@
 #include <Geode/ui/PopupManager.hpp>
 #ifdef GEODE_IS_ANDROID
     #include <EGL/egl.h>
+    #include <EGL/eglext.h>
 #endif
 #ifdef GEODE_IS_WINDOWS
     #include <Geode/modify/CCEGLView.hpp>
@@ -792,14 +793,136 @@ namespace {
         }
     }
 
+    class AndroidGpuTimer final {
+    public:
+        void begin() {
+            initialize();
+            if (!m_supported || m_active >= 0) return;
+            poll();
+            auto const index = m_next;
+            if (m_pending[index]) return;
+            m_beginQuery(0x88BF, m_queries[index]);
+            m_active = static_cast<int>(index);
+        }
+        void end() {
+            if (m_active < 0) return;
+            m_endQuery(0x88BF);
+            m_pending[static_cast<std::size_t>(m_active)] = true;
+            m_next = (static_cast<std::size_t>(m_active) + 1) % m_queries.size();
+            m_active = -1;
+        }
+    private:
+        using GenQueries = void (*)(GLsizei, GLuint*);
+        using DeleteQueries = void (*)(GLsizei, GLuint const*);
+        using BeginQuery = void (*)(GLenum, GLuint);
+        using EndQuery = void (*)(GLenum);
+        using GetQueryObjectuiv = void (*)(GLuint, GLenum, GLuint*);
+        using GetQueryObjectui64v = void (*)(GLuint, GLenum, GLuint64*);
+        void initialize() {
+            if (m_checked) return;
+            m_checked = true;
+            auto const raw = reinterpret_cast<char const*>(glGetString(GL_EXTENSIONS));
+            if (!raw || std::string_view(raw).find("GL_EXT_disjoint_timer_query") == std::string_view::npos) {
+                log::info("[FrameGeneration][GPU] EXT_disjoint_timer_query unavailable; GPU timing disabled");
+                return;
+            }
+            m_genQueries = reinterpret_cast<GenQueries>(eglGetProcAddress("glGenQueriesEXT"));
+            m_deleteQueries = reinterpret_cast<DeleteQueries>(eglGetProcAddress("glDeleteQueriesEXT"));
+            m_beginQuery = reinterpret_cast<BeginQuery>(eglGetProcAddress("glBeginQueryEXT"));
+            m_endQuery = reinterpret_cast<EndQuery>(eglGetProcAddress("glEndQueryEXT"));
+            m_getQueryObjectuiv = reinterpret_cast<GetQueryObjectuiv>(eglGetProcAddress("glGetQueryObjectuivEXT"));
+            m_getQueryObjectui64v = reinterpret_cast<GetQueryObjectui64v>(eglGetProcAddress("glGetQueryObjectui64vEXT"));
+            if (!m_genQueries || !m_deleteQueries || !m_beginQuery || !m_endQuery ||
+                !m_getQueryObjectuiv || !m_getQueryObjectui64v) {
+                log::warn("[FrameGeneration][GPU] Timer-query entry points incomplete");
+                return;
+            }
+            m_genQueries(static_cast<GLsizei>(m_queries.size()), m_queries.data());
+            for (auto query : m_queries) {
+                if (!query) {
+                    if (m_queries[0]) m_deleteQueries(static_cast<GLsizei>(m_queries.size()), m_queries.data());
+                    m_queries = {};
+                    log::warn("[FrameGeneration][GPU] Unable to allocate timer queries");
+                    return;
+                }
+            }
+            m_supported = true;
+            log::info("[FrameGeneration][GPU] Disjoint timer queries enabled");
+        }
+        void poll() {
+            for (std::size_t i = 0; i < m_queries.size(); ++i) {
+                if (!m_pending[i]) continue;
+                GLuint available = GL_FALSE;
+                m_getQueryObjectuiv(m_queries[i], 0x8867, &available);
+                if (!available) continue;
+                GLint disjoint = GL_FALSE;
+                glGetIntegerv(0x8FBB, &disjoint);
+                if (!disjoint) {
+                    GLuint64 elapsedNs = 0;
+                    m_getQueryObjectui64v(m_queries[i], 0x8866, &elapsedNs);
+                    m_totalNs += elapsedNs;
+                    ++m_samples;
+                    if ((m_samples % 120) == 0) {
+                        log::info("[FrameGeneration][GPU] average interpolation + midpoint presentation time over 120 samples: {} us",
+                            (m_totalNs / 120) / 1000);
+                        m_totalNs = 0;
+                    }
+                }
+                m_pending[i] = false;
+            }
+        }
+        bool m_checked = false;
+        bool m_supported = false;
+        int m_active = -1;
+        std::size_t m_next = 0;
+        std::array<GLuint, 4> m_queries = {};
+        std::array<bool, 4> m_pending = {};
+        std::uint64_t m_samples = 0;
+        std::uint64_t m_totalNs = 0;
+        GenQueries m_genQueries = nullptr;
+        DeleteQueries m_deleteQueries = nullptr;
+        BeginQuery m_beginQuery = nullptr;
+        EndQuery m_endQuery = nullptr;
+        GetQueryObjectuiv m_getQueryObjectuiv = nullptr;
+        GetQueryObjectui64v m_getQueryObjectui64v = nullptr;
+    };
+
+    struct AndroidEglFenceApi {
+        using CreateSync = EGLSyncKHR (EGLAPIENTRYP)(EGLDisplay, EGLenum, EGLint const*);
+        using ClientWaitSync = EGLint (EGLAPIENTRYP)(EGLDisplay, EGLSyncKHR, EGLint, EGLTimeKHR);
+        using DestroySync = EGLBoolean (EGLAPIENTRYP)(EGLDisplay, EGLSyncKHR);
+        CreateSync createSync = nullptr;
+        ClientWaitSync clientWaitSync = nullptr;
+        DestroySync destroySync = nullptr;
+        bool checked = false;
+        void initialize() {
+            if (checked) return;
+            checked = true;
+            auto const extensions = eglQueryString(eglGetCurrentDisplay(), EGL_EXTENSIONS);
+            if (!extensions || !hasEglExtension(extensions, "EGL_KHR_fence_sync")) return;
+            createSync = reinterpret_cast<CreateSync>(eglGetProcAddress("eglCreateSyncKHR"));
+            clientWaitSync = reinterpret_cast<ClientWaitSync>(eglGetProcAddress("eglClientWaitSyncKHR"));
+            destroySync = reinterpret_cast<DestroySync>(eglGetProcAddress("eglDestroySyncKHR"));
+            if (!createSync || !clientWaitSync || !destroySync) {
+                createSync = nullptr;
+                clientWaitSync = nullptr;
+                destroySync = nullptr;
+            }
+        }
+    };
+    AndroidEglFenceApi& androidEglFenceApi() {
+        static AndroidEglFenceApi api;
+        api.initialize();
+        return api;
+    }
+
     // Two GPU-resident snapshots of the final EGL window surface, plus an
     // experimental motion-matched midpoint texture. Display pacing is separate.
     class AndroidFrameHistory final {
     public:
         void capture(EGLDisplay display, EGLSurface surface, EGLContext context) {
             if (context == EGL_NO_CONTEXT) return;
-            // CPU time here measures command submission/orchestration only. GL work
-            // remains asynchronous on the GPU; deliberately do not wait with glFinish().
+            // CPU timer measures submission only; GPU time is queried separately.
             auto const cpuSubmitStart = std::chrono::steady_clock::now();
 
             EGLint width = 0;
@@ -814,6 +937,8 @@ namespace {
             if (maxTextureSize <= 0 || width > maxTextureSize || height > maxTextureSize) {
                 return;
             }
+            if (!retirePreviousFence(display)) return;
+            m_gpuTimer.begin();
 
             if (m_context != context) {
                 // GL names from a lost context are invalid in the new context;
@@ -895,10 +1020,14 @@ namespace {
                     auto const previousIndex = m_writeIndex;
                     auto const currentIndex = 1 - m_writeIndex;
                     if (m_interpolator.prepare(width, height) &&
-                        m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])) {
+                        m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex]) &&
+                        m_interpolator.present()) {
+                        // Draw the midpoint into the current EGL back buffer before
+                        // the game's normal swap. This does not add a second swap.
+                        createCompletionFence(display);
                         if (!m_pairLogged) {
                             m_pairLogged = true;
-                            log::info("[FrameGeneration] GPU motion-matched midpoint texture generated");
+                            log::info("[FrameGeneration] GPU midpoint generated and drawn to EGL back buffer");
                         }
                     }
                     else if (!m_generationWarningLogged) {
@@ -908,6 +1037,7 @@ namespace {
                 }
             }
 
+            m_gpuTimer.end();
             ++m_profiledCaptures;
             auto const elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::steady_clock::now() - cpuSubmitStart
@@ -925,10 +1055,42 @@ namespace {
         }
 
     private:
+        bool retirePreviousFence(EGLDisplay display) {
+            if (m_gpuFence == EGL_NO_SYNC_KHR) return true;
+            auto& api = androidEglFenceApi();
+            if (!api.clientWaitSync || !api.destroySync) {
+                m_gpuFence = EGL_NO_SYNC_KHR;
+                return true;
+            }
+            auto const result = api.clientWaitSync(display, m_gpuFence, 0, 0);
+            if (result == EGL_TIMEOUT_EXPIRED_KHR) return false;
+            api.destroySync(display, m_gpuFence);
+            m_gpuFence = EGL_NO_SYNC_KHR;
+            if (result != EGL_CONDITION_SATISFIED_KHR && result != EGL_ALREADY_SIGNALED_KHR) {
+                log::warn("[FrameGeneration][Fence] Non-blocking poll failed; retaining same-context GL ordering");
+            }
+            return true;
+        }
+        void createCompletionFence(EGLDisplay display) {
+            auto& api = androidEglFenceApi();
+            if (!api.createSync) return;
+            if (m_gpuFence != EGL_NO_SYNC_KHR && api.destroySync) {
+                api.destroySync(display, m_gpuFence);
+                m_gpuFence = EGL_NO_SYNC_KHR;
+            }
+            m_gpuFence = api.createSync(display, EGL_SYNC_FENCE_KHR, nullptr);
+            if (m_gpuFence == EGL_NO_SYNC_KHR && !m_fenceWarningLogged) {
+                m_fenceWarningLogged = true;
+                log::warn("[FrameGeneration][Fence] Fence creation failed; no glFinish fallback will be used");
+            }
+        }
         std::uint64_t m_profiledCaptures = 0;
         std::uint64_t m_cpuSubmitMicros = 0;
         std::array<GLuint, 2> m_textures = {};
         bv::render::FrameInterpolationRenderer m_interpolator;
+        AndroidGpuTimer m_gpuTimer;
+        EGLSyncKHR m_gpuFence = EGL_NO_SYNC_KHR;
+        bool m_fenceWarningLogged = false;
         EGLContext m_context = EGL_NO_CONTEXT;
         EGLint m_width = 0;
         EGLint m_height = 0;
