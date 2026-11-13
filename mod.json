@@ -8,7 +8,7 @@
 	},
 	"id": "tiromixo2013.bettervisuals-gsr",
 	"name": "Better Visuals and FPS",
-	"version": "2.4.0",
+	"version": "2.4.1",
 	"developer": "tiromixo2013",
 	"description": "Neat upscaling and post-processing mod.",
 	"tags": [
@@ -76,10 +76,12 @@
 		},
 		"frame-history-capture": {
 			"type": "bool",
-			"name": "Experimental Frame Generation (Android)",
-			"description": "Captures two frames and synthesizes a motion-matched midpoint texture on the GPU. Experimental; it does not yet schedule or present an extra display frame and may reduce performance.",
+			"name": "Frame Generation (Experimental, Android)",
+			"description": "Captures consecutive frames and generates a midpoint GPU texture. This build does not yet insert the midpoint into the display stream; enabling it can reduce performance.",
 			"default": false,
-			"platforms": ["android"]
+			"platforms": [
+				"android"
+			]
 		},
 		"render-scale": {
 			"type": "float",
@@ -103,7 +105,8 @@
 			"one-of": [
 				"Nearest",
 				"Bilinear",
-				"FSR 1"
+				"FSR 1",
+				"SGSR 1"
 			]
 		},
 		"fsr-sharpness": {
@@ -263,8 +266,40 @@
 		"fsr-quality-preset": {
 			"type": "string",
 			"name": "FSR 1 Quality Preset",
-			"description": "Selects the base FSR 1 input resolution. Render Scale is then applied as an independent multiplier; this setting is used only when FSR 1 is selected.",
+			"description": "Selects the base FSR 1 input resolution. Render Scale is an additional multiplier. Custom uses the Render Scale slider without a preset ratio.",
 			"default": "Custom",
+			"one-of": [
+				"Custom",
+				"Ultra Quality",
+				"Quality",
+				"Balanced",
+				"Performance",
+				"Ultra Performance"
+			]
+		},
+		"frame-pacing-enabled": {
+			"type": "bool",
+			"name": "Frame Pacing (Android)",
+			"description": "Requests EGL swap interval 1 for display-synchronized presentation. Android's compositor and GPU driver still control the actual buffer queue.",
+			"default": false,
+			"platforms": [
+				"android"
+			]
+		},
+		"low-latency-enabled": {
+			"type": "bool",
+			"name": "Low Latency (Android)",
+			"description": "Requests EGL swap interval 0 to avoid the app-side vsync wait where supported. May cause uneven pacing or tearing; it does not change GPU queue depth. Takes precedence over Frame Pacing if both are enabled.",
+			"default": false,
+			"platforms": [
+				"android"
+			]
+		},
+		"sgsr-quality-preset": {
+			"type": "string",
+			"name": "SGSR 1 Quality Preset",
+			"description": "Selects the SGSR 1 input resolution independently from the FSR 1 preset. Render Scale remains an additional multiplier. Custom uses the Render Scale slider without a preset ratio.",
+			"default": "Quality",
 			"one-of": [
 				"Custom",
 				"Ultra Quality",
