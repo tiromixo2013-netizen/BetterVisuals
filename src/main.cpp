@@ -261,9 +261,15 @@ namespace {
         });
     }
 
-    void bindDoubleSetting(char const* name, std::atomic<float>& value) {
-        auto update = [&value](double input) {
-            value.store(static_cast<float>(input), std::memory_order_relaxed);
+    void bindDoubleSetting(
+        char const* name, std::atomic<float>& value,
+        float minimum, float maximum, float fallback
+    ) {
+        auto update = [&value, minimum, maximum, fallback](double input) {
+            auto const converted = static_cast<float>(input);
+            auto const safeValue = std::isfinite(converted) ?
+                std::clamp(converted, minimum, maximum) : fallback;
+            value.store(safeValue, std::memory_order_relaxed);
         };
         update(Mod::get()->getSettingValue<double>(name));
         listenForSettingChanges<double>(name, [update](double input) {
@@ -625,7 +631,7 @@ $on_mod(Loaded) {
     };
     applyFullScene(Mod::get()->getSettingValue<bool>("full-scene-effects"));
     listenForSettingChanges<bool>("full-scene-effects", applyFullScene);
-    bindDoubleSetting("render-scale", g_renderScale);
+    bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.f, 1.f);
     bindStringSetting("upscale-method", updateUpscaleMethod);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {
@@ -637,12 +643,12 @@ $on_mod(Loaded) {
         }
     });
     bindBoolSetting("cas-enabled", g_casEnabled);
-    bindDoubleSetting("cas-sharpness", g_casSharpness);
-    bindDoubleSetting("fsr-sharpness", g_fsrSharpness);
+    bindDoubleSetting("cas-sharpness", g_casSharpness, 0.f, 1.f, 0.f);
+    bindDoubleSetting("fsr-sharpness", g_fsrSharpness, 0.f, 1.f, 0.5f);
     bindBoolSetting("bloom-enabled", g_bloomEnabled);
-    bindDoubleSetting("bloom-threshold", g_bloomThreshold);
-    bindDoubleSetting("bloom-intensity", g_bloomIntensity);
-    bindDoubleSetting("bloom-radius", g_bloomRadius);
+    bindDoubleSetting("bloom-threshold", g_bloomThreshold, 0.f, 1.f, 0.7f);
+    bindDoubleSetting("bloom-intensity", g_bloomIntensity, 0.f, 1.5f, 0.3f);
+    bindDoubleSetting("bloom-radius", g_bloomRadius, 0.f, 16.f, 8.f);
     bindBoolSetting("grayscale-enabled", g_grayscaleEnabled);
     bindBoolSetting("pixelate-enabled", g_pixelateEnabled);
     bindBoolSetting("invert-enabled", g_invertEnabled);
