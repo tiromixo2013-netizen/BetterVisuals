@@ -20,6 +20,12 @@ required_source = (
     "previousTexture",
     "g_frameHistoryEnabled.load(std::memory_order_relaxed)",
     "g_androidFrameHistory.capture(display, surface, context)",
+    "bool hasEglExtension(char const* extensions, std::string_view name)",
+    "EGL_ANDROID_presentation_time",
+    "EGL_ANDROID_get_frame_timestamps",
+    'eglGetProcAddress("eglPresentationTimeANDROID")',
+    'eglGetProcAddress("eglGetFrameTimestampsANDROID")',
+    "logAndroidPresentationCapabilities(display)",
     "no synthetic frame is generated or presented here",
 )
 for token in required_source:
