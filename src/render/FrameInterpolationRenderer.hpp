@@ -18,6 +18,7 @@ namespace bv::render {
         bool generate(GLuint previousFrame, GLuint currentFrame);
         GLuint outputTexture() const { return m_outputTexture; }
         void reset();
+        void abandonContext();
 
     private:
         void destroyResources();
