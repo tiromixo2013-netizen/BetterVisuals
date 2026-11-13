@@ -54,14 +54,13 @@ void main() {
     float secondBestCost = 1.0;
     vec2 bestOffset = vec2(0.0);
 
-    // Coarse-to-fine search: first cover an 8-pixel window at 2-pixel
-    // intervals, then refine around the best candidate at pixel precision.
-    // This is substantially more useful for fast 2D gameplay motion than
-    // the former +/-1-pixel-only search, without a large full-resolution
-    // brute-force radius.
-    for (int y = -2; y <= 2; ++y) {
-        for (int x = -2; x <= 2; ++x) {
-            vec2 offset = vec2(float(x), float(y)) * (2.0 * u_invResolution);
+    // Reduced-cost coarse-to-fine search. Nine coarse candidates span the
+    // same +/-4-pixel window, followed by four cardinal 1-pixel refinements.
+    // This cuts per-output-pixel motion-search texture reads from 34 to 13
+    // while retaining sub-pixel-grid (1 px) refinement and conservative rejection.
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            vec2 offset = vec2(float(x), float(y)) * (4.0 * u_invResolution);
             vec3 candidate = texture2D(
                 u_previous, clamp(v_uv + offset, 0.0, 1.0)
             ).rgb;
@@ -80,6 +79,7 @@ void main() {
     vec2 coarseBest = bestOffset;
     for (int y = -1; y <= 1; ++y) {
         for (int x = -1; x <= 1; ++x) {
+            if (abs(x) + abs(y) != 1) continue;
             vec2 offset = coarseBest + vec2(float(x), float(y)) * u_invResolution;
             vec3 candidate = texture2D(
                 u_previous, clamp(v_uv + offset, 0.0, 1.0)
