@@ -56,10 +56,10 @@ void main() {
     ));
 
     float peak = -1.0 / mix(8.0, 5.0, clamp(u_sharpness, 0.0, 1.0));
-    float weight = amplify.g * peak;
+    vec3 weight = amplify * peak;
     vec3 filtered = (
         (north + south + east + west) * weight + center
-    ) / (1.0 + 4.0 * weight);
+    ) / (vec3(1.0) + 4.0 * weight);
 
     gl_FragColor = vec4(sqrt(clamp(filtered, 0.0, 1.0)), centerSample.a);
 }
