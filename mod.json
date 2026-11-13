@@ -78,9 +78,9 @@
 			"type": "float",
 			"name": "Render Scale",
 			"description": "Render at a lower internal resolution, upscale to the current window size.",
-			"default": 1.0,
+			"default": 1,
 			"min": 0.25,
-			"max": 1.0,
+			"max": 1,
 			"control": {
 				"arrows": true,
 				"arrow-step": 0.05,
@@ -104,8 +104,8 @@
 			"name": "FSR Sharpness",
 			"description": "FSR 1 reconstruction strength. Lower is smoother, 1 is sharpest.",
 			"default": 0.5,
-			"min": 0.0,
-			"max": 1.0,
+			"min": 0,
+			"max": 1,
 			"control": {
 				"arrows": true,
 				"arrow-step": 0.1,
@@ -146,9 +146,9 @@
 			"type": "float",
 			"name": "CAS Sharpness",
 			"description": "Sharpening strength. 0 has less ringing, 1 is strongest.",
-			"default": 0.0,
-			"min": 0.0,
-			"max": 1.0,
+			"default": 0,
+			"min": 0,
+			"max": 1,
 			"control": {
 				"arrows": true,
 				"arrow-step": 0.1,
@@ -171,8 +171,8 @@
 			"name": "Bloom Threshold",
 			"description": "Brightness cutoff. Higher means only brighter pixels glow.",
 			"default": 0.7,
-			"min": 0.0,
-			"max": 1.0,
+			"min": 0,
+			"max": 1,
 			"enable-if": "bloom-enabled",
 			"control": {
 				"arrows": true,
@@ -186,7 +186,7 @@
 			"name": "Bloom Intensity",
 			"description": "Strength of the glow over the original image.",
 			"default": 0.3,
-			"min": 0.0,
+			"min": 0,
 			"max": 1.5,
 			"enable-if": "bloom-enabled",
 			"control": {
@@ -200,13 +200,13 @@
 			"type": "float",
 			"name": "Bloom Radius",
 			"description": "Spread of the glow in pixels at 1080p (scales with resolution).",
-			"default": 8.0,
-			"min": 0.0,
-			"max": 16.0,
+			"default": 8,
+			"min": 0,
+			"max": 16,
 			"enable-if": "bloom-enabled",
 			"control": {
 				"arrows": true,
-				"arrow-step": 1.0,
+				"arrow-step": 1,
 				"slider": true,
 				"slider-step": 0.5
 			}
@@ -252,6 +252,20 @@
 			"name": "CRT Filter",
 			"description": "Apply a CRT-style filter.",
 			"default": false
+		},
+		"fsr-quality-preset": {
+			"type": "string",
+			"name": "FSR 1 Quality Preset",
+			"description": "Sets the internal render resolution used by FSR 1. Custom uses the Render Scale slider.",
+			"default": "Custom",
+			"one-of": [
+				"Custom",
+				"Ultra Quality",
+				"Quality",
+				"Balanced",
+				"Performance",
+				"Ultra Performance"
+			]
 		}
 	}
 }
