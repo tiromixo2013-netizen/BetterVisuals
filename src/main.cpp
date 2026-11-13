@@ -678,7 +678,8 @@ namespace {
                 glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, &previousMagFilter);
 
                 auto const linearSampling =
-                    needsDownsample || config.upscaling == UpscaleMethod::Bilinear;
+                    needsDownsample || config.upscaling == UpscaleMethod::Bilinear ||
+                    config.upscaling == UpscaleMethod::Sgsr;
                 glTexParameteri(
                     GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linearSampling ? GL_LINEAR : GL_NEAREST
                 );
