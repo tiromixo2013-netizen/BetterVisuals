@@ -104,6 +104,9 @@ namespace {
 
     std::atomic<AntiAliasingMethod> g_antiAliasingMethod = AntiAliasingMethod::SmaaHigh;
     std::atomic<UpscaleMethod> g_upscaleMethod = UpscaleMethod::Nearest;
+    // Zero selects the user-controlled Render Scale value; positive values are
+    // the source-resolution ratios for the FSR 1 quality presets.
+    std::atomic<float> g_fsrPresetScale = 0.f;
     std::atomic<float> g_renderScale = 1.f;
     std::atomic<bool> g_casEnabled = false;
     std::atomic<float> g_casSharpness = 0.f;
@@ -252,6 +255,19 @@ namespace {
             log::warn("Unknown upscale method '{}', using nearest neighbour", value);
         }
         g_upscaleMethod.store(UpscaleMethod::Nearest, std::memory_order_relaxed);
+    }
+
+    void updateFsrQualityPreset(std::string_view value) {
+        float scale = 0.f;
+        if (value == "Ultra Quality") scale = 0.77f;
+        else if (value == "Quality") scale = 0.67f;
+        else if (value == "Balanced") scale = 0.59f;
+        else if (value == "Performance") scale = 0.50f;
+        else if (value == "Ultra Performance") scale = 0.33f;
+        else if (value != "Custom") {
+            log::warn("Unknown FSR 1 quality preset '{}', using Custom", value);
+        }
+        g_fsrPresetScale.store(scale, std::memory_order_relaxed);
     }
 
     void bindBoolSetting(char const* name, std::atomic<bool>& value) {
@@ -511,7 +527,10 @@ namespace {
         }
 
         auto const effectCount = config.effectCount();
-        auto const renderScale = g_renderScale.load(std::memory_order_relaxed);
+        auto const configuredScale = g_renderScale.load(std::memory_order_relaxed);
+        auto const fsrPresetScale = config.upscaling == UpscaleMethod::Fsr ?
+            g_fsrPresetScale.load(std::memory_order_relaxed) : 0.f;
+        auto const renderScale = fsrPresetScale > 0.f ? fsrPresetScale : configuredScale;
         auto const effectiveScale = renderScale * ssaaFactor(config.aa);
         auto const internalWidth = scaledDimension(width, effectiveScale);
         auto const internalHeight = scaledDimension(height, effectiveScale);
@@ -633,6 +652,7 @@ $on_mod(Loaded) {
     listenForSettingChanges<bool>("full-scene-effects", applyFullScene);
     bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.f, 1.f);
     bindStringSetting("upscale-method", updateUpscaleMethod);
+    bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {
         auto const wasSsaa = ssaaFactor(g_antiAliasingMethod.load(std::memory_order_relaxed)) > 1.f;
