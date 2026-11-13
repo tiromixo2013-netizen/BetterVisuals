@@ -139,7 +139,9 @@ namespace bv::render {
     }
 
     bool FrameInterpolationRenderer::generate(GLuint previousFrame, GLuint currentFrame) {
-        if (!previousFrame || !currentFrame || !m_program || !m_framebuffer || !m_outputTexture) {
+        if (!previousFrame || !currentFrame || previousFrame == currentFrame ||
+            !m_program || !m_framebuffer || !m_outputTexture ||
+            m_width <= 0 || m_height <= 0) {
             return false;
         }
         GlStateGuard state;
@@ -149,6 +151,8 @@ namespace bv::render {
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_STENCIL_TEST);
         glDisable(GL_SCISSOR_TEST);
+        glDisable(GL_CULL_FACE);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glUseProgram(m_program);
 
         glActiveTexture(GL_TEXTURE0);
@@ -157,7 +161,12 @@ namespace bv::render {
         glBindTexture(GL_TEXTURE_2D, currentFrame);
         m_quad.bind();
         FullscreenQuad::draw();
-        return glGetError() == GL_NO_ERROR;
+
+        // Do not consume the caller's pre-existing GL error state here:
+        // glGetError() would steal errors produced by the game before this pass.
+        // FBO completeness is validated in prepare(); once inputs/resources are
+        // valid, the draw has been issued and state is restored by the guard.
+        return true;
     }
 
     void FrameInterpolationRenderer::reset() {
