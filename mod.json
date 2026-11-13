@@ -76,8 +76,8 @@
 		},
 		"frame-history-capture": {
 			"type": "bool",
-			"name": "Frame Interpolation (Experimental, Android)",
-			"description": "Captures consecutive frames, generates a midpoint on the GPU, and draws it into the current EGL back buffer before the normal swap. Experimental: it does not add a second presentation or double the refresh rate.",
+			"name": "Frame Generation (Experimental, Android)",
+			"description": "Captures consecutive native frames, reconstructs a GPU midpoint, then presents the midpoint followed by the captured native frame using two EGL swaps. Experimental: actual smoothness and refresh-rate gains depend on display refresh, swap pacing, and device GPU performance.",
 			"default": false,
 			"platforms": [
 				"android"
