@@ -530,10 +530,25 @@ namespace {
         auto const configuredScale = g_renderScale.load(std::memory_order_relaxed);
         auto const fsrPresetScale = config.upscaling == UpscaleMethod::Fsr ?
             g_fsrPresetScale.load(std::memory_order_relaxed) : 0.f;
-        auto const renderScale = fsrPresetScale > 0.f ? fsrPresetScale : configuredScale;
+        // The quality preset selects the base input resolution. Render Scale is
+        // an independent multiplier on top of that base (100% = unchanged).
+        // FSR 1 is an upscaler, so never ask EASU to downscale above native.
+        auto const requestedScale =
+            (fsrPresetScale > 0.f ? fsrPresetScale : 1.f) * configuredScale;
+        auto const renderScale = std::clamp(requestedScale, 0.25f, 1.f);
         auto const effectiveScale = renderScale * ssaaFactor(config.aa);
-        auto const internalWidth = scaledDimension(width, effectiveScale);
-        auto const internalHeight = scaledDimension(height, effectiveScale);
+        GLint maxTextureSize = 0;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+        if (maxTextureSize <= 0) {
+            visitNext();
+            return;
+        }
+        auto const internalWidth = std::min(
+            scaledDimension(width, effectiveScale), static_cast<GLsizei>(maxTextureSize)
+        );
+        auto const internalHeight = std::min(
+            scaledDimension(height, effectiveScale), static_cast<GLsizei>(maxTextureSize)
+        );
         auto const needsPresentation = internalWidth != width || internalHeight != height;
         auto const needsDownsample = internalWidth > width || internalHeight > height;
         if (effectCount == 0 && !needsPresentation) {
