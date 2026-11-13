@@ -731,6 +731,43 @@ class $modify(BetterVisualsDirectorHook, CCDirector) {
         CCDirector::setViewport();
         applyCaptureViewport();
     }
+
+#ifdef GEODE_IS_ANDROID
+    // Diagnostic only: measure the real Cocos main-loop cadence on-device.
+    // This deliberately does not skip updates, alter delta time, or synthesize frames.
+    void mainLoop() {
+        using Clock = std::chrono::steady_clock;
+        static auto lastFrame = Clock::now();
+        static auto windowStart = lastFrame;
+        static std::uint64_t frameCount = 0;
+        static double minIntervalMs = 1.0e9;
+        static double maxIntervalMs = 0.0;
+
+        auto const now = Clock::now();
+        auto const intervalMs =
+            std::chrono::duration<double, std::milli>(now - lastFrame).count();
+        lastFrame = now;
+        ++frameCount;
+        minIntervalMs = std::min(minIntervalMs, intervalMs);
+        maxIntervalMs = std::max(maxIntervalMs, intervalMs);
+
+        auto const windowSeconds =
+            std::chrono::duration<double>(now - windowStart).count();
+        if (windowSeconds >= 5.0) {
+            auto const callsPerSecond = static_cast<double>(frameCount) / windowSeconds;
+            log::info(
+                "[FramePacing] Android mainLoop: {:.1f} calls/s; interval {:.2f}-{:.2f} ms",
+                callsPerSecond, minIntervalMs, maxIntervalMs
+            );
+            frameCount = 0;
+            minIntervalMs = 1.0e9;
+            maxIntervalMs = 0.0;
+            windowStart = now;
+        }
+
+        CCDirector::mainLoop();
+    }
+#endif
 };
 
 #ifdef GEODE_IS_MOBILE
