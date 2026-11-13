@@ -256,7 +256,7 @@
 		"fsr-quality-preset": {
 			"type": "string",
 			"name": "FSR 1 Quality Preset",
-			"description": "Selects the base FSR 1 input resolution. Render Scale is then applied as an independent multiplier.",
+			"description": "Selects the base FSR 1 input resolution. Render Scale is then applied as an independent multiplier; this setting is used only when FSR 1 is selected.",
 			"default": "Custom",
 			"one-of": [
 				"Custom",
