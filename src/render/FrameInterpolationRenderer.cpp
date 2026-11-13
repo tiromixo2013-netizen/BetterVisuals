@@ -4,6 +4,7 @@
 #include "ShaderProgram.hpp"
 
 #include <Geode/Geode.hpp>
+#include <algorithm>
 #include <array>
 
 using namespace geode::prelude;
