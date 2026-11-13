@@ -804,6 +804,23 @@ namespace {
             m_beginQuery(0x88BF, m_queries[index]);
             m_active = static_cast<int>(index);
         }
+        void abandonContext() {
+            // Query names belong to the lost GL context; do not delete them in a replacement context.
+            m_queries = {};
+            m_pending = {};
+            m_checked = false;
+            m_supported = false;
+            m_active = -1;
+            m_next = 0;
+            m_samples = 0;
+            m_totalNs = 0;
+            m_genQueries = nullptr;
+            m_deleteQueries = nullptr;
+            m_beginQuery = nullptr;
+            m_endQuery = nullptr;
+            m_getQueryObjectuiv = nullptr;
+            m_getQueryObjectui64v = nullptr;
+        }
         void end() {
             if (m_active < 0) return;
             m_endQuery(0x88BF);
@@ -949,6 +966,7 @@ namespace {
                 m_writeIndex = 0;
                 m_validFrames = 0;
                 m_interpolator.abandonContext();
+                m_gpuTimer.abandonContext();
                 m_context = context;
             }
 
