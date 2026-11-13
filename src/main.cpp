@@ -27,6 +27,7 @@
 #include <atomic>
 #include <cassert>
 #include <chrono>
+#include <cstdint>
 #include <cmath>
 #include <optional>
 #include <string_view>
@@ -733,9 +734,10 @@ class $modify(BetterVisualsDirectorHook, CCDirector) {
     }
 
 #ifdef GEODE_IS_ANDROID
-    // Diagnostic only: measure the real Cocos main-loop cadence on-device.
+    // Diagnostic only: measure actual scene-draw cadence on-device.
+    // drawScene is reached from the Android nativeRender path before GLSurfaceView swaps.
     // This deliberately does not skip updates, alter delta time, or synthesize frames.
-    void mainLoop() {
+    void drawScene() {
         using Clock = std::chrono::steady_clock;
         static auto lastFrame = Clock::now();
         static auto windowStart = lastFrame;
@@ -756,7 +758,7 @@ class $modify(BetterVisualsDirectorHook, CCDirector) {
         if (windowSeconds >= 5.0) {
             auto const callsPerSecond = static_cast<double>(frameCount) / windowSeconds;
             log::info(
-                "[FramePacing] Android mainLoop: {:.1f} calls/s; interval {:.2f}-{:.2f} ms",
+                "[FramePacing] Android drawScene: {:.1f} draws/s; interval {:.2f}-{:.2f} ms",
                 callsPerSecond, minIntervalMs, maxIntervalMs
             );
             frameCount = 0;
@@ -765,7 +767,7 @@ class $modify(BetterVisualsDirectorHook, CCDirector) {
             windowStart = now;
         }
 
-        CCDirector::mainLoop();
+        CCDirector::drawScene();
     }
 #endif
 };
