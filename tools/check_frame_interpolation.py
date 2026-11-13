@@ -15,15 +15,16 @@ for token in (
 ):
     assert token in main, f"missing Android integration: {token}"
 
+assert renderer.count("considerCandidate(") >= 11, "expected five forward and five reverse candidates"
+
 for token in (
     "uniform sampler2D u_previous",
     "uniform sampler2D u_current",
     "bestOffset",
-    "for (int y = -1; y <= 1; ++y)",
-    "for (int x = -1; x <= 1; ++x)",
+    "void considerCandidate(",
+    "vec2 searchStep = 2.0 * u_invResolution",
+    "Five-tap reverse check",
     "2.0 * u_invResolution",
-    "Nine coarse candidates span +/-4 source pixels",
-    "vec2 searchLimit = 2.25 * u_invResolution",
     "matchCost",
     "bestCost",
     "u_invResolution",
@@ -32,7 +33,6 @@ for token in (
     "previousMatch",
     "reverseBestCost",
     "reverseBestOffset",
-    "v_uv + bestOffset + reverseOffset",
     "motionCycleError",
     "consistencyLimit",
     "inconsistentMotion",
