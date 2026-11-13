@@ -39,6 +39,7 @@ def main() -> None:
     assert "g_fsrPresetScale.load" in source
     assert "(fsrPresetScale > 0.f ? fsrPresetScale : 1.f) * configuredScale" in source
     assert "std::clamp(requestedScale, 0.25f, 1.f)" in source
+    assert 'bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.2f, 1.f)' in source
     assert "GL_MAX_TEXTURE_SIZE" in source
     print("FSR preset base × Render Scale multiplier checks passed.")
 
