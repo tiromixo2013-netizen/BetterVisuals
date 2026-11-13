@@ -74,6 +74,12 @@ namespace bv::render {
 
     bool FrameInterpolationRenderer::prepare(GLsizei width, GLsizei height) {
         if (width <= 0 || height <= 0) return false;
+        // Avoid the expensive full GL-state snapshot on every frame when the
+        // renderer is already prepared for the current surface dimensions.
+        if (width == m_width && height == m_height &&
+            m_program && m_outputTexture && m_framebuffer) {
+            return true;
+        }
         GlStateGuard state;
 
         if (m_program == 0) {
@@ -95,10 +101,6 @@ namespace bv::render {
                 destroyResources();
                 return false;
             }
-        }
-
-        if (width == m_width && height == m_height && m_outputTexture && m_framebuffer) {
-            return true;
         }
 
         if (!m_outputTexture) glGenTextures(1, &m_outputTexture);
