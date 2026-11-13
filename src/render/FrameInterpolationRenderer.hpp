@@ -16,6 +16,7 @@ namespace bv::render {
 
         bool prepare(GLsizei width, GLsizei height);
         bool generate(GLuint previousFrame, GLuint currentFrame);
+        bool present();
         GLuint outputTexture() const { return m_outputTexture; }
         void reset();
         void abandonContext();
@@ -24,11 +25,13 @@ namespace bv::render {
         void destroyResources();
 
         GLuint m_program = 0;
+        GLuint m_presentProgram = 0;
         GLuint m_framebuffer = 0;
         GLuint m_outputTexture = 0;
         GLint m_previousUniform = -1;
         GLint m_currentUniform = -1;
         GLint m_invResolutionUniform = -1;
+        GLint m_presentTextureUniform = -1;
         GLsizei m_width = 0;
         GLsizei m_height = 0;
         FullscreenQuad m_quad;
