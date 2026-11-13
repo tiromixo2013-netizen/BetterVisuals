@@ -150,8 +150,8 @@ void main() {
 }
 )glsl";
 
-    VertexAttributeState captureFramePassAttribute(GLuint index) {
-        VertexAttributeState state;
+    bv::render::VertexAttributeState captureFramePassAttribute(GLuint index) {
+        bv::render::VertexAttributeState state;
         glGetVertexAttribiv(index, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &state.enabled);
         glGetVertexAttribiv(index, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, &state.buffer);
         glGetVertexAttribiv(index, GL_VERTEX_ATTRIB_ARRAY_SIZE, &state.size);
@@ -162,7 +162,7 @@ void main() {
         return state;
     }
 
-    void restoreFramePassAttribute(GLuint index, VertexAttributeState const& state) {
+    void restoreFramePassAttribute(GLuint index, bv::render::VertexAttributeState const& state) {
         glBindBuffer(GL_ARRAY_BUFFER, state.buffer);
         glVertexAttribPointer(
             index, state.size, state.type, static_cast<GLboolean>(state.normalized),
@@ -170,6 +170,11 @@ void main() {
         );
         if (state.enabled == GL_TRUE) glEnableVertexAttribArray(index);
         else glDisableVertexAttribArray(index);
+    }
+
+    void restoreCapability(GLenum capability, GLboolean enabled) {
+        if (enabled == GL_TRUE) glEnable(capability);
+        else glDisable(capability);
     }
 
     // The full GlStateGuard also queries blend equations, stencil functions,
@@ -194,8 +199,8 @@ void main() {
             m_stencilTest = glIsEnabled(GL_STENCIL_TEST);
             m_scissorTest = glIsEnabled(GL_SCISSOR_TEST);
             m_cullFace = glIsEnabled(GL_CULL_FACE);
-            m_attributes[0] = captureFramePassAttribute(FullscreenQuad::kPositionAttribute);
-            m_attributes[1] = captureFramePassAttribute(FullscreenQuad::kTexCoordAttribute);
+            m_attributes[0] = captureFramePassAttribute(bv::render::FullscreenQuad::kPositionAttribute);
+            m_attributes[1] = captureFramePassAttribute(bv::render::FullscreenQuad::kTexCoordAttribute);
         }
 
         ~FramePassStateGuard() {
@@ -234,14 +239,8 @@ void main() {
         GLboolean m_stencilTest = GL_FALSE;
         GLboolean m_scissorTest = GL_FALSE;
         GLboolean m_cullFace = GL_FALSE;
-        std::array<VertexAttributeState, 2> m_attributes = {};
+        std::array<bv::render::VertexAttributeState, 2> m_attributes = {};
     };
-
-    void restoreCapability(GLenum capability, GLboolean enabled) {
-        if (enabled == GL_TRUE) glEnable(capability);
-        else glDisable(capability);
-    }
-
 } // namespace
 
 namespace bv::render {
