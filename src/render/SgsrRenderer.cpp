@@ -52,7 +52,7 @@ void main() {
     vec2 pl = imgCoord - imgCoordPixel;
     vec4 left = textureGather(u_texture, coord, 1);
     float edgeVote = abs(left.z - left.y) + abs(color.g - left.y) + abs(color.g - left.z);
-    if (edgeVote > (8.0 / 255.0)) {
+    if (edgeVote > (8.0 / 255.0) && sourceSample.a >= 0.999) {
         coord.x += u_viewportInfo.x;
         vec4 right = textureGather(u_texture, coord + vec2(u_viewportInfo.x, 0.0), 1);
         vec4 upDown;
