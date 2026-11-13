@@ -174,8 +174,7 @@ namespace bv::render {
         m_invResolutionUniform = -1;
         m_width = 0;
         m_height = 0;
-        // FullscreenQuad::reset would issue GL calls against the replacement context.
-        // Its stale VBO name is intentionally abandoned with the lost context.
+        m_quad.abandonContext();
     }
 
     void FrameInterpolationRenderer::destroyResources() {
