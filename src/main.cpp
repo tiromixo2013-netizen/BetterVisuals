@@ -718,6 +718,10 @@ namespace {
     std::atomic<bool> g_eglSwapContextMismatchLogged = false;
     std::atomic<bool> g_eglPresentationDiagnosticsLogged = false;
     std::atomic<bool> g_frameHistoryEnabled = false;
+    std::atomic<bool> g_framePacingEnabled = false;
+    std::atomic<bool> g_lowLatencyEnabled = false;
+    EGLDisplay g_swapPolicyDisplay = EGL_NO_DISPLAY;
+    EGLint g_appliedSwapInterval = -1;
 
     bool hasEglExtension(char const* extensions, std::string_view name) {
         if (!extensions || name.empty()) return false;
@@ -754,6 +758,37 @@ namespace {
             hasPresentationTime, presentationTimeProc,
             hasFrameTimestamps, frameTimestampsProc
         );
+    }
+
+    void applyAndroidSwapPolicy(EGLDisplay display) {
+        bool const lowLatency = g_lowLatencyEnabled.load(std::memory_order_relaxed);
+        bool const framePacing = g_framePacingEnabled.load(std::memory_order_relaxed);
+        EGLint const requestedInterval = lowLatency ? 0 : (framePacing ? 1 : -1);
+
+        if (requestedInterval < 0) {
+            if (g_appliedSwapInterval >= 0 && g_swapPolicyDisplay == display) {
+                if (eglSwapInterval(display, 1) == EGL_TRUE) {
+                    g_appliedSwapInterval = -1;
+                    g_swapPolicyDisplay = EGL_NO_DISPLAY;
+                    log::info("[Presentation] Restored default EGL swap interval");
+                }
+            }
+            return;
+        }
+
+        if (g_swapPolicyDisplay == display && g_appliedSwapInterval == requestedInterval) {
+            return;
+        }
+        if (eglSwapInterval(display, requestedInterval) == EGL_TRUE) {
+            g_swapPolicyDisplay = display;
+            g_appliedSwapInterval = requestedInterval;
+            log::info("[Presentation] EGL swap interval set to {} ({})",
+                requestedInterval, lowLatency ? "low-latency request" : "frame-pacing request");
+        }
+        else {
+            log::warn("[Presentation] eglSwapInterval({}) failed: {}",
+                requestedInterval, eglGetError());
+        }
     }
 
     // Two GPU-resident snapshots of the final EGL window surface, plus an
@@ -894,6 +929,10 @@ namespace {
             currentDisplay == display &&
             currentDrawSurface == surface;
 
+        if (isGamePresentationContext) {
+            applyAndroidSwapPolicy(display);
+        }
+
         // Capture the completed window-surface image before the original swap.
         // Kept opt-in because full-resolution GPU copies can be expensive on mobile.
         if (isGamePresentationContext &&
@@ -947,6 +986,8 @@ $on_mod(Loaded) {
     bindBoolSetting("enable-fun", g_funEnabled);
 #ifdef GEODE_IS_ANDROID
     bindBoolSetting("frame-history-capture", g_frameHistoryEnabled);
+    bindBoolSetting("frame-pacing-enabled", g_framePacingEnabled);
+    bindBoolSetting("low-latency-enabled", g_lowLatencyEnabled);
 #endif
 
     auto applyFullScene = [](bool on) {
