@@ -1,4 +1,5 @@
 #include "render/BloomRenderer.hpp"
+#include "render/FrameInterpolationRenderer.hpp"
 #include "render/GlStateGuard.hpp"
 #include "render/PostProcessPipeline.hpp"
 #include "render/PostProcessRenderer.hpp"
@@ -715,6 +716,7 @@ namespace {
                 m_height = 0;
                 m_writeIndex = 0;
                 m_validFrames = 0;
+                m_interpolator.abandonContext();
                 m_context = context;
             }
 
@@ -727,6 +729,7 @@ namespace {
                 m_height = 0;
                 m_writeIndex = 0;
                 m_validFrames = 0;
+                m_interpolator.reset();
             }
 
             GLint previousFramebuffer = 0;
@@ -781,21 +784,34 @@ namespace {
             if (captured) {
                 m_writeIndex = 1 - m_writeIndex;
                 if (m_validFrames < 2) ++m_validFrames;
-                if (m_validFrames == 2 && !m_pairLogged) {
-                    m_pairLogged = true;
-                    log::info("[FrameGeneration] Two consecutive EGL surface frames captured into GPU history");
+                if (m_validFrames == 2) {
+                    auto const previousIndex = m_writeIndex;
+                    auto const currentIndex = 1 - m_writeIndex;
+                    if (m_interpolator.prepare(width, height) &&
+                        m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])) {
+                        if (!m_pairLogged) {
+                            m_pairLogged = true;
+                            log::info("[FrameGeneration] GPU motion-matched midpoint texture generated");
+                        }
+                    }
+                    else if (!m_generationWarningLogged) {
+                        m_generationWarningLogged = true;
+                        log::warn("[FrameGeneration] Midpoint reconstruction could not be initialized; capture history remains available");
+                    }
                 }
             }
         }
 
     private:
         std::array<GLuint, 2> m_textures = {};
+        bv::render::FrameInterpolationRenderer m_interpolator;
         EGLContext m_context = EGL_NO_CONTEXT;
         EGLint m_width = 0;
         EGLint m_height = 0;
         std::size_t m_writeIndex = 0;
         std::size_t m_validFrames = 0;
         bool m_pairLogged = false;
+        bool m_generationWarningLogged = false;
     };
 
     AndroidFrameHistory g_androidFrameHistory;
