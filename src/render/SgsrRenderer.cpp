@@ -148,12 +148,10 @@ namespace bv::render {
             m_viewportUniform,
             1.f / static_cast<GLfloat>(inputWidth),
             1.f / static_cast<GLfloat>(inputHeight),
-            // SGSR's pixel-space coordinates and texel offsets must use the
-            // source image dimensions. Using the larger output dimensions here
-            // makes the gather coordinates walk past the low-resolution image
-            // at high upscale ratios, producing edge smearing/ghost-like trails.
-            static_cast<GLfloat>(inputWidth),
-            static_cast<GLfloat>(inputHeight)
+            // SGSR maps output pixel coordinates back into source texels:
+            // zw is the output viewport size, xy is the inverse source size.
+            static_cast<GLfloat>(outputWidth),
+            static_cast<GLfloat>(outputHeight)
         );
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, inputTexture);
