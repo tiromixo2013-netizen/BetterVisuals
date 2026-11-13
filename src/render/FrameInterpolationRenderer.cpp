@@ -108,7 +108,7 @@ void main() {
             vec2 reverseOffset =
                 vec2(float(reverseX), float(reverseY)) * (2.0 * u_invResolution);
             vec3 reverseCandidate = texture2D(
-                u_current, clamp(v_uv + reverseOffset, 0.0, 1.0)
+                u_current, clamp(v_uv + bestOffset + reverseOffset, 0.0, 1.0)
             ).rgb;
             float reverseCost = matchCost(previousMatch, reverseCandidate);
             if (reverseCost < reverseBestCost) {
