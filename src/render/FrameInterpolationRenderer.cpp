@@ -239,6 +239,7 @@ namespace bv::render {
         m_framebuffer = 0;
         m_outputTexture = 0;
         m_program = 0;
+        m_presentProgram = 0;
         m_previousUniform = -1;
         m_currentUniform = -1;
         m_invResolutionUniform = -1;
