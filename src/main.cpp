@@ -1156,6 +1156,8 @@ namespace {
             isGamePresentationContext &&
             g_frameHistoryEnabled.load(std::memory_order_relaxed);
 
+        // This opt-in path performs two EGL swaps only when
+        // frame-history-capture is enabled by the user.
         if (frameGenerationEnabled) {
             bool const generated = g_androidFrameHistory.capture(display, surface, context);
             if (generated && g_androidFrameHistory.presentMidpoint()) {
