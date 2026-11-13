@@ -86,9 +86,10 @@ void main() {
         float deltaY = clamp(finalY - centerY, -23.0 / 255.0, 23.0 / 255.0);
         color = clamp(color + vec3(deltaY), 0.0, 1.0);
     }
-    // This is the final, fully composited scene image. Its destination must
-    // not alpha-blend with stale contents from the previous back buffer.
-    outColor = vec4(color, 1.0);
+    // The default hook captures GJBaseGameLayer only, not the background
+    // already drawn by its parent scene. Preserve the layer's premultiplied
+    // alpha so the upscaled layer can be composited over that background.
+    outColor = vec4(color, sourceSample.a);
 }
 )glsl";
 
@@ -145,11 +146,11 @@ namespace bv::render {
         }
 
         GlStateGuard state;
-        // SGSR writes a complete final-frame image into the caller's target.
-        // Inherit neither sprite blending nor partial-write tests from the game:
-        // otherwise translucent source alpha can blend the new frame with old
-        // back-buffer pixels and create the visible duplicate/trailing image.
-        glDisable(GL_BLEND);
+        // This pass may contain a transparent game layer over a background
+        // already rendered by the parent scene. SGSR preserves alpha and the
+        // Cocos2d premultiplied-alpha convention composites it over that scene.
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_STENCIL_TEST);
         glDisable(GL_SCISSOR_TEST);
