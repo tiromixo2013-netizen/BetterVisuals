@@ -92,6 +92,49 @@ void main() {
         return;
     }
 
+    // Forward/backward consistency: starting from the matched point in the
+    // previous frame, independently search the current frame for its return
+    // correspondence. Occluded pixels and mismatched motion usually fail this
+    // cycle check, so use the current native pixel instead of drawing a trail.
+    vec3 previousMatch = texture2D(
+        u_previous, clamp(v_uv + bestOffset, 0.0, 1.0)
+    ).rgb;
+    float reverseBestCost = 1.0;
+    float reverseSecondBestCost = 1.0;
+    vec2 reverseBestOffset = vec2(0.0);
+
+    for (int reverseY = -1; reverseY <= 1; ++reverseY) {
+        for (int reverseX = -1; reverseX <= 1; ++reverseX) {
+            vec2 reverseOffset =
+                vec2(float(reverseX), float(reverseY)) * (2.0 * u_invResolution);
+            vec3 reverseCandidate = texture2D(
+                u_current, clamp(v_uv + reverseOffset, 0.0, 1.0)
+            ).rgb;
+            float reverseCost = matchCost(previousMatch, reverseCandidate);
+            if (reverseCost < reverseBestCost) {
+                reverseSecondBestCost = reverseBestCost;
+                reverseBestCost = reverseCost;
+                reverseBestOffset = reverseOffset;
+            }
+            else if (reverseCost < reverseSecondBestCost) {
+                reverseSecondBestCost = reverseCost;
+            }
+        }
+    }
+
+    // The two independently estimated vectors must close the motion cycle.
+    // A one-cell disagreement is rejected rather than blended as a ghost.
+    vec2 motionCycleError = bestOffset + reverseBestOffset;
+    vec2 consistencyLimit = 0.75 * u_invResolution;
+    bool inconsistentMotion =
+        abs(motionCycleError.x) > consistencyLimit.x ||
+        abs(motionCycleError.y) > consistencyLimit.y;
+    if (inconsistentMotion || reverseBestCost > 0.08 ||
+        (reverseSecondBestCost - reverseBestCost) < 0.0015) {
+        gl_FragColor = vec4(current, 1.0);
+        return;
+    }
+
     vec2 halfMotion = bestOffset * 0.5;
     vec3 fromPrevious = texture2D(
         u_previous, clamp(v_uv + halfMotion, 0.0, 1.0)
