@@ -88,13 +88,6 @@
 				"slider-step": 0.01
 			}
 		},
-		"adaptive-resolution": {
-			"type": "bool",
-			"name": "Adaptive Resolution",
-			"description": "Gradually lowers internal render resolution under sustained CPU/driver submission load and restores it after sustained headroom. Uses no GPU waits; it is not frame generation.",
-			"default": false,
-			"enable-if": "enabled"
-		},
 		"upscale-method": {
 			"type": "string",
 			"name": "Upscale Method",
