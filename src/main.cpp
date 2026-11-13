@@ -1084,7 +1084,7 @@ namespace {
             if (result == EGL_TIMEOUT_EXPIRED_KHR) return false;
             api.destroySync(display, m_gpuFence);
             m_gpuFence = EGL_NO_SYNC_KHR;
-            if (result != EGL_CONDITION_SATISFIED_KHR && result != EGL_ALREADY_SIGNALED_KHR) {
+            if (result != EGL_CONDITION_SATISFIED_KHR) {
                 log::warn("[FrameGeneration][Fence] Non-blocking poll failed; retaining same-context GL ordering");
             }
             return true;
