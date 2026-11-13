@@ -96,9 +96,16 @@ void main() {
         }
     }
 
-    // Reject uncertain, occluded, flat, or newly exposed pixels instead of
-    // blending unrelated samples into a visible double image.
-    if (bestCost > 0.08 || (secondBestCost - bestCost) < 0.0025) {
+    // A winner at the search boundary usually means the real motion is
+    // outside our local window. Reject it rather than inventing a clipped vector.
+    vec2 searchLimit = 4.5 * u_invResolution;
+    bool hitSearchBoundary =
+        abs(bestOffset.x) >= searchLimit.x || abs(bestOffset.y) >= searchLimit.y;
+
+    // Reject uncertain, occluded, flat, newly exposed, or out-of-range pixels
+    // instead of blending unrelated samples into a visible double image.
+    if (hitSearchBoundary || bestCost > 0.08 ||
+        (secondBestCost - bestCost) < 0.0025) {
         gl_FragColor = vec4(current, 1.0);
         return;
     }
