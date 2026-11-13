@@ -880,7 +880,7 @@ namespace {
                     m_totalNs += elapsedNs;
                     ++m_samples;
                     if ((m_samples % 120) == 0) {
-                        log::info("[FrameGeneration][GPU] average interpolation + midpoint presentation time over 120 samples: {} us",
+                        log::info("[FrameGeneration][GPU] average frame capture + interpolation GPU time over 120 samples: {} us",
                             (m_totalNs / 120) / 1000);
                         m_totalNs = 0;
                     }
