@@ -843,12 +843,12 @@ namespace {
                 log::info("[FrameGeneration][GPU] EXT_disjoint_timer_query unavailable; GPU timing disabled");
                 return;
             }
-            m_genQueries = reinterpret_cast<GenQueries>(eglGetProcAddress("glGenQueriesEXT"));
-            m_deleteQueries = reinterpret_cast<DeleteQueries>(eglGetProcAddress("glDeleteQueriesEXT"));
-            m_beginQuery = reinterpret_cast<BeginQuery>(eglGetProcAddress("glBeginQueryEXT"));
-            m_endQuery = reinterpret_cast<EndQuery>(eglGetProcAddress("glEndQueryEXT"));
-            m_getQueryObjectuiv = reinterpret_cast<GetQueryObjectuiv>(eglGetProcAddress("glGetQueryObjectuivEXT"));
-            m_getQueryObjectui64v = reinterpret_cast<GetQueryObjectui64v>(eglGetProcAddress("glGetQueryObjectui64vEXT"));
+            m_genQueries = reinterpret_cast<GenQueries>(eglGetProcAddress("glGenQueries" "EXT"));
+            m_deleteQueries = reinterpret_cast<DeleteQueries>(eglGetProcAddress("glDeleteQueries" "EXT"));
+            m_beginQuery = reinterpret_cast<BeginQuery>(eglGetProcAddress("glBeginQuery" "EXT"));
+            m_endQuery = reinterpret_cast<EndQuery>(eglGetProcAddress("glEndQuery" "EXT"));
+            m_getQueryObjectuiv = reinterpret_cast<GetQueryObjectuiv>(eglGetProcAddress("glGetQueryObjectuiv" "EXT"));
+            m_getQueryObjectui64v = reinterpret_cast<GetQueryObjectui64v>(eglGetProcAddress("glGetQueryObjectui64v" "EXT"));
             if (!m_genQueries || !m_deleteQueries || !m_beginQuery || !m_endQuery ||
                 !m_getQueryObjectuiv || !m_getQueryObjectui64v) {
                 log::warn("[FrameGeneration][GPU] Timer-query entry points incomplete");
