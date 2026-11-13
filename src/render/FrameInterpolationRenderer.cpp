@@ -33,6 +33,10 @@ void main() { gl_FragColor = texture2D(u_texture, v_uv); }
     // Low-cost bidirectional cross search. Five candidates in each direction
     // replace the previous 3x3 + 3x3 search (18 match samples). Output remains
     // half resolution; uncertain motion falls back to the native current frame.
+    // Minimal one-sided midpoint reprojection. Five inexpensive previous-frame
+    // candidates estimate motion; uncertain/ambiguous pixels use the current
+    // frame. A single source sample is used for accepted pixels (no temporal
+    // cross-blend), avoiding the double-image ghosting caused by averaging.
     constexpr char kFragment[] = R"glsl(
 precision mediump float;
 varying vec2 v_uv;
@@ -41,106 +45,56 @@ uniform sampler2D u_current;
 uniform vec2 u_invResolution;
 
 float matchCost(vec3 a, vec3 b) {
-    vec3 delta = abs(a - b);
-    return max(delta.r, max(delta.g, delta.b));
-}
-
-void considerCandidate(
-    vec3 referenceColor, vec3 candidateColor, vec2 offset,
-    inout float bestCost, inout float secondBestCost, inout vec2 bestOffset
-) {
-    float cost = matchCost(referenceColor, candidateColor);
-    if (cost < bestCost) {
-        secondBestCost = bestCost;
-        bestCost = cost;
-        bestOffset = offset;
-    }
-    else if (cost < secondBestCost) {
-        secondBestCost = cost;
-    }
+    vec3 d = abs(a - b);
+    return max(d.r, max(d.g, d.b));
 }
 
 void main() {
     vec3 current = texture2D(u_current, v_uv).rgb;
-    float bestCost = 1.0;
-    float secondBestCost = 1.0;
-    vec2 bestOffset = vec2(0.0);
-    vec2 searchStep = 2.0 * u_invResolution;
+    vec2 step = 2.0 * u_invResolution;
 
-    // Center + four cardinal neighbours: substantially fewer texture reads
-    // and ALU operations than the former 3x3 search.
-    considerCandidate(current, texture2D(u_previous, v_uv).rgb,
-        vec2(0.0), bestCost, secondBestCost, bestOffset);
-    considerCandidate(current, texture2D(u_previous,
-        clamp(v_uv + vec2(-searchStep.x, 0.0), 0.0, 1.0)).rgb,
-        vec2(-searchStep.x, 0.0), bestCost, secondBestCost, bestOffset);
-    considerCandidate(current, texture2D(u_previous,
-        clamp(v_uv + vec2(searchStep.x, 0.0), 0.0, 1.0)).rgb,
-        vec2(searchStep.x, 0.0), bestCost, secondBestCost, bestOffset);
-    considerCandidate(current, texture2D(u_previous,
-        clamp(v_uv + vec2(0.0, -searchStep.y), 0.0, 1.0)).rgb,
-        vec2(0.0, -searchStep.y), bestCost, secondBestCost, bestOffset);
-    considerCandidate(current, texture2D(u_previous,
-        clamp(v_uv + vec2(0.0, searchStep.y), 0.0, 1.0)).rgb,
-        vec2(0.0, searchStep.y), bestCost, secondBestCost, bestOffset);
+    float best = matchCost(current, texture2D(u_previous, v_uv).rgb);
+    float second = 1.0;
+    vec2 offset = vec2(0.0);
 
-    bool hitSearchBoundary =
-        abs(bestOffset.x) >= searchStep.x * 0.99 ||
-        abs(bestOffset.y) >= searchStep.y * 0.99;
+    float c = matchCost(current, texture2D(
+        u_previous, clamp(v_uv + vec2(-step.x, 0.0), 0.0, 1.0)
+    ).rgb);
+    if (c < best) { second = best; best = c; offset = vec2(-step.x, 0.0); }
+    else { second = min(second, c); }
 
-    // Reject flat/ambiguous regions, large motion and newly exposed pixels.
-    if (hitSearchBoundary || bestCost > 0.08 ||
-        (secondBestCost - bestCost) < 0.0025) {
+    c = matchCost(current, texture2D(
+        u_previous, clamp(v_uv + vec2(step.x, 0.0), 0.0, 1.0)
+    ).rgb);
+    if (c < best) { second = best; best = c; offset = vec2(step.x, 0.0); }
+    else { second = min(second, c); }
+
+    c = matchCost(current, texture2D(
+        u_previous, clamp(v_uv + vec2(0.0, -step.y), 0.0, 1.0)
+    ).rgb);
+    if (c < best) { second = best; best = c; offset = vec2(0.0, -step.y); }
+    else { second = min(second, c); }
+
+    c = matchCost(current, texture2D(
+        u_previous, clamp(v_uv + vec2(0.0, step.y), 0.0, 1.0)
+    ).rgb);
+    if (c < best) { second = best; best = c; offset = vec2(0.0, step.y); }
+    else { second = min(second, c); }
+
+    // Reject weak, ambiguous and search-limit matches. Falling back to the
+    // current frame creates no blended double image in uncertain regions.
+    bool atSearchLimit = abs(offset.x) > 0.0 || abs(offset.y) > 0.0;
+    if (best > 0.08 || (second - best) < 0.003 || atSearchLimit) {
         gl_FragColor = vec4(current, 1.0);
         return;
     }
 
-    vec3 previousMatch = texture2D(
-        u_previous, clamp(v_uv + bestOffset, 0.0, 1.0)
+    // One-sided reprojection: sample only the previous frame at the midpoint.
+    // This trades some motion coverage for lower bandwidth and no blend ghost.
+    vec3 midpoint = texture2D(
+        u_previous, clamp(v_uv + offset * 0.5, 0.0, 1.0)
     ).rgb;
-
-    // Five-tap reverse check rejects occlusions and false matches. This keeps
-    // the no-ghost fallback while using 10 match samples instead of 18.
-    float reverseBestCost = 1.0;
-    float reverseSecondBestCost = 1.0;
-    vec2 reverseBestOffset = vec2(0.0);
-
-    considerCandidate(previousMatch, texture2D(u_current,
-        clamp(v_uv + bestOffset, 0.0, 1.0)).rgb,
-        vec2(0.0), reverseBestCost, reverseSecondBestCost, reverseBestOffset);
-    considerCandidate(previousMatch, texture2D(u_current,
-        clamp(v_uv + bestOffset + vec2(-searchStep.x, 0.0), 0.0, 1.0)).rgb,
-        vec2(-searchStep.x, 0.0), reverseBestCost, reverseSecondBestCost, reverseBestOffset);
-    considerCandidate(previousMatch, texture2D(u_current,
-        clamp(v_uv + bestOffset + vec2(searchStep.x, 0.0), 0.0, 1.0)).rgb,
-        vec2(searchStep.x, 0.0), reverseBestCost, reverseSecondBestCost, reverseBestOffset);
-    considerCandidate(previousMatch, texture2D(u_current,
-        clamp(v_uv + bestOffset + vec2(0.0, -searchStep.y), 0.0, 1.0)).rgb,
-        vec2(0.0, -searchStep.y), reverseBestCost, reverseSecondBestCost, reverseBestOffset);
-    considerCandidate(previousMatch, texture2D(u_current,
-        clamp(v_uv + bestOffset + vec2(0.0, searchStep.y), 0.0, 1.0)).rgb,
-        vec2(0.0, searchStep.y), reverseBestCost, reverseSecondBestCost, reverseBestOffset);
-
-    vec2 motionCycleError = bestOffset + reverseBestOffset;
-    vec2 consistencyLimit = 0.75 * u_invResolution;
-    bool inconsistentMotion =
-        abs(motionCycleError.x) > consistencyLimit.x ||
-        abs(motionCycleError.y) > consistencyLimit.y;
-
-    if (inconsistentMotion || reverseBestCost > 0.08 ||
-        (reverseSecondBestCost - reverseBestCost) < 0.0015) {
-        gl_FragColor = vec4(current, 1.0);
-        return;
-    }
-
-    vec2 halfMotion = bestOffset * 0.5;
-    vec3 fromPrevious = texture2D(
-        u_previous, clamp(v_uv + halfMotion, 0.0, 1.0)
-    ).rgb;
-    vec3 fromCurrent = texture2D(
-        u_current, clamp(v_uv - halfMotion, 0.0, 1.0)
-    ).rgb;
-    gl_FragColor = vec4((fromPrevious + fromCurrent) * 0.5, 1.0);
+    gl_FragColor = vec4(midpoint, 1.0);
 }
 )glsl";
 
