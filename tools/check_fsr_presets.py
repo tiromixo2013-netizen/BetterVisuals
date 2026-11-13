@@ -16,6 +16,9 @@ def main() -> None:
         "Ultra Performance",
     ]
     assert preset["default"] == "Custom"
+
+    fsr_blend = settings["fsr-sharpness"]
+    assert fsr_blend["default"] == 1
     assert preset["one-of"] == expected
 
     render_scale = settings["render-scale"]
@@ -42,6 +45,8 @@ def main() -> None:
     assert "auto const aaScale = fsrPresetScale > 0.f ? 1.f : ssaaFactor(config.aa)" in source
     assert 'bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.2f, 1.f)' in source
     assert "GL_MAX_TEXTURE_SIZE" in source
+    assert "g_fsrReconstructionBlend = 1.f" in source
+    assert 'bindDoubleSetting("fsr-sharpness", g_fsrReconstructionBlend, 0.f, 1.f, 1.f)' in source
     print("FSR preset base × Render Scale multiplier checks passed.")
 
 
