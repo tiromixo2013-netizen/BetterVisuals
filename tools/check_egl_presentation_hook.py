@@ -6,7 +6,7 @@ def main() -> None:
     source = (root / "src/main.cpp").read_text(encoding="utf-8")
     cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
 
-    assert "#ifdef GEODE_IS_ANDROID\n    #include <EGL/egl.h>\n#endif" in source
+    assert "#ifdef GEODE_IS_ANDROID\n    #include <EGL/egl.h>\n    #include <EGL/eglext.h>\n#endif" in source
     assert "EGLBoolean betterVisualsEglSwapBuffers(EGLDisplay display, EGLSurface surface)" in source
     assert "eglGetCurrentContext()" in source
     assert "eglGetCurrentDisplay()" in source
@@ -17,7 +17,7 @@ def main() -> None:
     assert "Mod::get()->hook(" in source
     assert "tulip::hook::TulipConvention::Cdecl" in source
     assert "installAndroidEglSwapHook();" in source
-    assert "if (ANDROID)\n    target_link_libraries(${PROJECT_NAME} PRIVATE EGL)\nendif()" in cmake
+    assert "if (ANDROID)\n    target_link_libraries(${PROJECT_NAME} EGL)\nendif()" in cmake
 
     # This is a presentation-hook probe only. It must not claim to generate frames.
     assert "generated frame" not in detour.lower()
