@@ -6,10 +6,10 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"id": "imes.bettervisuals",
+	"id": "tiromixo2013.bettervisuals-gsr",
 	"name": "Better Visuals and FPS",
-	"version": "v2.3.2",
-	"developer": "imes",
+	"version": "2.4.0",
+	"developer": "tiromixo2013",
 	"description": "Neat upscaling and post-processing mod.",
 	"tags": [
 		"universal",
@@ -19,7 +19,7 @@
 	],
 	"links": {
 		"community": "https://discord.gg/E8f6D6XqbW",
-		"source": "https://github.com/ItMe12s/BetterVisuals"
+		"source": "https://github.com/tiromixo2013-netizen/BetterVisuals"
 	},
 	"dependencies": {
 		"geode.node-ids": ">=1.23.3"
@@ -101,8 +101,8 @@
 		},
 		"fsr-sharpness": {
 			"type": "float",
-			"name": "FSR Sharpness",
-			"description": "FSR 1 reconstruction strength. Lower is smoother, 1 is sharpest.",
+			"name": "FSR Reconstruction Blend",
+			"description": "Blends bilinear sampling with full edge-adaptive EASU reconstruction: 0 is bilinear, 1 is full EASU.",
 			"default": 0.5,
 			"min": 0,
 			"max": 1,
