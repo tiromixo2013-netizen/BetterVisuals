@@ -25,6 +25,12 @@ void main() {
     // reconstructed by sampling both frames halfway along that displacement.
     // This is intentionally conservative and is not a claim of production
     // quality optical flow: occlusions and large motion remain difficult.
+    constexpr char kPresentFragment[] = R"glsl(
+varying vec2 v_uv;
+uniform sampler2D u_texture;
+void main() { gl_FragColor = texture2D(u_texture, v_uv); }
+)glsl";
+
     constexpr char kFragment[] = R"glsl(
 varying vec2 v_uv;
 uniform sampler2D u_previous;
@@ -77,7 +83,7 @@ namespace bv::render {
         // Avoid the expensive full GL-state snapshot on every frame when the
         // renderer is already prepared for the current surface dimensions.
         if (width == m_width && height == m_height &&
-            m_program && m_outputTexture && m_framebuffer) {
+            m_program && m_presentProgram && m_outputTexture && m_framebuffer) {
             return true;
         }
         GlStateGuard state;
@@ -89,6 +95,20 @@ namespace bv::render {
                 "Android frame interpolation", vertexSources, fragmentSources
             );
             if (m_program == 0) return false;
+
+            std::array<std::string_view, 1> presentSources{kPresentFragment};
+            m_presentProgram = compileShaderProgram(
+                "Android midpoint presentation", vertexSources, presentSources
+            );
+            if (m_presentProgram == 0) {
+                destroyResources();
+                return false;
+            }
+            m_presentTextureUniform = glGetUniformLocation(m_presentProgram, "u_texture");
+            if (m_presentTextureUniform < 0) {
+                destroyResources();
+                return false;
+            }
 
             m_previousUniform = glGetUniformLocation(m_program, "u_previous");
             m_currentUniform = glGetUniformLocation(m_program, "u_current");
@@ -171,6 +191,26 @@ namespace bv::render {
         return true;
     }
 
+    bool FrameInterpolationRenderer::present() {
+        if (!m_outputTexture || !m_presentProgram || m_width <= 0 || m_height <= 0) return false;
+        GlStateGuard state;
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, m_width, m_height);
+        glDisable(GL_BLEND);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_STENCIL_TEST);
+        glDisable(GL_SCISSOR_TEST);
+        glDisable(GL_CULL_FACE);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glUseProgram(m_presentProgram);
+        glUniform1i(m_presentTextureUniform, 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_outputTexture);
+        m_quad.bind();
+        FullscreenQuad::draw();
+        return true;
+    }
+
     void FrameInterpolationRenderer::reset() {
         destroyResources();
     }
@@ -180,9 +220,11 @@ namespace bv::render {
         m_framebuffer = 0;
         m_outputTexture = 0;
         m_program = 0;
+        m_presentProgram = 0;
         m_previousUniform = -1;
         m_currentUniform = -1;
         m_invResolutionUniform = -1;
+        m_presentTextureUniform = -1;
         m_width = 0;
         m_height = 0;
         m_quad.abandonContext();
@@ -193,6 +235,7 @@ namespace bv::render {
         if (m_framebuffer) glDeleteFramebuffers(1, &m_framebuffer);
         if (m_outputTexture) glDeleteTextures(1, &m_outputTexture);
         if (m_program) glDeleteProgram(m_program);
+        if (m_presentProgram) glDeleteProgram(m_presentProgram);
         m_framebuffer = 0;
         m_outputTexture = 0;
         m_program = 0;
