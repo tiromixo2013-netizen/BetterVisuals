@@ -21,8 +21,9 @@ for token in (
     "bestOffset",
     "for (int y = -1; y <= 1; ++y)",
     "for (int x = -1; x <= 1; ++x)",
-    "4.0 * u_invResolution",
-    "abs(x) + abs(y) != 1",
+    "2.0 * u_invResolution",
+    "Nine coarse candidates span +/-4 source pixels",
+    "vec2 searchLimit = 2.25 * u_invResolution",
     "matchCost",
     "bestCost",
     "u_invResolution",
@@ -43,11 +44,16 @@ for token in (
     "bool generate(GLuint previousFrame, GLuint currentFrame)",
     "GLuint outputTexture() const",
     "bool presentTexture(GLuint texture)",
+    "m_surfaceWidth",
+    "m_surfaceHeight",
     "void abandonContext()",
 ):
     assert token in header, f"missing renderer API: {token}"
 
 assert "return glGetError()" not in renderer, "renderer must not consume caller GL errors"
+assert "outputWidth = std::max<GLsizei>(1, (width + 1) / 2)" in renderer
+assert "outputHeight = std::max<GLsizei>(1, (height + 1) / 2)" in renderer
+assert "glViewport(0, 0, m_surfaceWidth, m_surfaceHeight)" in renderer
 
 prepare_body = renderer.split("bool FrameInterpolationRenderer::prepare", 1)[1].split("bool FrameInterpolationRenderer::generate", 1)[0]
 assert prepare_body.index("m_outputTexture && m_framebuffer") < prepare_body.index("GlStateGuard state"), (
