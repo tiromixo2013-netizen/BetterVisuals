@@ -104,8 +104,8 @@ namespace {
 
     std::atomic<AntiAliasingMethod> g_antiAliasingMethod = AntiAliasingMethod::SmaaHigh;
     std::atomic<UpscaleMethod> g_upscaleMethod = UpscaleMethod::Nearest;
-    // Zero selects the user-controlled Render Scale value; positive values are
-    // the source-resolution ratios for the FSR 1 quality presets.
+    // Zero selects the Custom base (1.0); positive values are the base
+    // source-resolution ratios for the FSR 1 quality presets.
     std::atomic<float> g_fsrPresetScale = 0.f;
     std::atomic<float> g_renderScale = 1.f;
     std::atomic<bool> g_casEnabled = false;
@@ -676,7 +676,7 @@ $on_mod(Loaded) {
     };
     applyFullScene(Mod::get()->getSettingValue<bool>("full-scene-effects"));
     listenForSettingChanges<bool>("full-scene-effects", applyFullScene);
-    bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.f, 1.f);
+    bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.2f, 1.f);
     bindStringSetting("upscale-method", updateUpscaleMethod);
     bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
