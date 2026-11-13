@@ -955,7 +955,6 @@ namespace {
                 return;
             }
             if (!retirePreviousFence(display)) return;
-            m_gpuTimer.begin();
 
             if (m_context != context) {
                 // GL names from a lost context are invalid in the new context;
@@ -982,6 +981,7 @@ namespace {
                 m_interpolator.reset();
             }
 
+            m_gpuTimer.begin();
             GLint previousFramebuffer = 0;
             GLint previousActiveTexture = GL_TEXTURE0;
             glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
