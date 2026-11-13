@@ -83,8 +83,7 @@ void main() {
 
     // Reject weak, ambiguous and search-limit matches. Falling back to the
     // current frame creates no blended double image in uncertain regions.
-    bool atSearchLimit = abs(offset.x) > 0.0 || abs(offset.y) > 0.0;
-    if (best > 0.08 || (second - best) < 0.003 || atSearchLimit) {
+    if (best > 0.08 || (second - best) < 0.003) {
         gl_FragColor = vec4(current, 1.0);
         return;
     }
