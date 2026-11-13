@@ -535,7 +535,9 @@ namespace {
         // FSR 1 is an upscaler, so never ask EASU to downscale above native.
         auto const requestedScale =
             (fsrPresetScale > 0.f ? fsrPresetScale : 1.f) * configuredScale;
-        auto const renderScale = std::clamp(requestedScale, 0.25f, 1.f);
+        auto const renderScale = std::clamp(
+            requestedScale, 0.25f, config.upscaling == UpscaleMethod::Fsr ? 1.f : 1.2f
+        );
         // A selected FSR quality preset owns the base resolution. SSAA's
         // supersampling multiplier would otherwise push it above native and
         // route presentation through the SSAA downsampler instead of EASU.
