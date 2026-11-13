@@ -21,12 +21,12 @@ void main() {
 }
 )glsl";
 
-    // A compact 3x3 block-matching search estimates a local displacement
-    // from the current frame back into the previous frame. The midpoint is
-    // reconstructed by sampling both frames halfway along that displacement.
-    // The output runs at half surface resolution to reduce fragment work by 4x
-    // on mobile GPUs; the native frame remains full resolution.
-    // This is not production-quality optical flow: occlusions and large motion remain difficult.
+    // Bidirectional 3x3 block matching estimates local motion and checks that
+    // the reverse correspondence closes the motion cycle before reconstruction.
+    // The output runs at half surface resolution to bound fragment work on
+    // mobile GPUs; the native frame remains full resolution.
+    // This is conservative local flow, not production optical flow: large or
+    // ambiguous motion falls back to the native current-frame pixel.
     constexpr char kPresentFragment[] = R"glsl(
 varying vec2 v_uv;
 uniform sampler2D u_texture;
@@ -58,8 +58,8 @@ void main() {
 
     // Nine coarse candidates span +/-4 source pixels. The output grid is half
     // resolution, so one output pixel corresponds to two source pixels.
-    // Removing the four refinement reads keeps the mobile shader bounded at
-    // nine search reads plus the two midpoint samples.
+    // A second 3x3 search runs only after the forward match passes confidence
+    // checks; it validates the reverse correspondence before blending.
     for (int y = -1; y <= 1; ++y) {
         for (int x = -1; x <= 1; ++x) {
             vec2 offset = vec2(float(x), float(y)) * (2.0 * u_invResolution);
