@@ -19,6 +19,10 @@ for token in (
     "uniform sampler2D u_previous",
     "uniform sampler2D u_current",
     "bestOffset",
+    "for (int y = -2; y <= 2; ++y)",
+    "for (int x = -2; x <= 2; ++x)",
+    "for (int y = -1; y <= 1; ++y)",
+    "matchCost",
     "bestCost",
     "u_invResolution",
     "fromPrevious",
@@ -37,6 +41,7 @@ for token in (
     "bool prepare(GLsizei width, GLsizei height)",
     "bool generate(GLuint previousFrame, GLuint currentFrame)",
     "GLuint outputTexture() const",
+    "bool presentTexture(GLuint texture)",
     "void abandonContext()",
 ):
     assert token in header, f"missing renderer API: {token}"
