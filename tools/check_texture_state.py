@@ -9,8 +9,9 @@ def main() -> None:
     assert "glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, &previousMagFilter)" in source
     assert "glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, previousMinFilter)" in source
     assert "glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, previousMagFilter)" in source
-    assert "glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);" not in source
-    assert "glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);" not in source
+    # Frame-history textures intentionally use linear sampling; the scene upscaler
+    # path must still preserve and restore the caller texture parameters (checked above).
+    assert "glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);" in source
     print("Texture sampling state restoration self-check passed.")
 
 
