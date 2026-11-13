@@ -66,13 +66,43 @@ namespace bv::render {
         glGetIntegerv(GL_VIEWPORT, state.viewport.data());
         glGetIntegerv(GL_SCISSOR_BOX, state.scissorBox.data());
         glGetFloatv(GL_COLOR_CLEAR_VALUE, state.clearColor.data());
+        glGetFloatv(GL_BLEND_COLOR, state.blendColor.data());
         glGetBooleanv(GL_COLOR_WRITEMASK, state.colorMask.data());
+
         state.blend = glIsEnabled(GL_BLEND);
         state.depthTest = glIsEnabled(GL_DEPTH_TEST);
         state.stencilTest = glIsEnabled(GL_STENCIL_TEST);
         state.scissorTest = glIsEnabled(GL_SCISSOR_TEST);
         state.cullFace = glIsEnabled(GL_CULL_FACE);
 
+        glGetIntegerv(GL_BLEND_SRC_RGB, &state.blendSrcRGB);
+        glGetIntegerv(GL_BLEND_DST_RGB, &state.blendDstRGB);
+        glGetIntegerv(GL_BLEND_SRC_ALPHA, &state.blendSrcAlpha);
+        glGetIntegerv(GL_BLEND_DST_ALPHA, &state.blendDstAlpha);
+        glGetIntegerv(GL_BLEND_EQUATION_RGB, &state.blendEquationRGB);
+        glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &state.blendEquationAlpha);
+
+        glGetIntegerv(GL_DEPTH_FUNC, &state.depthFunc);
+        glGetBooleanv(GL_DEPTH_WRITEMASK, &state.depthMask);
+
+        glGetIntegerv(GL_STENCIL_FUNC, &state.stencilFunc);
+        glGetIntegerv(GL_STENCIL_REF, &state.stencilRef);
+        glGetIntegerv(GL_STENCIL_VALUE_MASK, &state.stencilValueMask);
+        glGetIntegerv(GL_STENCIL_FAIL, &state.stencilFail);
+        glGetIntegerv(GL_STENCIL_PASS_DEPTH_FAIL, &state.stencilDepthFail);
+        glGetIntegerv(GL_STENCIL_PASS_DEPTH_PASS, &state.stencilDepthPass);
+        glGetIntegerv(GL_STENCIL_WRITEMASK, &state.stencilWriteMask);
+
+        glGetIntegerv(GL_STENCIL_BACK_FUNC, &state.stencilBackFunc);
+        glGetIntegerv(GL_STENCIL_BACK_REF, &state.stencilBackRef);
+        glGetIntegerv(GL_STENCIL_BACK_VALUE_MASK, &state.stencilBackValueMask);
+        glGetIntegerv(GL_STENCIL_BACK_FAIL, &state.stencilBackFail);
+        glGetIntegerv(GL_STENCIL_BACK_PASS_DEPTH_FAIL, &state.stencilBackDepthFail);
+        glGetIntegerv(GL_STENCIL_BACK_PASS_DEPTH_PASS, &state.stencilBackDepthPass);
+        glGetIntegerv(GL_STENCIL_BACK_WRITEMASK, &state.stencilBackWriteMask);
+
+        glGetIntegerv(GL_CULL_FACE_MODE, &state.cullFaceMode);
+        glGetIntegerv(GL_FRONT_FACE, &state.frontFace);
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &state.framebuffer);
         glGetIntegerv(GL_RENDERBUFFER_BINDING, &state.renderbuffer);
 
@@ -100,7 +130,38 @@ namespace bv::render {
         glClearColor(
             state.clearColor[0], state.clearColor[1], state.clearColor[2], state.clearColor[3]
         );
+        glBlendColor(
+            state.blendColor[0], state.blendColor[1], state.blendColor[2], state.blendColor[3]
+        );
         glColorMask(state.colorMask[0], state.colorMask[1], state.colorMask[2], state.colorMask[3]);
+
+        glBlendFuncSeparate(
+            state.blendSrcRGB, state.blendDstRGB, state.blendSrcAlpha, state.blendDstAlpha
+        );
+        glBlendEquationSeparate(state.blendEquationRGB, state.blendEquationAlpha);
+
+        glDepthFunc(state.depthFunc);
+        glDepthMask(state.depthMask);
+
+        glStencilFuncSeparate(
+            GL_FRONT, state.stencilFunc, state.stencilRef, static_cast<GLuint>(state.stencilValueMask)
+        );
+        glStencilOpSeparate(
+            GL_FRONT, state.stencilFail, state.stencilDepthFail, state.stencilDepthPass
+        );
+        glStencilMaskSeparate(GL_FRONT, static_cast<GLuint>(state.stencilWriteMask));
+        glStencilFuncSeparate(
+            GL_BACK, state.stencilBackFunc, state.stencilBackRef,
+            static_cast<GLuint>(state.stencilBackValueMask)
+        );
+        glStencilOpSeparate(
+            GL_BACK, state.stencilBackFail, state.stencilBackDepthFail, state.stencilBackDepthPass
+        );
+        glStencilMaskSeparate(GL_BACK, static_cast<GLuint>(state.stencilBackWriteMask));
+
+        glCullFace(state.cullFaceMode);
+        glFrontFace(state.frontFace);
+
         restoreCapability(GL_BLEND, state.blend);
         restoreCapability(GL_DEPTH_TEST, state.depthTest);
         restoreCapability(GL_STENCIL_TEST, state.stencilTest);
