@@ -57,8 +57,12 @@ namespace {
         std::vector<GLint> sourceLengths;
         sourceData.reserve(sources.size() + 1);
         sourceLengths.reserve(sources.size() + 1);
-        sourceData.push_back(kShaderPrelude.data());
-        sourceLengths.push_back(static_cast<GLint>(kShaderPrelude.size()));
+        bool const hasExplicitVersion =
+            !sources.empty() && sources.front().starts_with("#version");
+        if (!hasExplicitVersion) {
+            sourceData.push_back(kShaderPrelude.data());
+            sourceLengths.push_back(static_cast<GLint>(kShaderPrelude.size()));
+        }
         for (auto const& source : sources) {
             sourceData.push_back(source.data());
             sourceLengths.push_back(static_cast<GLint>(source.size()));
