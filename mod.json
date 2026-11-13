@@ -76,8 +76,8 @@
 		},
 		"frame-history-capture": {
 			"type": "bool",
-			"name": "Frame Generation (Experimental, Android)",
-			"description": "Captures consecutive frames and generates a midpoint GPU texture. This build does not yet insert the midpoint into the display stream; enabling it can reduce performance.",
+			"name": "Frame Interpolation (Experimental, Android)",
+			"description": "Captures consecutive frames, generates a midpoint on the GPU, and draws it into the current EGL back buffer before the normal swap. Experimental: it does not add a second presentation or double the refresh rate.",
 			"default": false,
 			"platforms": [
 				"android"
