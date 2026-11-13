@@ -11,8 +11,8 @@ def main() -> None:
     end = source.index("auto const needsPresentation", start)
     block = source[start:end]
 
-    assert "maxTextureSize / static_cast<float>(width)" in block
-    assert "maxTextureSize / static_cast<float>(height)" in block
+    assert "static_cast<float>(maxTextureSize) / static_cast<float>(width)" in block
+    assert "static_cast<float>(maxTextureSize) / static_cast<float>(height)" in block
     assert "std::min(effectiveScale, maxDimensionScale)" in block
     assert "scaledDimension(width, boundedScale)" in block
     assert "scaledDimension(height, boundedScale)" in block
