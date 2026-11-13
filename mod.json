@@ -77,7 +77,7 @@
 		"frame-history-capture": {
 			"type": "bool",
 			"name": "Frame Generation (Experimental, Android)",
-			"description": "Captures consecutive native frames, reconstructs a GPU midpoint, then presents the midpoint followed by the captured native frame using two EGL swaps. Experimental: actual smoothness and refresh-rate gains depend on display refresh, swap pacing, and device GPU performance.",
+			"description": "Experimental lightweight one-sided midpoint reprojection. Ambiguous pixels fall back to the current frame to avoid blended double images. Adds capture and presentation work; it may reduce game performance and does not increase the game simulation FPS.",
 			"default": false,
 			"platforms": [
 				"android"
@@ -298,7 +298,7 @@
 		"sgsr-quality-preset": {
 			"type": "string",
 			"name": "SGSR 1 Quality Preset",
-			"description": "Selects the SGSR 1 input resolution independently from the FSR 1 preset. Render Scale remains an additional multiplier. Custom uses the Render Scale slider without a preset ratio.",
+			"description": "Selects the SGSR 1 input resolution. Presets multiply the Render Scale slider; Custom uses the slider alone. Custom is the safe default so SGSR does not silently force a reduced render resolution.",
 			"default": "Custom",
 			"one-of": [
 				"Custom",
