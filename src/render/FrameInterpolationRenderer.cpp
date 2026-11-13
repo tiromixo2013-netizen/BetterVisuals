@@ -79,7 +79,7 @@ void main() {
 
     // A winner at the search boundary usually means the real motion is
     // outside our local window. Reject it rather than inventing a clipped vector.
-    vec2 searchLimit = 4.5 * u_invResolution;
+    vec2 searchLimit = 2.25 * u_invResolution;
     bool hitSearchBoundary =
         abs(bestOffset.x) >= searchLimit.x || abs(bestOffset.y) >= searchLimit.y;
 
