@@ -684,13 +684,27 @@ namespace {
 #ifdef GEODE_IS_ANDROID
 namespace {
     std::atomic<bool> g_eglSwapHookReached = false;
+    std::atomic<bool> g_eglSwapContextMismatchLogged = false;
 
     EGLBoolean betterVisualsEglSwapBuffers(EGLDisplay display, EGLSurface surface) {
-        // Geode's manual-hook chain calls the original when the hooked symbol
-        // is invoked from this detour on the same thread.
+        // Confirm this is the active game GL context before treating this as
+        // a valid frame boundary. Never issue GL work from an unknown context.
+        auto const context = eglGetCurrentContext();
+        auto const currentDisplay = eglGetCurrentDisplay();
+        auto const currentDrawSurface = eglGetCurrentSurface(EGL_DRAW);
+        auto const isGamePresentationContext =
+            context != EGL_NO_CONTEXT &&
+            currentDisplay == display &&
+            currentDrawSurface == surface;
+
+        // Geode's manual-hook chain forwards this call to the original EGL entry.
         auto const result = eglSwapBuffers(display, surface);
-        if (result == EGL_TRUE && !g_eglSwapHookReached.exchange(true, std::memory_order_relaxed)) {
-            log::info("[FrameGeneration] Android EGL presentation hook reached");
+        if (result == EGL_TRUE && isGamePresentationContext &&
+            !g_eglSwapHookReached.exchange(true, std::memory_order_relaxed)) {
+            log::info("[FrameGeneration] Android EGL swap reached on the active GL context");
+        } else if (result == EGL_TRUE && !isGamePresentationContext &&
+            !g_eglSwapContextMismatchLogged.exchange(true, std::memory_order_relaxed)) {
+            log::warn("[FrameGeneration] EGL swap observed without matching current GL context; frame processing remains disabled");
         }
         return result;
     }
