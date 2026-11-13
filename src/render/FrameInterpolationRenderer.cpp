@@ -44,6 +44,7 @@ float luma(vec3 c) {
 void main() {
     vec3 current = texture2D(u_current, v_uv).rgb;
     float bestCost = 1.0;
+    float secondBestCost = 1.0;
     vec2 bestOffset = vec2(0.0);
 
     for (int y = -1; y <= 1; ++y) {
@@ -52,15 +53,24 @@ void main() {
             vec3 candidate = texture2D(u_previous, clamp(v_uv + offset, 0.0, 1.0)).rgb;
             float cost = abs(luma(current) - luma(candidate));
             if (cost < bestCost) {
+                secondBestCost = bestCost;
                 bestCost = cost;
                 bestOffset = offset;
+            }
+            else if (cost < secondBestCost) {
+                secondBestCost = cost;
             }
         }
     }
 
-    // Reject ambiguous matches to avoid dragging unrelated pixels across cuts.
-    if (bestCost > 0.16) {
-        bestOffset = vec2(0.0);
+    // A weak or ambiguous match is not a motion vector. Blending the two
+    // frames anyway creates the exact double-image/ghost trail seen on UI,
+    // menus, and high-contrast game objects. Keep the current pixel instead.
+    // The margin rejects flat/repeating regions where several offsets look
+    // equally plausible; only confident matches are temporally reconstructed.
+    if (bestCost > 0.06 || (secondBestCost - bestCost) < 0.003) {
+        gl_FragColor = vec4(current, 1.0);
+        return;
     }
 
     vec2 halfMotion = bestOffset * 0.5;
