@@ -7,7 +7,7 @@
 namespace bv::render {
 
     // Lightweight dense block-match motion estimate and midpoint reconstruction.
-    // The output is a GPU texture; presentation/pacing is handled separately.
+    // Generates a GPU midpoint texture and can draw it into the active EGL back buffer.
     class FrameInterpolationRenderer final {
     public:
         FrameInterpolationRenderer() = default;
