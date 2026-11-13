@@ -33,7 +33,11 @@ uniform sampler2D u_texture;
 void main() { gl_FragColor = texture2D(u_texture, v_uv); }
 )glsl";
 
+    // Low-cost bidirectional cross search. Five candidates in each direction
+    // replace the previous 3x3 + 3x3 search (18 match samples). Output remains
+    // half resolution; uncertain motion falls back to the native current frame.
     constexpr char kFragment[] = R"glsl(
+precision mediump float;
 varying vec2 v_uv;
 uniform sampler2D u_previous;
 uniform sampler2D u_current;
@@ -44,10 +48,22 @@ float luma(vec3 c) {
 }
 
 float matchCost(vec3 a, vec3 b) {
-    vec3 delta = abs(a - b);
-    float colorCost = dot(delta, vec3(0.299, 0.587, 0.114));
-    float luminanceCost = abs(luma(a) - luma(b));
-    return 0.65 * luminanceCost + 0.35 * colorCost;
+    return abs(luma(a) - luma(b));
+}
+
+void considerCandidate(
+    vec3 referenceColor, vec3 candidateColor, vec2 offset,
+    inout float bestCost, inout float secondBestCost, inout vec2 bestOffset
+) {
+    float cost = matchCost(referenceColor, candidateColor);
+    if (cost < bestCost) {
+        secondBestCost = bestCost;
+        bestCost = cost;
+        bestOffset = offset;
+    }
+    else if (cost < secondBestCost) {
+        secondBestCost = cost;
+    }
 }
 
 void main() {
@@ -55,80 +71,68 @@ void main() {
     float bestCost = 1.0;
     float secondBestCost = 1.0;
     vec2 bestOffset = vec2(0.0);
+    vec2 searchStep = 2.0 * u_invResolution;
 
-    // Nine coarse candidates span +/-4 source pixels. The output grid is half
-    // resolution, so one output pixel corresponds to two source pixels.
-    // A second 3x3 search runs only after the forward match passes confidence
-    // checks; it validates the reverse correspondence before blending.
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            vec2 offset = vec2(float(x), float(y)) * (2.0 * u_invResolution);
-            vec3 candidate = texture2D(
-                u_previous, clamp(v_uv + offset, 0.0, 1.0)
-            ).rgb;
-            float cost = matchCost(current, candidate);
-            if (cost < bestCost) {
-                secondBestCost = bestCost;
-                bestCost = cost;
-                bestOffset = offset;
-            }
-            else if (cost < secondBestCost) {
-                secondBestCost = cost;
-            }
-        }
-    }
+    // Center + four cardinal neighbours: substantially fewer texture reads
+    // and ALU operations than the former 3x3 search.
+    considerCandidate(current, texture2D(u_previous, v_uv).rgb,
+        vec2(0.0), bestCost, secondBestCost, bestOffset);
+    considerCandidate(current, texture2D(u_previous,
+        clamp(v_uv + vec2(-searchStep.x, 0.0), 0.0, 1.0)).rgb,
+        vec2(-searchStep.x, 0.0), bestCost, secondBestCost, bestOffset);
+    considerCandidate(current, texture2D(u_previous,
+        clamp(v_uv + vec2(searchStep.x, 0.0), 0.0, 1.0)).rgb,
+        vec2(searchStep.x, 0.0), bestCost, secondBestCost, bestOffset);
+    considerCandidate(current, texture2D(u_previous,
+        clamp(v_uv + vec2(0.0, -searchStep.y), 0.0, 1.0)).rgb,
+        vec2(0.0, -searchStep.y), bestCost, secondBestCost, bestOffset);
+    considerCandidate(current, texture2D(u_previous,
+        clamp(v_uv + vec2(0.0, searchStep.y), 0.0, 1.0)).rgb,
+        vec2(0.0, searchStep.y), bestCost, secondBestCost, bestOffset);
 
-    // A winner at the search boundary usually means the real motion is
-    // outside our local window. Reject it rather than inventing a clipped vector.
-    vec2 searchLimit = 2.25 * u_invResolution;
     bool hitSearchBoundary =
-        abs(bestOffset.x) >= searchLimit.x || abs(bestOffset.y) >= searchLimit.y;
+        abs(bestOffset.x) >= searchStep.x * 0.99 ||
+        abs(bestOffset.y) >= searchStep.y * 0.99;
 
-    // Reject uncertain, occluded, flat, newly exposed, or out-of-range pixels
-    // instead of blending unrelated samples into a visible double image.
+    // Reject flat/ambiguous regions, large motion and newly exposed pixels.
     if (hitSearchBoundary || bestCost > 0.08 ||
         (secondBestCost - bestCost) < 0.0025) {
         gl_FragColor = vec4(current, 1.0);
         return;
     }
 
-    // Forward/backward consistency: starting from the matched point in the
-    // previous frame, independently search the current frame for its return
-    // correspondence. Occluded pixels and mismatched motion usually fail this
-    // cycle check, so use the current native pixel instead of drawing a trail.
     vec3 previousMatch = texture2D(
         u_previous, clamp(v_uv + bestOffset, 0.0, 1.0)
     ).rgb;
+
+    // Five-tap reverse check rejects occlusions and false matches. This keeps
+    // the no-ghost fallback while using 10 match samples instead of 18.
     float reverseBestCost = 1.0;
     float reverseSecondBestCost = 1.0;
     vec2 reverseBestOffset = vec2(0.0);
 
-    for (int reverseY = -1; reverseY <= 1; ++reverseY) {
-        for (int reverseX = -1; reverseX <= 1; ++reverseX) {
-            vec2 reverseOffset =
-                vec2(float(reverseX), float(reverseY)) * (2.0 * u_invResolution);
-            vec3 reverseCandidate = texture2D(
-                u_current, clamp(v_uv + bestOffset + reverseOffset, 0.0, 1.0)
-            ).rgb;
-            float reverseCost = matchCost(previousMatch, reverseCandidate);
-            if (reverseCost < reverseBestCost) {
-                reverseSecondBestCost = reverseBestCost;
-                reverseBestCost = reverseCost;
-                reverseBestOffset = reverseOffset;
-            }
-            else if (reverseCost < reverseSecondBestCost) {
-                reverseSecondBestCost = reverseCost;
-            }
-        }
-    }
+    considerCandidate(previousMatch, texture2D(u_current,
+        clamp(v_uv + bestOffset, 0.0, 1.0)).rgb,
+        vec2(0.0), reverseBestCost, reverseSecondBestCost, reverseBestOffset);
+    considerCandidate(previousMatch, texture2D(u_current,
+        clamp(v_uv + bestOffset + vec2(-searchStep.x, 0.0), 0.0, 1.0)).rgb,
+        vec2(-searchStep.x, 0.0), reverseBestCost, reverseSecondBestCost, reverseBestOffset);
+    considerCandidate(previousMatch, texture2D(u_current,
+        clamp(v_uv + bestOffset + vec2(searchStep.x, 0.0), 0.0, 1.0)).rgb,
+        vec2(searchStep.x, 0.0), reverseBestCost, reverseSecondBestCost, reverseBestOffset);
+    considerCandidate(previousMatch, texture2D(u_current,
+        clamp(v_uv + bestOffset + vec2(0.0, -searchStep.y), 0.0, 1.0)).rgb,
+        vec2(0.0, -searchStep.y), reverseBestCost, reverseSecondBestCost, reverseBestOffset);
+    considerCandidate(previousMatch, texture2D(u_current,
+        clamp(v_uv + bestOffset + vec2(0.0, searchStep.y), 0.0, 1.0)).rgb,
+        vec2(0.0, searchStep.y), reverseBestCost, reverseSecondBestCost, reverseBestOffset);
 
-    // The two independently estimated vectors must close the motion cycle.
-    // A one-cell disagreement is rejected rather than blended as a ghost.
     vec2 motionCycleError = bestOffset + reverseBestOffset;
     vec2 consistencyLimit = 0.75 * u_invResolution;
     bool inconsistentMotion =
         abs(motionCycleError.x) > consistencyLimit.x ||
         abs(motionCycleError.y) > consistencyLimit.y;
+
     if (inconsistentMotion || reverseBestCost > 0.08 ||
         (reverseSecondBestCost - reverseBestCost) < 0.0015) {
         gl_FragColor = vec4(current, 1.0);
@@ -144,7 +148,6 @@ void main() {
     ).rgb;
     gl_FragColor = vec4((fromPrevious + fromCurrent) * 0.5, 1.0);
 }
-)glsl";
 
 } // namespace
 
