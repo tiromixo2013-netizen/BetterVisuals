@@ -43,4 +43,9 @@ for token in (
 
 assert "return glGetError()" not in renderer, "renderer must not consume caller GL errors"
 
+prepare_body = renderer.split("bool FrameInterpolationRenderer::prepare", 1)[1].split("bool FrameInterpolationRenderer::generate", 1)[0]
+assert prepare_body.index("m_outputTexture && m_framebuffer") < prepare_body.index("GlStateGuard state"), (
+    "prepared frames should skip the expensive GL state snapshot"
+)
+
 print("Android GPU midpoint reconstruction source checks passed (static checks only).")
