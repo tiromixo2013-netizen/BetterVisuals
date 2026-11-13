@@ -79,8 +79,14 @@ namespace {
         bool operator==(PostProcessConfig const&) const = default;
 
         int effectCount() const {
-            return (aa != AntiAliasingMethod::Off) + cas + bloom + grayscale + pixelate + invert +
-                flip + dithering + vhs + crt;
+            // SSAA is performed by the final presentation/downsample pass, not
+            // by renderEffects(). Counting it here can leave an unpresented
+            // capture when the combined render scale resolves to native size.
+            auto const hasPostProcessAa =
+                aa == AntiAliasingMethod::Fxaa || aa == AntiAliasingMethod::SmaaHigh ||
+                aa == AntiAliasingMethod::SmaaUltra;
+            return hasPostProcessAa + cas + bloom + grayscale + pixelate + invert + flip +
+                dithering + vhs + crt;
         }
     };
 
