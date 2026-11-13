@@ -32,6 +32,7 @@ for token in (
     "previousMatch",
     "reverseBestCost",
     "reverseBestOffset",
+    "v_uv + bestOffset + reverseOffset",
     "motionCycleError",
     "consistencyLimit",
     "inconsistentMotion",
