@@ -42,6 +42,7 @@ for token in (
     "blockIndex * 16.0",
     "u_reusedMotion",
     "reuseValid",
+    "directionReversal",
     "m_motionTextures",
     "m_hasMotionHistory",
     "outputWidth = std::max<GLsizei>(1, (width + 1) / 2)",
