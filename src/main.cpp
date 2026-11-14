@@ -755,6 +755,7 @@ namespace {
     std::atomic<bool> g_eglSwapHookReached = false;
     std::atomic<bool> g_eglSwapContextMismatchLogged = false;
     std::atomic<bool> g_eglPresentationDiagnosticsLogged = false;
+    std::atomic<bool> g_eglPresentationTimeUnavailableLogged = false;
     std::atomic<bool> g_frameHistoryEnabled = false;
     std::atomic<bool> g_framePacingEnabled = false;
     std::atomic<bool> g_lowLatencyEnabled = false;
@@ -773,6 +774,19 @@ namespace {
             position = end;
         }
         return false;
+    }
+
+    bool supportsAndroidPresentationTime(EGLDisplay display) {
+        static EGLDisplay cachedDisplay = EGL_NO_DISPLAY;
+        static bool cachedAvailable = false;
+        if (display != cachedDisplay) {
+            cachedDisplay = display;
+            auto const extensions = eglQueryString(display, EGL_EXTENSIONS);
+            cachedAvailable =
+                hasEglExtension(extensions, "EGL_ANDROID_presentation_time") &&
+                eglGetProcAddress("eglPresentationTimeANDROID") != nullptr;
+        }
+        return display != EGL_NO_DISPLAY && cachedAvailable;
     }
 
     void logAndroidPresentationCapabilities(EGLDisplay display) {
@@ -801,7 +815,14 @@ namespace {
     void applyAndroidSwapPolicy(EGLDisplay display) {
         bool const lowLatency = g_lowLatencyEnabled.load(std::memory_order_relaxed);
         bool const framePacing = g_framePacingEnabled.load(std::memory_order_relaxed);
-        EGLint const requestedInterval = lowLatency ? 0 : (framePacing ? 1 : -1);
+        bool const frameGeneration = g_frameHistoryEnabled.load(std::memory_order_relaxed) &&
+            supportsAndroidPresentationTime(display);
+        // Frame generation submits a second buffer between real frames. It must
+        // not wait for another full swap interval; EGL presentation timestamps
+        // control when that buffer is eligible for display. Low Latency keeps
+        // its existing precedence and also requests interval 0.
+        EGLint const requestedInterval = lowLatency || frameGeneration ? 0 :
+            (framePacing ? 1 : -1);
 
         if (requestedInterval < 0) {
             if (g_appliedSwapInterval >= 0 && g_swapPolicyDisplay == display) {
@@ -821,7 +842,9 @@ namespace {
             g_swapPolicyDisplay = display;
             g_appliedSwapInterval = requestedInterval;
             log::info("[Presentation] EGL swap interval set to {} ({})",
-                requestedInterval, lowLatency ? "low-latency request" : "frame-pacing request");
+                requestedInterval,
+                lowLatency ? "low-latency request" :
+                (frameGeneration ? "frame-generation timestamp submission" : "frame-pacing request"));
         }
         else {
             log::warn("[Presentation] eglSwapInterval({}) failed: {}",
@@ -1041,9 +1064,9 @@ namespace {
         bool initialize() {
             if (m_checked) return m_presentationTime != nullptr;
             m_checked = true;
-            auto const extensions = eglQueryString(eglGetCurrentDisplay(), EGL_EXTENSIONS);
-            if (!hasEglExtension(extensions, "EGL_ANDROID_presentation_time")) {
-                log::info("[Presentation] EGL_ANDROID_presentation_time unavailable; using EGL swap policy only");
+            auto const display = eglGetCurrentDisplay();
+            if (!supportsAndroidPresentationTime(display)) {
+                log::warn("[Presentation] EGL_ANDROID_presentation_time unavailable; generated-frame presentation is disabled to protect real-frame pacing");
                 return false;
             }
             m_presentationTime = reinterpret_cast<PresentationTime>(
@@ -1118,11 +1141,15 @@ namespace {
         return api;
     }
 
-    // opt-in frame-history capture keeps this experimental GPU path disabled by default.
-    // Two GPU-resident snapshots of the final EGL window surface, plus a
-    // forward-predicted frame texture. Display pacing is separate.
+    // Opt-in frame history keeps this experimental GPU path disabled by default.
+    // One prediction is inserted every two real-frame intervals (1.5x target),
+    // while every real frame remains independently submitted first.
     class AndroidFrameHistory final {
     public:
+        bool shouldGenerateOnThisInterval() {
+            ++m_realFrameSequence;
+            return (m_realFrameSequence % 2) == 0;
+        }
         // Capture is intentionally limited to a GPU texture copy before the
         // real swap. Motion estimation and reconstruction run only afterwards.
         bool capture(EGLDisplay display, EGLSurface surface, EGLContext context) {
@@ -1150,6 +1177,7 @@ namespace {
                 m_height = 0;
                 m_writeIndex = 0;
                 m_validFrames = 0;
+                m_realFrameSequence = 0;
                 m_interpolator.abandonContext();
                 m_gpuTimer.abandonContext();
                 m_context = context;
@@ -1331,6 +1359,7 @@ namespace {
         }
         std::uint64_t m_profiledCaptures = 0;
         std::uint64_t m_profiledGenerations = 0;
+        std::uint64_t m_realFrameSequence = 0;
         std::uint64_t m_cpuCaptureMicros = 0;
         std::uint64_t m_cpuGenerationMicros = 0;
         std::array<GLuint, 2> m_textures = {};
@@ -1363,9 +1392,15 @@ namespace {
         }
 
         EGLBoolean result = EGL_FALSE;
-        bool const frameGenerationEnabled =
+        bool const frameGenerationRequested =
             isGamePresentationContext &&
             g_frameHistoryEnabled.load(std::memory_order_relaxed);
+        bool const frameGenerationEnabled =
+            frameGenerationRequested && supportsAndroidPresentationTime(display);
+        if (frameGenerationRequested && !frameGenerationEnabled &&
+            !g_eglPresentationTimeUnavailableLogged.exchange(true, std::memory_order_relaxed)) {
+            log::error("[FrameGeneration] Cannot insert generated frames: EGL_ANDROID_presentation_time is unavailable on this display");
+        }
 
         // The current real frame is always swapped first. Only after that
         // succeeds do we draw and swap the predicted frame. If prediction or
@@ -1373,26 +1408,40 @@ namespace {
         // never delayed or replaced by a stale generated texture.
         bool const usePresentationScheduler =
             isGamePresentationContext &&
-            g_framePacingEnabled.load(std::memory_order_relaxed) &&
-            !g_lowLatencyEnabled.load(std::memory_order_relaxed);
+            ((g_framePacingEnabled.load(std::memory_order_relaxed) &&
+              !g_lowLatencyEnabled.load(std::memory_order_relaxed)) ||
+             frameGenerationEnabled);
 
         if (frameGenerationEnabled) {
             bool const frameReady = g_androidFrameHistory.capture(display, surface, context);
+            bool const generateOnThisInterval =
+                g_androidFrameHistory.shouldGenerateOnThisInterval();
             androidPresentationScheduler().scheduleRealFrame(
                 display, surface, usePresentationScheduler
             );
-            // Submit the real frame before motion estimation or reconstruction.
-            // TulipHook's ARM64 handler advances its per-thread chain index for
-            // nested calls, so the second swap reaches the next hook/original target.
-            // If prediction misses its budget or fails, nothing replaces the real frame.
-            result = eglSwapBuffers(display, surface);
-            if (result == EGL_TRUE && frameReady && g_androidFrameHistory.generate() &&
-                g_androidFrameHistory.presentGeneratedFrame()) {
-                androidPresentationScheduler().scheduleGeneratedFrame(
-                    display, surface, usePresentationScheduler
-                );
-                g_androidFrameHistory.finishPresentation(display);
-                result = eglSwapBuffers(display, surface);
+
+            // Submit the real frame first. Prediction runs only on alternating
+            // real-frame intervals, targeting 1.5x rather than an accidental 2x.
+            EGLBoolean const realSwapResult = eglSwapBuffers(display, surface);
+            result = realSwapResult;
+            if (realSwapResult == EGL_TRUE && frameReady && generateOnThisInterval) {
+                bool const generated = g_androidFrameHistory.generate();
+                bool const drawn = generated && g_androidFrameHistory.presentGeneratedFrame();
+                if (drawn) {
+                    androidPresentationScheduler().scheduleGeneratedFrame(
+                        display, surface, usePresentationScheduler
+                    );
+                    g_androidFrameHistory.finishPresentation(display);
+                    EGLBoolean const generatedSwapResult = eglSwapBuffers(display, surface);
+                    if (generatedSwapResult != EGL_TRUE) {
+                        auto const error = eglGetError();
+                        log::error("[FrameGeneration][Presentation] Generated buffer swap failed (EGL error 0x{:04x}); keeping the already-presented real frame",
+                            static_cast<unsigned>(error));
+                    }
+                }
+                else {
+                    log::warn("[FrameGeneration][Presentation] Prediction or fullscreen draw failed; real frame remains presented");
+                }
             }
         }
         else {
