@@ -28,7 +28,10 @@ required_source = (
     'eglGetProcAddress("eglPresentationTimeANDROID")',
     'eglGetProcAddress("eglGetFrameTimestampsANDROID")',
     "logAndroidPresentationCapabilities(display)",
-    "Display pacing is separate.",
+    "supportsAndroidPresentationTime(display)",
+    "shouldGenerateOnThisInterval",
+    "generatedSwapResult",
+    "m_realFrameSequence % 2",
 )
 for token in required_source:
     assert token in source, f"missing frame-history safeguard or stage: {token}"
