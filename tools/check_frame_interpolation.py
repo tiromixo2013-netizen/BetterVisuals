@@ -40,6 +40,8 @@ for token in (
     "protectedPrediction",
     "Confidence recovery is deliberately gradual",
     "blockIndex * 16.0",
+    "refineBlockIndex * 8.0",
+    "refineUv",
     "u_reusedMotion",
     "reuseValid",
     "directionReversal",
