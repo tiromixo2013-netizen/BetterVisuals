@@ -1136,6 +1136,11 @@ namespace {
                 width <= 0 || height <= 0) {
                 return false;
             }
+            // A sync object from a lost context must not be polled through
+            // the replacement display/context.
+            if (m_context != EGL_NO_CONTEXT && m_context != context) {
+                m_gpuFence = EGL_NO_SYNC_KHR;
+            }
             if (!retirePreviousFence(display)) return false;
 
             if (m_context != context) {
