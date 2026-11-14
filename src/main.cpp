@@ -290,7 +290,7 @@ namespace {
         g_fsrPresetScale.store(scale, std::memory_order_relaxed);
     }
 
-    void updateFsrQualityPreset(std::string_view value) {
+    void updateSgsrQualityPreset(std::string_view value) {
         float scale = 0.f;
         if (value == "Ultra Quality") scale = 0.77f;
         else if (value == "Quality") scale = 0.67f;
