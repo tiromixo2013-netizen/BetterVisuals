@@ -17,14 +17,16 @@ def main() -> None:
     )[0]
     assert detour.count("eglSwapBuffers(display, surface)") == 4
     assert "presentGeneratedFrame()" in detour
+    assert "g_androidFrameHistory.generate()" in detour
     assert "scheduleRealFrame" in detour
     assert "scheduleGeneratedFrame" in detour
     assert "EGL_ANDROID_presentation_time" in source
     assert "m_period / 2" in source
     assert "The current real frame is always swapped first" in detour
-    assert detour.index("result = eglSwapBuffers(display, surface)") < detour.index(
-        "presentGeneratedFrame()"
-    )
+    real_swap_index = detour.index("result = eglSwapBuffers(display, surface)")
+    generate_index = detour.index("g_androidFrameHistory.generate()")
+    present_index = detour.index("presentGeneratedFrame()")
+    assert real_swap_index < generate_index < present_index
     assert "presentNativeFrame()" not in detour
     assert "per-thread chain index" in detour
     assert "Mod::get()->hook(" in source
