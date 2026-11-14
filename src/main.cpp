@@ -756,6 +756,7 @@ namespace {
     std::atomic<bool> g_eglSwapContextMismatchLogged = false;
     std::atomic<bool> g_eglPresentationDiagnosticsLogged = false;
     std::atomic<bool> g_eglPresentationTimeUnavailableLogged = false;
+    std::atomic<bool> g_generatedSwapAcceptedLogged = false;
     std::atomic<bool> g_frameHistoryEnabled = false;
     std::atomic<bool> g_framePacingEnabled = false;
     std::atomic<bool> g_lowLatencyEnabled = false;
@@ -1422,6 +1423,8 @@ namespace {
 
             // Submit the real frame first. Prediction runs only on alternating
             // real-frame intervals, targeting 1.5x rather than an accidental 2x.
+            // TulipHook's ARM64 nested-call dispatch advances its per-thread
+            // chain index so the generated swap reaches the next hook/original.
             EGLBoolean const realSwapResult = eglSwapBuffers(display, surface);
             result = realSwapResult;
             if (realSwapResult == EGL_TRUE && frameReady && generateOnThisInterval) {
@@ -1437,6 +1440,9 @@ namespace {
                         auto const error = eglGetError();
                         log::error("[FrameGeneration][Presentation] Generated buffer swap failed (EGL error 0x{:04x}); keeping the already-presented real frame",
                             static_cast<unsigned>(error));
+                    }
+                    else if (!g_generatedSwapAcceptedLogged.exchange(true, std::memory_order_relaxed)) {
+                        log::info("[FrameGeneration][Presentation] EGL accepted the first generated-frame swap; physical display presentation still depends on SurfaceFlinger");
                     }
                 }
                 else {
