@@ -37,6 +37,8 @@ for token in (
     "best > 0.075",
     "confidence < 0.30",
     "refineEightPixelBlock",
+    "protectedPrediction",
+    "Confidence recovery is deliberately gradual",
     "blockIndex * 16.0",
     "u_reusedMotion",
     "reuseValid",
