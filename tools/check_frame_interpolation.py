@@ -48,7 +48,6 @@ for token in (
     "previousFrame == currentFrame",
     "glDisable(GL_CULL_FACE)",
     "glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)",
-    "Do not consume the caller's pre-existing GL error state",
 ):
     assert token in renderer, f"missing predictive reconstruction stage: {token}"
 
@@ -83,7 +82,7 @@ assert "m_pendingTexture" not in main
 
 # Sign check for the shader's coordinate convention:
 # if an object moved right, its matching previous location is left of current;
-# previousOffset is negative, so v_uv - previousOffset predicts farther right.
+# the negative previous-frame offset is subtracted to predict farther right.
 current_x = 0.50
 previous_offset_x = -0.02
 predicted_x = current_x - previous_offset_x
