@@ -269,7 +269,9 @@ void main() {
         float chromaCost = max(chromaDelta.r, max(chromaDelta.g, chromaDelta.b));
         float lumaDelta = abs(currentLuma - previousLuma);
         float alphaDelta = abs(currentSample.a - previousSample.a);
-        bool photometricTransition = chromaCost < 0.075 &&
+        bool fadeFromBlack = min(previousLuma, currentLuma) < 0.025 &&
+            max(previousLuma, currentLuma) < 0.42;
+        bool photometricTransition = (chromaCost < 0.20 || fadeFromBlack) &&
             lumaDelta > 0.008 && lumaDelta < 0.42;
         vec3 alphaRgbDelta = abs(previousSample.rgb - currentSample.rgb);
         float alphaRgbCost = max(alphaRgbDelta.r, max(alphaRgbDelta.g, alphaRgbDelta.b));
