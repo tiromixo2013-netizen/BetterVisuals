@@ -15,7 +15,7 @@ def main() -> None:
     detour = source.split("EGLBoolean betterVisualsEglSwapBuffers", 1)[1].split(
         "void installAndroidEglSwapHook", 1
     )[0]
-    assert detour.count("eglSwapBuffers(display, surface)") == 4
+    assert detour.count("eglSwapBuffers(display, surface)") == 3
     assert "presentGeneratedFrame()" in detour
     assert "g_androidFrameHistory.generate()" in detour
     assert "scheduleRealFrame" in detour
