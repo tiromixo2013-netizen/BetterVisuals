@@ -121,7 +121,6 @@ namespace {
     // Zero selects the Custom base (1.0); positive values are the base
     // source-resolution ratios for the FSR 1 quality presets.
     std::atomic<float> g_fsrPresetScale = 0.f;
-    std::atomic<float> g_sgsrPresetScale = 0.f;
     std::atomic<float> g_renderScale = 1.f;
     std::atomic<bool> g_casEnabled = false;
     std::atomic<float> g_casSharpness = 0.f;
@@ -289,19 +288,6 @@ namespace {
             log::warn("Unknown FSR 1 quality preset '{}', using Custom", value);
         }
         g_fsrPresetScale.store(scale, std::memory_order_relaxed);
-    }
-
-    void updateSgsrQualityPreset(std::string_view value) {
-        float scale = 0.f;
-        if (value == "Ultra Quality") scale = 0.77f;
-        else if (value == "Quality") scale = 0.67f;
-        else if (value == "Balanced") scale = 0.59f;
-        else if (value == "Performance") scale = 0.50f;
-        else if (value == "Ultra Performance") scale = 0.33f;
-        else if (value != "Custom") {
-            log::warn("Unknown SGSR 1 quality preset '{}', using Custom", value);
-        }
-        g_sgsrPresetScale.store(scale, std::memory_order_relaxed);
     }
 
     void bindBoolSetting(char const* name, std::atomic<bool>& value) {
@@ -565,12 +551,11 @@ namespace {
         auto const configuredScale = g_renderScale.load(std::memory_order_relaxed);
         auto const fsrPresetScale = config.upscaling == UpscaleMethod::Fsr ?
             g_fsrPresetScale.load(std::memory_order_relaxed) : 0.f;
-        auto const sgsrPresetScale = config.upscaling == UpscaleMethod::Sgsr ?
-            g_sgsrPresetScale.load(std::memory_order_relaxed) : 0.f;
-        auto const presetScale = fsrPresetScale > 0.f ? fsrPresetScale : sgsrPresetScale;
-        // The quality preset selects the base input resolution. Render Scale is
-        // an independent multiplier on top of that base (100% = unchanged).
-        // FSR 1 is an upscaler, so never ask EASU to downscale above native.
+        // SGSR 1 preset scaling is isolated until the Android capture viewport,
+        // scissor and alpha path is validated at non-native resolutions. The
+        // explicit Render Scale remains available for controlled testing.
+        // FSR presets still select their own base input resolution.
+        auto const presetScale = fsrPresetScale;
         auto const requestedScale =
             (presetScale > 0.f ? presetScale : 1.f) * configuredScale;
         auto const usesSpatialUpscaler =
@@ -1255,7 +1240,6 @@ $on_mod(Loaded) {
     bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.2f, 1.f);
     bindStringSetting("upscale-method", updateUpscaleMethod);
     bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
-    bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {
         auto const wasSsaa = ssaaFactor(g_antiAliasingMethod.load(std::memory_order_relaxed)) > 1.f;
