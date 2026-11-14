@@ -122,6 +122,7 @@ namespace {
     // Zero selects Custom (1.0); positive values are source-resolution ratios.
     std::atomic<float> g_fsrPresetScale = 0.f;
     std::atomic<float> g_sgsrPresetScale = 0.f;
+    std::atomic<int> g_sgsrOperationMode = 1;
     std::atomic<float> g_renderScale = 1.f;
     std::atomic<bool> g_casEnabled = false;
     std::atomic<float> g_casSharpness = 0.f;
@@ -308,6 +309,21 @@ namespace {
             log::warn("Unknown SGSR 1 quality preset '{}', using Custom", value);
         }
         g_sgsrPresetScale.store(scale, std::memory_order_relaxed);
+    }
+
+    void updateSgsrOperationMode(std::string_view value) {
+        if (value == "RGBY") {
+            g_sgsrOperationMode.store(3, std::memory_order_relaxed);
+        }
+        else if (value == "LERP") {
+            g_sgsrOperationMode.store(4, std::memory_order_relaxed);
+        }
+        else {
+            if (value != "RGBA") {
+                log::warn("Unknown SGSR1 operation mode '{}', using RGBA", value);
+            }
+            g_sgsrOperationMode.store(1, std::memory_order_relaxed);
+        }
     }
 
     void bindBoolSetting(char const* name, std::atomic<bool>& value) {
@@ -711,7 +727,10 @@ namespace {
                     g_fsrLiteRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
                 }
                 else if (config.upscaling == UpscaleMethod::Sgsr) {
-                    if (!g_sgsrRenderer.apply(sourceTexture, internalWidth, internalHeight, width, height)) {
+                    if (!g_sgsrRenderer.apply(
+                        sourceTexture, internalWidth, internalHeight, width, height,
+                        g_sgsrOperationMode.load(std::memory_order_relaxed)
+                    )) {
                         g_renderScaleRenderer.apply(sourceTexture);
                     }
                 }
@@ -1418,6 +1437,7 @@ $on_mod(Loaded) {
     bindStringSetting("upscale-method", updateUpscaleMethod);
     bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
     bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset);
+    bindStringSetting("sgsr-operation-mode", updateSgsrOperationMode);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {
         auto const wasSsaa = ssaaFactor(g_antiAliasingMethod.load(std::memory_order_relaxed)) > 1.f;
