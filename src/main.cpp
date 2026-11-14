@@ -1142,7 +1142,7 @@ namespace {
         return api;
     }
 
-    // Opt-in frame history keeps this experimental GPU path disabled by default.
+    // opt-in frame history keeps this experimental GPU path disabled by default.
     // One prediction is inserted every two real-frame intervals (1.5x target),
     // while every real frame remains independently submitted first.
     class AndroidFrameHistory final {
