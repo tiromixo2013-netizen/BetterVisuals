@@ -1270,7 +1270,9 @@ namespace {
                 log::warn("[FrameGeneration] Forward prediction skipped; the real frame has already been presented");
             }
 
-            m_gpuTimer.end();
+            // Keep the GPU query open through the generated-frame draw;
+            // otherwise the budget ignores the final presentation pass.
+            if (!generated) m_gpuTimer.end();
             ++m_profiledGenerations;
             auto const elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::steady_clock::now() - cpuSubmitStart
@@ -1287,7 +1289,11 @@ namespace {
         }
 
         bool presentGeneratedFrame() {
-            return m_interpolator.present();
+            auto const presented = m_interpolator.present();
+            // Include the fullscreen presentation draw in the same measured
+            // budget as motion estimation and reconstruction.
+            m_gpuTimer.end();
+            return presented;
         }
         void finishPresentation(EGLDisplay display) {
             createCompletionFence(display);
