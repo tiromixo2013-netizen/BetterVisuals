@@ -491,7 +491,9 @@ namespace bv::render {
         glDisable(GL_CULL_FACE);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
-        auto const writeIndex = m_hasMotionHistory ? 1 - m_motionReadIndex : 0;
+        // Always ping-pong, including the first pass, so the motion texture
+        // attached for writing is never simultaneously sampled as reuse history.
+        auto const writeIndex = 1 - m_motionReadIndex;
 
         // Coarse 16x16 motion field with validated temporal vector reuse.
         glBindFramebuffer(GL_FRAMEBUFFER, m_motionFramebuffers[writeIndex]);
