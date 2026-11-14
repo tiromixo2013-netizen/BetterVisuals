@@ -1123,9 +1123,10 @@ namespace {
     // forward-predicted frame texture. Display pacing is separate.
     class AndroidFrameHistory final {
     public:
+        // Capture is intentionally limited to a GPU texture copy before the
+        // real swap. Motion estimation and reconstruction run only afterwards.
         bool capture(EGLDisplay display, EGLSurface surface, EGLContext context) {
             if (context == EGL_NO_CONTEXT) return false;
-            // CPU timer measures submission only; GPU time is queried separately.
             auto const cpuSubmitStart = std::chrono::steady_clock::now();
 
             EGLint width = 0;
@@ -1138,8 +1139,7 @@ namespace {
             if (!retirePreviousFence(display)) return false;
 
             if (m_context != context) {
-                // GL names from a lost context are invalid in the new context;
-                // do not attempt to delete them through the replacement context.
+                // GL names from a lost context are invalid in the new context.
                 m_textures = {};
                 m_width = 0;
                 m_height = 0;
@@ -1150,8 +1150,6 @@ namespace {
                 m_context = context;
                 m_maxTextureSize = 0;
             }
-            // GL_MAX_TEXTURE_SIZE is invariant for a live context. Cache it
-            // instead of issuing a synchronous driver query on every swap.
             if (m_maxTextureSize <= 0) {
                 glGetIntegerv(GL_MAX_TEXTURE_SIZE, &m_maxTextureSize);
             }
@@ -1171,7 +1169,6 @@ namespace {
                 m_interpolator.reset();
             }
 
-            m_gpuTimer.begin();
             GLint previousFramebuffer = 0;
             GLint previousActiveTexture = GL_TEXTURE0;
             glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
@@ -1206,10 +1203,9 @@ namespace {
             }
 
             bool captured = false;
-            bool generated = false;
             if (m_textures[0] && m_textures[1] && m_width == width && m_height == height) {
-                // eglSwapBuffers presents the EGL window surface (default FB).
-                // Copy before the original swap invalidates/recycles its contents.
+                // The default framebuffer may be recycled by eglSwapBuffers,
+                // so preserve the real frame before submitting that swap.
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 glBindTexture(GL_TEXTURE_2D, m_textures[m_writeIndex]);
                 glCopyTexSubImage2D(
@@ -1225,41 +1221,60 @@ namespace {
             if (captured) {
                 m_writeIndex = 1 - m_writeIndex;
                 if (m_validFrames < 2) ++m_validFrames;
-                if (m_validFrames == 2) {
-                    auto const previousIndex = m_writeIndex;
-                    auto const currentIndex = 1 - m_writeIndex;
-                    if (m_gpuTimer.shouldInterpolate() &&
-                        m_interpolator.prepare(width, height) &&
-                        m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])) {
-                        // Keep the predicted frame off-screen until the current
-                        // real frame has been presented by the EGL swap detour.
-                        generated = true;
-                        if (!m_pairLogged) {
-                            m_pairLogged = true;
-                            log::info("[FrameGeneration] GPU forward prediction generated; queued after the real frame");
-                        }
-                    }
-                    else if (!m_generationWarningLogged) {
-                        m_generationWarningLogged = true;
-                        log::warn("[FrameGeneration] Forward prediction could not be initialized; real-frame presentation remains available");
-                    }
-                }
             }
 
-            m_gpuTimer.end();
             ++m_profiledCaptures;
             auto const elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::steady_clock::now() - cpuSubmitStart
             ).count();
-            m_cpuSubmitMicros += static_cast<std::uint64_t>(std::max<std::int64_t>(0, elapsedUs));
+            m_cpuCaptureMicros += static_cast<std::uint64_t>(std::max<std::int64_t>(0, elapsedUs));
             if ((m_profiledCaptures % 120) == 0) {
-                auto const averageUs = m_cpuSubmitMicros / 120;
                 log::info(
-                    "[FrameGeneration][CPU] avg capture + GPU-submit overhead over 120 frames: {} us; "
-                    "GPU execution is asynchronous and is not measured by this CPU timer",
-                    averageUs
+                    "[FrameGeneration][CPU] avg pre-swap frame-copy overhead over 120 frames: {} us",
+                    m_cpuCaptureMicros / 120
                 );
-                m_cpuSubmitMicros = 0;
+                m_cpuCaptureMicros = 0;
+            }
+            return captured && m_validFrames == 2;
+        }
+
+        // Called only after the current real frame has successfully reached EGL.
+        // This keeps the expensive motion search and reconstruction off the
+        // critical path to the real-frame swap.
+        bool generate() {
+            if (m_validFrames < 2 || m_width <= 0 || m_height <= 0) return false;
+            auto const cpuSubmitStart = std::chrono::steady_clock::now();
+            m_gpuTimer.begin();
+
+            bool generated = false;
+            auto const previousIndex = m_writeIndex;
+            auto const currentIndex = 1 - m_writeIndex;
+            if (m_gpuTimer.shouldInterpolate() &&
+                m_interpolator.prepare(m_width, m_height) &&
+                m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])) {
+                generated = true;
+                if (!m_pairLogged) {
+                    m_pairLogged = true;
+                    log::info("[FrameGeneration] Forward prediction generated after the real-frame swap");
+                }
+            }
+            else if (!m_generationWarningLogged) {
+                m_generationWarningLogged = true;
+                log::warn("[FrameGeneration] Forward prediction skipped; the real frame has already been presented");
+            }
+
+            m_gpuTimer.end();
+            ++m_profiledGenerations;
+            auto const elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - cpuSubmitStart
+            ).count();
+            m_cpuGenerationMicros += static_cast<std::uint64_t>(std::max<std::int64_t>(0, elapsedUs));
+            if ((m_profiledGenerations % 120) == 0) {
+                log::info(
+                    "[FrameGeneration][CPU] avg post-swap prediction submission over 120 frames: {} us",
+                    m_cpuGenerationMicros / 120
+                );
+                m_cpuGenerationMicros = 0;
             }
             return generated;
         }
@@ -1302,7 +1317,9 @@ namespace {
             }
         }
         std::uint64_t m_profiledCaptures = 0;
-        std::uint64_t m_cpuSubmitMicros = 0;
+        std::uint64_t m_profiledGenerations = 0;
+        std::uint64_t m_cpuCaptureMicros = 0;
+        std::uint64_t m_cpuGenerationMicros = 0;
         std::array<GLuint, 2> m_textures = {};
         bv::render::FrameInterpolationRenderer m_interpolator;
         AndroidGpuTimer m_gpuTimer;
@@ -1318,7 +1335,7 @@ namespace {
         bool m_generationWarningLogged = false;
     };
 
-    AndroidFrameHistory g_androidFrameHistory;
+        AndroidFrameHistory g_androidFrameHistory;
     EGLBoolean betterVisualsEglSwapBuffers(EGLDisplay display, EGLSurface surface) {
         auto const context = eglGetCurrentContext();
         auto const currentDisplay = eglGetCurrentDisplay();
@@ -1347,23 +1364,19 @@ namespace {
             !g_lowLatencyEnabled.load(std::memory_order_relaxed);
 
         if (frameGenerationEnabled) {
-            bool const generated = g_androidFrameHistory.capture(display, surface, context);
+            bool const frameReady = g_androidFrameHistory.capture(display, surface, context);
             androidPresentationScheduler().scheduleRealFrame(
                 display, surface, usePresentationScheduler
             );
-            if (generated) {
-                // TulipHook's ARM64 handler advances its per-thread chain index
-                // for nested calls, so this invokes the next hook/original target.
-                result = eglSwapBuffers(display, surface);
-                if (result == EGL_TRUE && g_androidFrameHistory.presentGeneratedFrame()) {
-                    androidPresentationScheduler().scheduleGeneratedFrame(
-                        display, surface, usePresentationScheduler
-                    );
-                    g_androidFrameHistory.finishPresentation(display);
-                    result = eglSwapBuffers(display, surface);
-                }
-            }
-            else {
+            // Submit the real frame before motion estimation or reconstruction.
+            // If the prediction misses its budget or fails, nothing replaces it.
+            result = eglSwapBuffers(display, surface);
+            if (result == EGL_TRUE && frameReady && g_androidFrameHistory.generate() &&
+                g_androidFrameHistory.presentGeneratedFrame()) {
+                androidPresentationScheduler().scheduleGeneratedFrame(
+                    display, surface, usePresentationScheduler
+                );
+                g_androidFrameHistory.finishPresentation(display);
                 result = eglSwapBuffers(display, surface);
             }
         }
