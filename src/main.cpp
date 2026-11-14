@@ -1423,8 +1423,8 @@ namespace {
 
             // Submit the real frame first. Prediction runs only on alternating
             // real-frame intervals, targeting 1.5x rather than an accidental 2x.
-            // TulipHook's ARM64 nested-call dispatch advances its per-thread
-            // chain index so the generated swap reaches the next hook/original.
+            // TulipHook's ARM64 nested-call dispatch advances its per-thread chain index
+            // so the generated swap reaches the next hook/original.
             EGLBoolean const realSwapResult = eglSwapBuffers(display, surface);
             result = realSwapResult;
             if (realSwapResult == EGL_TRUE && frameReady && generateOnThisInterval) {
