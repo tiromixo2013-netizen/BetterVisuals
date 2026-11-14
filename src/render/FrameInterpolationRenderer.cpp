@@ -191,23 +191,29 @@ void main() {
         max(length(motionUp - offset), length(motionDown - offset))
     ) / max(length(searchStep), 0.000001);
 
-    vec3 left = texture2D(u_current, clamp(refineUv - searchStep, 0.0, 1.0)).rgb;
-    vec3 right = texture2D(u_current, clamp(refineUv + searchStep, 0.0, 1.0)).rgb;
-    vec3 up = texture2D(u_current, clamp(refineUv - vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
-    vec3 down = texture2D(u_current, clamp(refineUv + vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
-    float edgeComplexity = max(
-        matchCost(left, refineCurrentSample.rgb) + matchCost(right, refineCurrentSample.rgb),
-        matchCost(up, refineCurrentSample.rgb) + matchCost(down, refineCurrentSample.rgb)
-    );
-    // Protected Prediction is selected by low block confidence, complex
-    // local edges, or neighboring-block disagreement. It uses a stricter
-    // 8x8 refinement path; stable regions stay on the cheaper 16x16 vector.
-    bool protectedPrediction =
-        motion.a < 0.55 || edgeComplexity > 0.075 || disagreement > 0.55;
+    // Most stable regions can use the coarse 16x16 vector directly.
+    // Defer the five edge-analysis texture reads until confidence and
+    // neighboring motion actually indicate that refinement may be needed.
+    bool protectedPrediction = motion.a < 0.55 || disagreement > 0.55;
+    if (!protectedPrediction) {
+        vec4 edgeCenter = texture2D(u_current, refineUv);
+        vec3 left = texture2D(u_current, clamp(refineUv - searchStep, 0.0, 1.0)).rgb;
+        vec3 right = texture2D(u_current, clamp(refineUv + searchStep, 0.0, 1.0)).rgb;
+        vec3 up = texture2D(u_current, clamp(refineUv - vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
+        vec3 down = texture2D(u_current, clamp(refineUv + vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
+        float edgeComplexity = max(
+            matchCost(left, edgeCenter.rgb) + matchCost(right, edgeCenter.rgb),
+            matchCost(up, edgeCenter.rgb) + matchCost(down, edgeCenter.rgb)
+        );
+        protectedPrediction = edgeComplexity > 0.075;
+    }
+    // Protected Prediction uses a stricter 8x8 refinement path; stable
+    // regions avoid the edge-analysis reads and keep the coarse vector.
     bool refineEightPixelBlock = protectedPrediction;
 
     float confidence = motion.a;
     if (protectedPrediction) {
+        vec4 refineCurrentSample = texture2D(u_current, refineUv);
         vec2 halfStep = searchStep * 0.5;
         float best = 1.0;
         float second = 1.0;
