@@ -11,7 +11,9 @@ settings = json.loads(Path("mod.json").read_text(encoding="utf-8"))["settings"]
 assert shader.count("texture2D(u_texture,") == 6
 assert "bilinearFallback" in shader
 assert "orientationConfidence" in shader
-assert "gl_FragColor = vec4(result, center.a)" in shader
+assert "float outputAlpha = bilinearFallback.a" in shader
+assert "result = min(result, vec3(outputAlpha))" in shader
+assert "gl_FragColor = vec4(result, outputAlpha)" in shader
 assert "kFsrLiteShader" in header
 assert "UpscaleMethod::FsrLite" in main
 assert "g_fsrLiteRenderer.apply" in main
