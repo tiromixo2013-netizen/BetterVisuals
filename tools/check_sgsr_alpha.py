@@ -12,7 +12,14 @@ settings = json.loads(Path("mod.json").read_text(encoding="utf-8"))["settings"]
 assert "glGetFloatv(GL_COLOR_CLEAR_VALUE, previousClearColor.data())" in pipeline
 assert "glClearColor(0.f, 0.f, 0.f, 0.f)" in pipeline
 assert "previousClearColor[3]" in pipeline
-assert "outColor = vec4(color, sourceSample.a)" in sgsr
+assert "outColor = vec4(color, sourceAlpha)" in sgsr
+assert "u_operationMode == 3" in sgsr
+assert "u_operationMode == 4" in sgsr
+assert "textureGather(u_texture, coord, 3)" in sgsr
+assert "textureGather(u_texture, coord, 1)" in sgsr
+assert "outColor = vec4(source.rgb, luma)" in sgsr
+assert "textureLod(u_alphaTexture, v_uv, 0.0).a" in sgsr
+assert "color = min(color, vec3(sourceAlpha))" in sgsr
 assert "glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)" in sgsr
 
 # SGSR1 and FSR1 presets must be separate and bind to their own upscaler.
@@ -23,6 +30,11 @@ assert "g_sgsrPresetScale" in main
 assert "updateSgsrQualityPreset" in main
 assert 'bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset)' in main
 assert "config.upscaling == UpscaleMethod::Sgsr" in main
+assert "g_sgsrOperationMode" in main
+assert "updateSgsrOperationMode" in main
+assert 'bindStringSetting("sgsr-operation-mode", updateSgsrOperationMode)' in main
+assert settings["sgsr-operation-mode"]["default"] == "RGBA"
+assert settings["sgsr-operation-mode"]["one-of"] == ["RGBA", "RGBY", "LERP"]
 assert "auto const presetScale = (config.upscaling == UpscaleMethod::Fsr ||" in main
 assert "config.upscaling == UpscaleMethod::FsrLite)" in main
 
