@@ -254,6 +254,45 @@ void main() {
             if (c < best) { second = best; best = c; refinedOffset = offset + vec2(halfStep.x, halfStep.y); }
             else { second = min(second, c); }
         }
+        // A final one-output-pixel probe is only paid by uncertain blocks.
+        // This recovers odd-pixel motion without increasing the common stable path cost.
+        if (best > 0.015) {
+            vec2 fineStep = searchStep * 0.25;
+            c = matchCost(refineCurrentSample, texture2D(u_previous,
+                clamp(refineUv + refinedOffset + vec2(-fineStep.x, 0.0), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; refinedOffset += vec2(-fineStep.x, 0.0); }
+            else { second = min(second, c); }
+            c = matchCost(refineCurrentSample, texture2D(u_previous,
+                clamp(refineUv + refinedOffset + vec2(fineStep.x, 0.0), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; refinedOffset += vec2(fineStep.x, 0.0); }
+            else { second = min(second, c); }
+            c = matchCost(refineCurrentSample, texture2D(u_previous,
+                clamp(refineUv + refinedOffset + vec2(0.0, -fineStep.y), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; refinedOffset += vec2(0.0, -fineStep.y); }
+            else { second = min(second, c); }
+            c = matchCost(refineCurrentSample, texture2D(u_previous,
+                clamp(refineUv + refinedOffset + vec2(0.0, fineStep.y), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; refinedOffset += vec2(0.0, fineStep.y); }
+            else { second = min(second, c); }
+            if (best > 0.025) {
+                c = matchCost(refineCurrentSample, texture2D(u_previous,
+                    clamp(refineUv + refinedOffset + vec2(-fineStep.x, -fineStep.y), 0.0, 1.0)));
+                if (c < best) { second = best; best = c; refinedOffset += vec2(-fineStep.x, -fineStep.y); }
+                else { second = min(second, c); }
+                c = matchCost(refineCurrentSample, texture2D(u_previous,
+                    clamp(refineUv + refinedOffset + vec2(fineStep.x, -fineStep.y), 0.0, 1.0)));
+                if (c < best) { second = best; best = c; refinedOffset += vec2(fineStep.x, -fineStep.y); }
+                else { second = min(second, c); }
+                c = matchCost(refineCurrentSample, texture2D(u_previous,
+                    clamp(refineUv + refinedOffset + vec2(-fineStep.x, fineStep.y), 0.0, 1.0)));
+                if (c < best) { second = best; best = c; refinedOffset += vec2(-fineStep.x, fineStep.y); }
+                else { second = min(second, c); }
+                c = matchCost(refineCurrentSample, texture2D(u_previous,
+                    clamp(refineUv + refinedOffset + vec2(fineStep.x, fineStep.y), 0.0, 1.0)));
+                if (c < best) { second = best; best = c; refinedOffset += vec2(fineStep.x, fineStep.y); }
+                else { second = min(second, c); }
+            }
+        }
         confidence = clamp((second - best) * 10.0, 0.0, 1.0);
         if (best > 0.105) confidence = 0.0;
         offset = refinedOffset;
