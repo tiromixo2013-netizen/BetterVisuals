@@ -82,14 +82,55 @@ void main() {
     else { second = min(second, c); }
 
     // Reject weak and ambiguous matches. Falling back to the
-    // current frame creates no blended double image in uncertain regions.
+    // current frame avoids blending two unrelated positions into a ghost.
     if (best > 0.08 || (second - best) < 0.003) {
         gl_FragColor = vec4(current, 1.0);
         return;
     }
 
-    // One-sided reprojection: sample only the previous frame at the midpoint.
-    // This trades some motion coverage for lower bandwidth and no blend ghost.
+    // Most confident pixels need no extra work. For borderline matches,
+    // verify that searching back from the previous-frame candidate recovers
+    // the opposite displacement. This conditional reverse check targets
+    // false matches at moving edges without doubling the cost on every pixel.
+    if (best > 0.02 && dot(offset, offset) > 0.0) {
+        vec2 previousCoord = clamp(v_uv + offset, 0.0, 1.0);
+        vec3 previousSample = texture2D(u_previous, previousCoord).rgb;
+        float reverseBest = matchCost(
+            previousSample, texture2D(u_current, previousCoord).rgb
+        );
+        vec2 reverseOffset = vec2(0.0);
+
+        c = matchCost(previousSample, texture2D(
+            u_current, clamp(previousCoord + vec2(-searchStep.x, 0.0), 0.0, 1.0)
+        ).rgb);
+        if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(-searchStep.x, 0.0); }
+
+        c = matchCost(previousSample, texture2D(
+            u_current, clamp(previousCoord + vec2(searchStep.x, 0.0), 0.0, 1.0)
+        ).rgb);
+        if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(searchStep.x, 0.0); }
+
+        c = matchCost(previousSample, texture2D(
+            u_current, clamp(previousCoord + vec2(0.0, -searchStep.y), 0.0, 1.0)
+        ).rgb);
+        if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(0.0, -searchStep.y); }
+
+        c = matchCost(previousSample, texture2D(
+            u_current, clamp(previousCoord + vec2(0.0, searchStep.y), 0.0, 1.0)
+        ).rgb);
+        if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(0.0, searchStep.y); }
+
+        bool inconsistent =
+            abs(reverseOffset.x + offset.x) > searchStep.x * 0.5 ||
+            abs(reverseOffset.y + offset.y) > searchStep.y * 0.5;
+        if (reverseBest > 0.08 || inconsistent) {
+            gl_FragColor = vec4(current, 1.0);
+            return;
+        }
+    }
+
+    // One-sided midpoint reprojection: use a single previous-frame sample.
+    // No temporal cross-blend is performed, avoiding double-image ghosting.
     vec3 midpoint = texture2D(
         u_previous, clamp(v_uv + offset * 0.5, 0.0, 1.0)
     ).rgb;
