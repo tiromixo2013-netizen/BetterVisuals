@@ -799,10 +799,20 @@ namespace {
             m_beginQuery(0x88BF, m_queries[index]);
             m_active = static_cast<int>(index);
         }
-        bool shouldInterpolate() const {
+        bool shouldInterpolate() {
             // If timer queries are unavailable, preserve the user-requested
             // behavior rather than guessing at GPU load.
-            return !m_supported || m_interpolationAllowed;
+            if (!m_supported || m_interpolationAllowed) return true;
+            if (m_framesUntilProbe > 0) {
+                --m_framesUntilProbe;
+                return false;
+            }
+            // Associate the probe with this capture's own timer query. Do not
+            // mistake a queued capture-only query for the probe result.
+            if (m_active < 0) return false;
+            m_probeQuery = m_active;
+            m_interpolationAllowed = true;
+            return true;
         }
         void abandonContext() {
             // Query names belong to the lost GL context; do not delete them in a replacement context.
@@ -817,6 +827,8 @@ namespace {
             m_windowSamples = 0;
             m_lastAverageNs = 0;
             m_interpolationAllowed = true;
+            m_framesUntilProbe = 0;
+            m_probeQuery = -1;
             m_genQueries = nullptr;
             m_deleteQueries = nullptr;
             m_beginQuery = nullptr;
@@ -880,26 +892,36 @@ namespace {
                 if (!disjoint) {
                     GLuint64 elapsedNs = 0;
                     m_getQueryObjectui64v(m_queries[i], 0x8866, &elapsedNs);
-                    m_totalNs += elapsedNs;
-                    ++m_samples;
-                    ++m_windowSamples;
-                    if (m_windowSamples >= 30) {
-                        m_lastAverageNs = m_totalNs / m_windowSamples;
-                        // Keep interpolation from monopolizing the mobile GPU.
-                        // Disable above 4 ms and only re-enable below 2.5 ms to
-                        // avoid rapid toggling around a single threshold.
-                        if (m_interpolationAllowed && m_lastAverageNs > 4'000'000ULL) {
+                    if (static_cast<int>(i) == m_probeQuery) {
+                        m_probeQuery = -1;
+                        if (elapsedNs > 4'000'000ULL) {
                             m_interpolationAllowed = false;
-                            log::warn("[FrameGeneration][GPU] interpolation throttled: average capture + interpolation cost {} us",
-                                m_lastAverageNs / 1000);
+                            m_framesUntilProbe = 120;
+                            log::warn("[FrameGeneration][GPU] interpolation paused for 120 frames after a {} us probe",
+                                elapsedNs / 1000);
                         }
-                        else if (!m_interpolationAllowed && m_lastAverageNs < 2'500'000ULL) {
-                            m_interpolationAllowed = true;
-                            log::info("[FrameGeneration][GPU] interpolation resumed: average capture + interpolation cost {} us",
-                                m_lastAverageNs / 1000);
+                        else {
+                            m_totalNs = elapsedNs;
+                            m_windowSamples = 1;
                         }
-                        m_totalNs = 0;
-                        m_windowSamples = 0;
+                    }
+                    else if (m_interpolationAllowed) {
+                        m_totalNs += elapsedNs;
+                        ++m_windowSamples;
+                        if (m_windowSamples >= 30) {
+                            m_lastAverageNs = m_totalNs / m_windowSamples;
+                            // Pause if the rolling interpolation workload exceeds
+                            // 4 ms. Resume only through a single measured probe
+                            // after a 120-frame cooldown, avoiding on/off oscillation.
+                            if (m_lastAverageNs > 4'000'000ULL) {
+                                m_interpolationAllowed = false;
+                                m_framesUntilProbe = 120;
+                                log::warn("[FrameGeneration][GPU] interpolation paused for 120 frames: average cost {} us",
+                                    m_lastAverageNs / 1000);
+                            }
+                            m_totalNs = 0;
+                            m_windowSamples = 0;
+                        }
                     }
                 }
                 m_pending[i] = false;
@@ -915,6 +937,8 @@ namespace {
         std::uint64_t m_totalNs = 0;
         std::uint32_t m_windowSamples = 0;
         std::uint64_t m_lastAverageNs = 0;
+        std::uint32_t m_framesUntilProbe = 0;
+        int m_probeQuery = -1;
         bool m_interpolationAllowed = true;
         GenQueries m_genQueries = nullptr;
         DeleteQueries m_deleteQueries = nullptr;
