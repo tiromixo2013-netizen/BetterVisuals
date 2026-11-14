@@ -22,8 +22,11 @@ def main() -> None:
     assert "scheduleGeneratedFrame" in detour
     assert "EGL_ANDROID_presentation_time" in source
     assert "m_period / 2" in source
-    assert "The current real frame is always swapped first" in detour
-    real_swap_index = detour.index("result = eglSwapBuffers(display, surface)")
+    assert "Submit the real frame first." in detour
+    assert "shouldGenerateOnThisInterval" in detour
+    assert "supportsAndroidPresentationTime(display)" in detour
+    assert "frameGenerationEnabled" in detour
+    real_swap_index = detour.index("EGLBoolean const realSwapResult = eglSwapBuffers(display, surface)")
     generate_index = detour.index("g_androidFrameHistory.generate()")
     present_index = detour.index("presentGeneratedFrame()")
     assert real_swap_index < generate_index < present_index
