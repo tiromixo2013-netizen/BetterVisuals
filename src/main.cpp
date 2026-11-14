@@ -982,6 +982,7 @@ namespace {
         return api;
     }
 
+    // Opt-in frame-history capture keeps this experimental GPU path disabled by default.
     // Two GPU-resident snapshots of the final EGL window surface, plus a
     // forward-predicted frame texture. Display pacing is separate.
     class AndroidFrameHistory final {
