@@ -19,11 +19,13 @@ void main() {
     vec2 dx = vec2(u_invResolution.x, 0.0);
     vec2 dy = vec2(0.0, u_invResolution.y);
 
-    vec4 center = texture2D(u_texture, v_texCoord);
-    vec3 left = texture2D(u_texture, v_texCoord - dx).rgb;
-    vec3 right = texture2D(u_texture, v_texCoord + dx).rgb;
-    vec3 up = texture2D(u_texture, v_texCoord - dy).rgb;
-    vec3 down = texture2D(u_texture, v_texCoord + dy).rgb;
+    vec2 sourcePixel = floor(v_texCoord / u_invResolution);
+    vec2 centerUv = (sourcePixel + vec2(0.5)) * u_invResolution;
+    vec4 center = texture2D(u_texture, centerUv);
+    vec3 left = texture2D(u_texture, centerUv - dx).rgb;
+    vec3 right = texture2D(u_texture, centerUv + dx).rgb;
+    vec3 up = texture2D(u_texture, centerUv - dy).rgb;
+    vec3 down = texture2D(u_texture, centerUv + dy).rgb;
     vec4 bilinearFallback = texture2D(u_texture, v_texCoord);
 
     float gx = abs(dot(right - left, vec3(0.299, 0.587, 0.114)));
