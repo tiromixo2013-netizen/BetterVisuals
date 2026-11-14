@@ -164,23 +164,37 @@ float matchCost(vec3 a, vec3 b) {
 
 void main() {
     vec4 currentSample = texture2D(u_current, v_uv);
-    vec4 motion = texture2D(u_motion, v_uv);
+    vec2 outputPixel = floor(v_uv / u_invResolution);
+    vec2 coarseBlockIndex = floor(outputPixel / 16.0);
+    vec2 coarseBlockUv = clamp(
+        (coarseBlockIndex * 16.0 + vec2(8.0)) * u_invResolution,
+        0.5 * u_invResolution, vec2(1.0) - 0.5 * u_invResolution
+    );
+    // Complex 16x16 regions split into four 8x8 refinement blocks. Every
+    // fragment in the same sub-block uses the same refined motion vector.
+    vec2 refineBlockIndex = floor(outputPixel / 8.0);
+    vec2 refineUv = clamp(
+        (refineBlockIndex * 8.0 + vec2(4.0)) * u_invResolution,
+        0.5 * u_invResolution, vec2(1.0) - 0.5 * u_invResolution
+    );
+    vec4 refineCurrentSample = texture2D(u_current, refineUv);
+    vec4 motion = texture2D(u_motion, coarseBlockUv);
     vec2 searchStep = 2.0 * u_invResolution;
     vec2 offset = (motion.rg * 2.0 - 1.0) * searchStep;
 
-    vec2 motionLeft = (texture2D(u_motion, v_uv - vec2(u_motionTexel.x, 0.0)).rg * 2.0 - 1.0) * searchStep;
-    vec2 motionRight = (texture2D(u_motion, v_uv + vec2(u_motionTexel.x, 0.0)).rg * 2.0 - 1.0) * searchStep;
-    vec2 motionUp = (texture2D(u_motion, v_uv - vec2(0.0, u_motionTexel.y)).rg * 2.0 - 1.0) * searchStep;
-    vec2 motionDown = (texture2D(u_motion, v_uv + vec2(0.0, u_motionTexel.y)).rg * 2.0 - 1.0) * searchStep;
+    vec2 motionLeft = (texture2D(u_motion, coarseBlockUv - vec2(u_motionTexel.x, 0.0)).rg * 2.0 - 1.0) * searchStep;
+    vec2 motionRight = (texture2D(u_motion, coarseBlockUv + vec2(u_motionTexel.x, 0.0)).rg * 2.0 - 1.0) * searchStep;
+    vec2 motionUp = (texture2D(u_motion, coarseBlockUv - vec2(0.0, u_motionTexel.y)).rg * 2.0 - 1.0) * searchStep;
+    vec2 motionDown = (texture2D(u_motion, coarseBlockUv + vec2(0.0, u_motionTexel.y)).rg * 2.0 - 1.0) * searchStep;
     float disagreement = max(
         max(length(motionLeft - offset), length(motionRight - offset)),
         max(length(motionUp - offset), length(motionDown - offset))
     ) / max(length(searchStep), 0.000001);
 
-    vec3 left = texture2D(u_current, clamp(v_uv - searchStep, 0.0, 1.0)).rgb;
-    vec3 right = texture2D(u_current, clamp(v_uv + searchStep, 0.0, 1.0)).rgb;
-    vec3 up = texture2D(u_current, clamp(v_uv - vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
-    vec3 down = texture2D(u_current, clamp(v_uv + vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
+    vec3 left = texture2D(u_current, clamp(refineUv - searchStep, 0.0, 1.0)).rgb;
+    vec3 right = texture2D(u_current, clamp(refineUv + searchStep, 0.0, 1.0)).rgb;
+    vec3 up = texture2D(u_current, clamp(refineUv - vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
+    vec3 down = texture2D(u_current, clamp(refineUv + vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
     float edgeComplexity = max(
         matchCost(left, currentSample.rgb) + matchCost(right, currentSample.rgb),
         matchCost(up, currentSample.rgb) + matchCost(down, currentSample.rgb)
@@ -199,12 +213,12 @@ void main() {
         float second = 1.0;
         vec2 refinedOffset = offset;
         float c = matchCost(
-            currentSample.rgb,
-            texture2D(u_previous, clamp(v_uv + offset, 0.0, 1.0)).rgb
+            refineCurrentSample.rgb,
+            texture2D(u_previous, clamp(refineUv + offset, 0.0, 1.0)).rgb
         );
         best = c;
-        c = matchCost(currentSample.rgb, texture2D(
-            u_previous, clamp(v_uv + offset + vec2(-halfStep.x, 0.0), 0.0, 1.0)
+        c = matchCost(refineCurrentSample.rgb, texture2D(
+            u_previous, clamp(refineUv + offset + vec2(-halfStep.x, 0.0), 0.0, 1.0)
         ).rgb);
         if (c < best) { second = best; best = c; refinedOffset = offset + vec2(-halfStep.x, 0.0); }
         else { second = min(second, c); }
