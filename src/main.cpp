@@ -1510,6 +1510,7 @@ namespace {
 namespace {
     std::atomic<bool> g_windowsFrameHistoryEnabled = false;
     bool g_windowsFrameGenerationSwapInterval = false;
+    int g_windowsPreviousSwapInterval = 1;
     using WglSwapInterval = BOOL (WINAPI*)(int);
     using WglGetSwapInterval = int (WINAPI*)();
 
@@ -1958,7 +1959,7 @@ class $modify(BetterVisualsEGLView, CCEGLView) {
         bool const enabled = g_windowsFrameHistoryEnabled.load(std::memory_order_relaxed);
         if (!enabled) {
             if (g_windowsFrameGenerationSwapInterval) {
-                setWindowsSwapInterval(getWindowsSwapInterval() == 0 ? 1 : 1);
+                setWindowsSwapInterval(g_windowsPreviousSwapInterval);
                 g_windowsFrameGenerationSwapInterval = false;
                 g_windowsFrameHistory.reset();
             }
@@ -1970,6 +1971,7 @@ class $modify(BetterVisualsEGLView, CCEGLView) {
         // wait while inserting the extra buffer; the desktop compositor and
         // monitor still determine which submitted buffers are physically shown.
         if (!g_windowsFrameGenerationSwapInterval) {
+            g_windowsPreviousSwapInterval = getWindowsSwapInterval();
             setWindowsSwapInterval(0);
             g_windowsFrameGenerationSwapInterval = true;
             log::info("[FrameGeneration][Windows] WGL swap interval set to 0 for generated-buffer submission");
