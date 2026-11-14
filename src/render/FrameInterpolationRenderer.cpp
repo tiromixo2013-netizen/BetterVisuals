@@ -177,7 +177,6 @@ void main() {
         (refineBlockIndex * 8.0 + vec2(4.0)) * u_invResolution,
         0.5 * u_invResolution, vec2(1.0) - 0.5 * u_invResolution
     );
-    vec4 refineCurrentSample = texture2D(u_current, refineUv);
     vec4 motion = texture2D(u_motion, coarseBlockUv);
     vec2 searchStep = 2.0 * u_invResolution;
     vec2 offset = (motion.rg * 2.0 - 1.0) * searchStep;
@@ -521,6 +520,12 @@ namespace bv::render {
         glBindTexture(GL_TEXTURE_2D, m_motionTextures[m_motionReadIndex]);
         m_quad.bind();
         FullscreenQuad::draw();
+        auto const motionPassError = glGetError();
+        if (motionPassError != GL_NO_ERROR) {
+            log::error("Predictive motion pass failed with GL error 0x{:04x}",
+                static_cast<unsigned>(motionPassError));
+            return false;
+        }
 
         // Reconstruct at half surface resolution; uncertain regions use the
         // current real frame as a safe fallback instead of inventing pixels.
@@ -537,6 +542,12 @@ namespace bv::render {
         glBindTexture(GL_TEXTURE_2D, m_motionTextures[writeIndex]);
         m_quad.bind();
         FullscreenQuad::draw();
+        auto const reconstructionError = glGetError();
+        if (reconstructionError != GL_NO_ERROR) {
+            log::error("Predictive reconstruction pass failed with GL error 0x{:04x}",
+                static_cast<unsigned>(reconstructionError));
+            return false;
+        }
 
         m_motionReadIndex = writeIndex;
         m_hasMotionHistory = true;
@@ -549,8 +560,16 @@ namespace bv::render {
 
     bool FrameInterpolationRenderer::presentTexture(GLuint texture) {
         if (!texture || !m_presentProgram || m_surfaceWidth <= 0 || m_surfaceHeight <= 0) return false;
+        if (glIsTexture(texture) != GL_TRUE) {
+            log::error("Generated-frame presentation rejected a non-texture input");
+            return false;
+        }
         FramePassStateGuard state;
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            log::error("Generated-frame presentation target (default framebuffer) is incomplete");
+            return false;
+        }
         glViewport(0, 0, m_surfaceWidth, m_surfaceHeight);
         glDisable(GL_BLEND);
         glDisable(GL_DEPTH_TEST);
@@ -564,6 +583,12 @@ namespace bv::render {
         glBindTexture(GL_TEXTURE_2D, texture);
         m_quad.bind();
         FullscreenQuad::draw();
+        auto const presentationError = glGetError();
+        if (presentationError != GL_NO_ERROR) {
+            log::error("Generated-frame fullscreen presentation failed with GL error 0x{:04x}",
+                static_cast<unsigned>(presentationError));
+            return false;
+        }
         return true;
     }
 
