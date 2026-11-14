@@ -28,24 +28,33 @@ for token in (
     "EGLBoolean const realSwapResult = eglSwapBuffers(display, surface)",
     "generatedSwapResult",
     "keeping the already-presented real frame",
+    "Generated frame missed its midpoint deadline",
+    "result = realSwapResult;",
+    "bool scheduleGeneratedFrame(",
+    "if (target <= earliest) return false;"
 ):
     assert token in main, f"missing Android integration: {token}"
 
 for token in (
     "uniform sampler2D u_previous",
     "uniform sampler2D u_current",
-    "vec2 searchStep = 2.0 * u_invResolution",
+    "vec2 searchStep = 4.0 * u_invResolution",
     "float second = 1.0",
-    "reverseBest > 0.075 || inconsistent",
-    "vec2 predictedCoord = clamp(v_uv - offset * 0.5, 0.0, 1.0)",
-    "vec4 predictedSample = texture2D(u_current, predictedCoord)",
-    "gl_FragColor = predictedSample",
+    "reverseBest > 0.105 || inconsistent",
+    "float predictionFraction = (motionMagnitude > 0.72 || confidence < 0.55) ? 0.25 : 0.5",
+    "vec2 predictedCoord = clamp(v_uv - offset * predictionFraction, 0.0, 1.0)",
+    "gl_FragColor = texture2D(u_current, predictedCoord)",
     "gl_FragColor = currentSample",
-    "best > 0.075",
+    "best > 0.105",
+    "float matchCost(vec4 a, vec4 b)",
+    "bool photometricTransition",
+    "bool fadeFromBlack",
+    "bool alphaTransition",
+    "alphaRgbCost < 0.05",
+    "if (best > 0.055)",
+    "if (reverseBest > 0.055)",
     "confidence < 0.30",
-    "refineEightPixelBlock",
     "protectedPrediction",
-    "Confidence recovery is deliberately gradual",
     "blockIndex * 16.0",
     "refineBlockIndex * 8.0",
     "refineUv",
@@ -95,13 +104,16 @@ assert "if (realSwapResult == EGL_TRUE && frameReady && generateOnThisInterval)"
 assert "presentNativeFrame" not in main
 assert "m_pendingTexture" not in main
 
-# Sign check for the shader's coordinate convention:
-# if an object moved right, its matching previous location is left of current;
-# the negative previous-frame offset is subtracted to predict farther right.
+# Sign and adaptive-step checks for the shader's coordinate convention:
+# if an object moved right, its matching previous location is left of current.
 current_x = 0.50
 previous_offset_x = -0.02
-predicted_x = current_x - previous_offset_x * 0.5
-assert predicted_x > current_x
-assert abs(predicted_x - current_x - 0.01) < 1e-9, "prediction must use half of the measured displacement"
+stable_fraction = 0.5
+fast_fraction = 0.25
+stable_x = current_x - previous_offset_x * stable_fraction
+fast_x = current_x - previous_offset_x * fast_fraction
+assert stable_x > current_x and fast_x > current_x
+assert abs(stable_x - current_x - 0.01) < 1e-9, "stable motion must use half displacement"
+assert abs(fast_x - current_x - 0.005) < 1e-9, "fast motion must use quarter displacement"
 
 print("Android forward-predictive frame-generation source checks passed (static only).")
