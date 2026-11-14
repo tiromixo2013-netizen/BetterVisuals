@@ -196,8 +196,8 @@ void main() {
     vec3 up = texture2D(u_current, clamp(refineUv - vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
     vec3 down = texture2D(u_current, clamp(refineUv + vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
     float edgeComplexity = max(
-        matchCost(left, currentSample.rgb) + matchCost(right, currentSample.rgb),
-        matchCost(up, currentSample.rgb) + matchCost(down, currentSample.rgb)
+        matchCost(left, refineCurrentSample.rgb) + matchCost(right, refineCurrentSample.rgb),
+        matchCost(up, refineCurrentSample.rgb) + matchCost(down, refineCurrentSample.rgb)
     );
     // Protected Prediction is selected by low block confidence, complex
     // local edges, or neighboring-block disagreement. It uses a stricter
@@ -222,18 +222,18 @@ void main() {
         ).rgb);
         if (c < best) { second = best; best = c; refinedOffset = offset + vec2(-halfStep.x, 0.0); }
         else { second = min(second, c); }
-        c = matchCost(currentSample.rgb, texture2D(
-            u_previous, clamp(v_uv + offset + vec2(halfStep.x, 0.0), 0.0, 1.0)
+        c = matchCost(refineCurrentSample.rgb, texture2D(
+            u_previous, clamp(refineUv + offset + vec2(halfStep.x, 0.0), 0.0, 1.0)
         ).rgb);
         if (c < best) { second = best; best = c; refinedOffset = offset + vec2(halfStep.x, 0.0); }
         else { second = min(second, c); }
-        c = matchCost(currentSample.rgb, texture2D(
-            u_previous, clamp(v_uv + offset + vec2(0.0, -halfStep.y), 0.0, 1.0)
+        c = matchCost(refineCurrentSample.rgb, texture2D(
+            u_previous, clamp(refineUv + offset + vec2(0.0, -halfStep.y), 0.0, 1.0)
         ).rgb);
         if (c < best) { second = best; best = c; refinedOffset = offset + vec2(0.0, -halfStep.y); }
         else { second = min(second, c); }
-        c = matchCost(currentSample.rgb, texture2D(
-            u_previous, clamp(v_uv + offset + vec2(0.0, halfStep.y), 0.0, 1.0)
+        c = matchCost(refineCurrentSample.rgb, texture2D(
+            u_previous, clamp(refineUv + offset + vec2(0.0, halfStep.y), 0.0, 1.0)
         ).rgb);
         if (c < best) { second = best; best = c; refinedOffset = offset + vec2(0.0, halfStep.y); }
         else { second = min(second, c); }
