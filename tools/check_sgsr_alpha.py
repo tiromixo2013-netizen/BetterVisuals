@@ -20,6 +20,11 @@ assert "textureGather(u_texture, coord, 1)" in sgsr
 assert "outColor = vec4(source.rgb, luma)" in sgsr
 assert "textureLod(u_alphaTexture, v_uv, 0.0).a" in sgsr
 assert "color = min(color, vec3(sourceAlpha))" in sgsr
+assert "m_rgbYFramebuffer" in sgsr
+assert "m_rgbYTexture" in sgsr
+assert "glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(callerFramebuffer))" in sgsr
+assert "glViewport(callerViewport[0], callerViewport[1], callerViewport[2], callerViewport[3])" in sgsr
+assert "glUniform1i(m_operationModeUniform, operationMode)" in sgsr
 assert "glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)" in sgsr
 
 # SGSR1 and FSR1 presets must be separate and bind to their own upscaler.
