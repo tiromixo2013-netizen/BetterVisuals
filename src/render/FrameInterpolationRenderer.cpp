@@ -271,8 +271,9 @@ void main() {
         float alphaDelta = abs(currentSample.a - previousSample.a);
         bool photometricTransition = chromaCost < 0.075 &&
             lumaDelta > 0.008 && lumaDelta < 0.42;
-        bool alphaTransition = alphaDelta > 0.02 &&
-            matchCost(previousSample, currentSample) < 0.08;
+        vec3 alphaRgbDelta = abs(previousSample.rgb - currentSample.rgb);
+        float alphaRgbCost = max(alphaRgbDelta.r, max(alphaRgbDelta.g, alphaRgbDelta.b));
+        bool alphaTransition = alphaDelta > 0.02 && alphaRgbCost < 0.05;
         if (photometricTransition || alphaTransition)
             gl_FragColor = mix(previousSample, currentSample, 0.5);
         else
