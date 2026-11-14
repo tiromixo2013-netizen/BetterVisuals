@@ -822,7 +822,6 @@ namespace {
             m_supported = false;
             m_active = -1;
             m_next = 0;
-            m_samples = 0;
             m_totalNs = 0;
             m_windowSamples = 0;
             m_lastAverageNs = 0;
@@ -933,7 +932,6 @@ namespace {
         std::size_t m_next = 0;
         std::array<GLuint, 4> m_queries = {};
         std::array<bool, 4> m_pending = {};
-        std::uint64_t m_samples = 0;
         std::uint64_t m_totalNs = 0;
         std::uint32_t m_windowSamples = 0;
         std::uint64_t m_lastAverageNs = 0;
