@@ -12,19 +12,29 @@ def main() -> None:
     assert "eglGetCurrentDisplay()" in source
     assert "eglGetCurrentSurface(EGL_DRAW)" in source
     assert "frame processing remains disabled" in source
-    detour = source.split("EGLBoolean betterVisualsEglSwapBuffers", 1)[1].split("\n    }", 1)[0]
-    assert detour.count("eglSwapBuffers(display, surface)") == 4  # midpoint, native restore, and two fallback paths
-    assert "presentMidpoint()" in detour
-    assert "presentNativeFrame()" in detour
+    detour = source.split("EGLBoolean betterVisualsEglSwapBuffers", 1)[1].split(
+        "void installAndroidEglSwapHook", 1
+    )[0]
+    assert detour.count("eglSwapBuffers(display, surface)") == 3
+    assert "presentGeneratedFrame()" in detour
+    assert "g_androidFrameHistory.generate()" in detour
+    assert "scheduleRealFrame" in detour
+    assert "scheduleGeneratedFrame" in detour
+    assert "EGL_ANDROID_presentation_time" in source
+    assert "m_period / 2" in source
+    assert "The current real frame is always swapped first" in detour
+    real_swap_index = detour.index("result = eglSwapBuffers(display, surface)")
+    generate_index = detour.index("g_androidFrameHistory.generate()")
+    present_index = detour.index("presentGeneratedFrame()")
+    assert real_swap_index < generate_index < present_index
+    assert "presentNativeFrame()" not in detour
     assert "per-thread chain index" in detour
     assert "Mod::get()->hook(" in source
     assert "tulip::hook::TulipConvention::Cdecl" in source
     assert "installAndroidEglSwapHook();" in source
     assert "if (ANDROID)\n    target_link_libraries(${PROJECT_NAME} EGL)\nendif()" in cmake
 
-    # The hook now presents one generated midpoint and then restores the native frame.
-    assert "generated midpoint" in detour.lower()
-    print("Android EGL presentation-hook source checks passed.")
+    print("Android EGL real-first predictive presentation checks passed (static only).")
 
 
 if __name__ == "__main__":

@@ -65,6 +65,7 @@ namespace {
         Nearest,
         Bilinear,
         Fsr,
+        FsrLite,
         Sgsr,
     };
 
@@ -121,6 +122,7 @@ namespace {
     // Zero selects Custom (1.0); positive values are source-resolution ratios.
     std::atomic<float> g_fsrPresetScale = 0.f;
     std::atomic<float> g_sgsrPresetScale = 0.f;
+    std::atomic<int> g_sgsrOperationMode = 1;
     std::atomic<float> g_renderScale = 1.f;
     std::atomic<bool> g_casEnabled = false;
     std::atomic<float> g_casSharpness = 0.f;
@@ -148,6 +150,7 @@ namespace {
     bv::render::PostProcessRenderer g_ssaaRenderer;
     bv::render::PostProcessRenderer g_renderScaleRenderer;
     bv::render::PostProcessRenderer g_fsrRenderer;
+    bv::render::PostProcessRenderer g_fsrLiteRenderer;
     bv::render::SgsrRenderer g_sgsrRenderer;
     bv::render::PostProcessRenderer g_casRenderer;
     bv::render::BloomRenderer g_bloomRenderer;
@@ -191,6 +194,7 @@ namespace {
         g_ssaaRenderer.reset();
         g_renderScaleRenderer.reset();
         g_fsrRenderer.reset();
+        g_fsrLiteRenderer.reset();
         g_sgsrRenderer.reset();
         g_casRenderer.reset();
         g_bloomRenderer.reset();
@@ -266,6 +270,10 @@ namespace {
             g_upscaleMethod.store(UpscaleMethod::Fsr, std::memory_order_relaxed);
             return;
         }
+        if (value == "FSR Lite (6-Tap)") {
+            g_upscaleMethod.store(UpscaleMethod::FsrLite, std::memory_order_relaxed);
+            return;
+        }
         if (value == "SGSR 1") {
             g_upscaleMethod.store(UpscaleMethod::Sgsr, std::memory_order_relaxed);
             return;
@@ -301,6 +309,21 @@ namespace {
             log::warn("Unknown SGSR 1 quality preset '{}', using Custom", value);
         }
         g_sgsrPresetScale.store(scale, std::memory_order_relaxed);
+    }
+
+    void updateSgsrOperationMode(std::string_view value) {
+        if (value == "RGBY") {
+            g_sgsrOperationMode.store(3, std::memory_order_relaxed);
+        }
+        else if (value == "LERP") {
+            g_sgsrOperationMode.store(4, std::memory_order_relaxed);
+        }
+        else {
+            if (value != "RGBA") {
+                log::warn("Unknown SGSR1 operation mode '{}', using RGBA", value);
+            }
+            g_sgsrOperationMode.store(1, std::memory_order_relaxed);
+        }
     }
 
     void bindBoolSetting(char const* name, std::atomic<bool>& value) {
@@ -444,6 +467,7 @@ namespace {
         if (prepared && key.needsPresentation) {
             if (key.needsDownsample) {
                 g_fsrRenderer.reset();
+                g_fsrLiteRenderer.reset();
                 g_renderScaleRenderer.reset();
                 g_ssaaRenderer.reset();
                 auto const& ssaaShader = config.aa == AntiAliasingMethod::Ssaa300 ?
@@ -453,11 +477,19 @@ namespace {
             }
             else if (config.upscaling == UpscaleMethod::Fsr) {
                 g_renderScaleRenderer.reset();
+                g_fsrLiteRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_fsrRenderer.prepare(bv::shaders::kFsrShader, key.width, key.height);
             }
+            else if (config.upscaling == UpscaleMethod::FsrLite) {
+                g_renderScaleRenderer.reset();
+                g_fsrRenderer.reset();
+                g_ssaaRenderer.reset();
+                prepared = g_fsrLiteRenderer.prepare(bv::shaders::kFsrLiteShader, key.width, key.height);
+            }
             else {
                 g_fsrRenderer.reset();
+                g_fsrLiteRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_renderScaleRenderer.prepare(
                     bv::shaders::kRenderScaleShader, key.width, key.height
@@ -467,6 +499,7 @@ namespace {
         else if (!key.needsPresentation) {
             g_renderScaleRenderer.reset();
             g_fsrRenderer.reset();
+            g_fsrLiteRenderer.reset();
             g_ssaaRenderer.reset();
         }
 
@@ -562,14 +595,16 @@ namespace {
 
         auto const effectCount = config.effectCount();
         auto const configuredScale = g_renderScale.load(std::memory_order_relaxed);
-        auto const presetScale = config.upscaling == UpscaleMethod::Fsr ?
+        auto const presetScale = (config.upscaling == UpscaleMethod::Fsr ||
+            config.upscaling == UpscaleMethod::FsrLite) ?
             g_fsrPresetScale.load(std::memory_order_relaxed) :
             (config.upscaling == UpscaleMethod::Sgsr ?
                 g_sgsrPresetScale.load(std::memory_order_relaxed) : 0.f);
         auto const requestedScale =
             (presetScale > 0.f ? presetScale : 1.f) * configuredScale;
         auto const usesSpatialUpscaler =
-            config.upscaling == UpscaleMethod::Fsr || config.upscaling == UpscaleMethod::Sgsr;
+            config.upscaling == UpscaleMethod::Fsr || config.upscaling == UpscaleMethod::FsrLite ||
+            config.upscaling == UpscaleMethod::Sgsr;
         auto const renderScale = std::clamp(requestedScale, 0.25f, usesSpatialUpscaler ? 1.f : 1.2f);
         // A selected spatial-upscaler quality preset owns the base resolution.
         // SSAA must not override its input size or route it through downsampling.
@@ -673,7 +708,7 @@ namespace {
 
                 auto const linearSampling =
                     needsDownsample || config.upscaling == UpscaleMethod::Bilinear ||
-                    config.upscaling == UpscaleMethod::Sgsr;
+                    config.upscaling == UpscaleMethod::FsrLite || config.upscaling == UpscaleMethod::Sgsr;
                 glTexParameteri(
                     GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linearSampling ? GL_LINEAR : GL_NEAREST
                 );
@@ -688,8 +723,14 @@ namespace {
                 else if (config.upscaling == UpscaleMethod::Fsr) {
                     g_fsrRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
                 }
+                else if (config.upscaling == UpscaleMethod::FsrLite) {
+                    g_fsrLiteRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
+                }
                 else if (config.upscaling == UpscaleMethod::Sgsr) {
-                    if (!g_sgsrRenderer.apply(sourceTexture, internalWidth, internalHeight, width, height)) {
+                    if (!g_sgsrRenderer.apply(
+                        sourceTexture, internalWidth, internalHeight, width, height,
+                        g_sgsrOperationMode.load(std::memory_order_relaxed)
+                    )) {
                         g_renderScaleRenderer.apply(sourceTexture);
                     }
                 }
@@ -953,6 +994,101 @@ namespace {
         GetQueryObjectui64v m_getQueryObjectui64v = nullptr;
     };
 
+    // Best-effort EGL_ANDROID_presentation_time scheduler. It estimates the
+    // application's real-frame cadence and places a generated frame halfway
+    // between real frames. If the extension is absent, normal EGL swap policy
+    // remains the fallback; no CPU sleeps or glFinish calls are introduced.
+    class AndroidPresentationScheduler final {
+    public:
+        void scheduleRealFrame(EGLDisplay display, EGLSurface surface, bool enabled) {
+            if (!enabled || !initialize()) return;
+            auto const now = std::chrono::steady_clock::now();
+            if (display != m_display || surface != m_surface) {
+                m_display = display;
+                m_surface = surface;
+                m_lastRealFrame = {};
+                m_period = std::chrono::nanoseconds(16'666'667);
+            }
+            if (m_lastRealFrame != std::chrono::steady_clock::time_point{}) {
+                auto const elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    now - m_lastRealFrame
+                );
+                if (elapsed >= std::chrono::milliseconds(5) &&
+                    elapsed <= std::chrono::milliseconds(50)) {
+                    m_period = (m_period * 7 + elapsed) / 8;
+                }
+            }
+            m_lastRealFrame = now;
+            m_realTarget = now;
+            submitTimestamp(display, surface, m_realTarget);
+        }
+
+        void scheduleGeneratedFrame(EGLDisplay display, EGLSurface surface, bool enabled) {
+            if (!enabled || !m_presentationTime ||
+                m_realTarget == std::chrono::steady_clock::time_point{}) return;
+            auto target = m_realTarget + m_period / 2;
+            auto const earliest = std::chrono::steady_clock::now() +
+                std::chrono::microseconds(500);
+            if (target < earliest) target = earliest;
+            submitTimestamp(display, surface, target);
+        }
+
+    private:
+        using PresentationTime = EGLBoolean (EGLAPIENTRYP)(
+            EGLDisplay, EGLSurface, EGLnsecsANDROID
+        );
+
+        bool initialize() {
+            if (m_checked) return m_presentationTime != nullptr;
+            m_checked = true;
+            auto const extensions = eglQueryString(eglGetCurrentDisplay(), EGL_EXTENSIONS);
+            if (!hasEglExtension(extensions, "EGL_ANDROID_presentation_time")) {
+                log::info("[Presentation] EGL_ANDROID_presentation_time unavailable; using EGL swap policy only");
+                return false;
+            }
+            m_presentationTime = reinterpret_cast<PresentationTime>(
+                eglGetProcAddress("eglPresentationTimeANDROID")
+            );
+            if (!m_presentationTime) {
+                log::warn("[Presentation] EGL presentation-time extension has no entry point");
+                return false;
+            }
+            log::info("[Presentation] EGL presentation-time scheduler enabled");
+            return true;
+        }
+
+        void submitTimestamp(
+            EGLDisplay display, EGLSurface surface,
+            std::chrono::steady_clock::time_point target
+        ) {
+            // Android's EGL extension uses CLOCK_MONOTONIC nanoseconds; Android
+            // steady_clock is backed by the same monotonic clock.
+            auto const timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                target.time_since_epoch()
+            ).count();
+            if (m_presentationTime(
+                display, surface, static_cast<EGLnsecsANDROID>(timestamp)
+            ) != EGL_TRUE && !m_warningLogged) {
+                m_warningLogged = true;
+                log::warn("[Presentation] eglPresentationTimeANDROID rejected a frame timestamp");
+            }
+        }
+
+        bool m_checked = false;
+        bool m_warningLogged = false;
+        PresentationTime m_presentationTime = nullptr;
+        EGLDisplay m_display = EGL_NO_DISPLAY;
+        EGLSurface m_surface = EGL_NO_SURFACE;
+        std::chrono::steady_clock::time_point m_lastRealFrame = {};
+        std::chrono::steady_clock::time_point m_realTarget = {};
+        std::chrono::nanoseconds m_period{16'666'667};
+    };
+
+    AndroidPresentationScheduler& androidPresentationScheduler() {
+        static AndroidPresentationScheduler scheduler;
+        return scheduler;
+    }
+
     struct AndroidEglFenceApi {
         using CreateSync = EGLSyncKHR (EGLAPIENTRYP)(EGLDisplay, EGLenum, EGLint const*);
         using ClientWaitSync = EGLint (EGLAPIENTRYP)(EGLDisplay, EGLSyncKHR, EGLint, EGLTimeKHR);
@@ -982,13 +1118,15 @@ namespace {
         return api;
     }
 
-    // Two GPU-resident snapshots of the final EGL window surface, plus an
-    // experimental motion-matched midpoint texture. Display pacing is separate.
+    // opt-in frame-history capture keeps this experimental GPU path disabled by default.
+    // Two GPU-resident snapshots of the final EGL window surface, plus a
+    // forward-predicted frame texture. Display pacing is separate.
     class AndroidFrameHistory final {
     public:
+        // Capture is intentionally limited to a GPU texture copy before the
+        // real swap. Motion estimation and reconstruction run only afterwards.
         bool capture(EGLDisplay display, EGLSurface surface, EGLContext context) {
             if (context == EGL_NO_CONTEXT) return false;
-            // CPU timer measures submission only; GPU time is queried separately.
             auto const cpuSubmitStart = std::chrono::steady_clock::now();
 
             EGLint width = 0;
@@ -998,12 +1136,15 @@ namespace {
                 width <= 0 || height <= 0) {
                 return false;
             }
+            // A sync object from a lost context must not be polled through
+            // the replacement display/context.
+            if (m_context != EGL_NO_CONTEXT && m_context != context) {
+                m_gpuFence = EGL_NO_SYNC_KHR;
+            }
             if (!retirePreviousFence(display)) return false;
 
             if (m_context != context) {
-                m_pendingTexture = 0;
-                // GL names from a lost context are invalid in the new context;
-                // do not attempt to delete them through the replacement context.
+                // GL names from a lost context are invalid in the new context.
                 m_textures = {};
                 m_width = 0;
                 m_height = 0;
@@ -1014,8 +1155,8 @@ namespace {
                 m_context = context;
                 m_maxTextureSize = 0;
             }
-            // GL_MAX_TEXTURE_SIZE is invariant for a live context. Cache it
-            // instead of issuing a synchronous driver query on every swap.
+            // GL_MAX_TEXTURE_SIZE is invariant for a live context; cache it
+            // rather than issuing a synchronous driver query on every swap.
             if (m_maxTextureSize <= 0) {
                 glGetIntegerv(GL_MAX_TEXTURE_SIZE, &m_maxTextureSize);
             }
@@ -1024,7 +1165,6 @@ namespace {
             }
 
             if (width != m_width || height != m_height) {
-                m_pendingTexture = 0;
                 if (m_textures[0] || m_textures[1]) {
                     glDeleteTextures(static_cast<GLsizei>(m_textures.size()), m_textures.data());
                 }
@@ -1036,7 +1176,6 @@ namespace {
                 m_interpolator.reset();
             }
 
-            m_gpuTimer.begin();
             GLint previousFramebuffer = 0;
             GLint previousActiveTexture = GL_TEXTURE0;
             glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
@@ -1071,10 +1210,9 @@ namespace {
             }
 
             bool captured = false;
-            bool generated = false;
             if (m_textures[0] && m_textures[1] && m_width == width && m_height == height) {
-                // eglSwapBuffers presents the EGL window surface (default FB).
-                // Copy before the original swap invalidates/recycles its contents.
+                // The default framebuffer may be recycled by eglSwapBuffers,
+                // so preserve the real frame before submitting that swap.
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 glBindTexture(GL_TEXTURE_2D, m_textures[m_writeIndex]);
                 glCopyTexSubImage2D(
@@ -1090,54 +1228,71 @@ namespace {
             if (captured) {
                 m_writeIndex = 1 - m_writeIndex;
                 if (m_validFrames < 2) ++m_validFrames;
-                if (m_validFrames == 2) {
-                    auto const previousIndex = m_writeIndex;
-                    auto const currentIndex = 1 - m_writeIndex;
-                    if (m_gpuTimer.shouldInterpolate() &&
-                        m_interpolator.prepare(width, height) &&
-                        m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])) {
-                        // Keep the interpolated frame off-screen until the native
-                        // frame boundary is handled by the EGL swap detour.
-                        m_pendingTexture = m_textures[currentIndex];
-                        generated = true;
-                        if (!m_pairLogged) {
-                            m_pairLogged = true;
-                            log::info("[FrameGeneration] GPU midpoint generated; queued for alternating presentation");
-                        }
-                    }
-                    else if (!m_generationWarningLogged) {
-                        m_generationWarningLogged = true;
-                        log::warn("[FrameGeneration] Midpoint reconstruction could not be initialized; capture history remains available");
-                    }
-                }
             }
 
-            m_gpuTimer.end();
             ++m_profiledCaptures;
             auto const elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::steady_clock::now() - cpuSubmitStart
             ).count();
-            m_cpuSubmitMicros += static_cast<std::uint64_t>(std::max<std::int64_t>(0, elapsedUs));
+            m_cpuCaptureMicros += static_cast<std::uint64_t>(std::max<std::int64_t>(0, elapsedUs));
             if ((m_profiledCaptures % 120) == 0) {
-                auto const averageUs = m_cpuSubmitMicros / 120;
                 log::info(
-                    "[FrameGeneration][CPU] avg capture + GPU-submit overhead over 120 frames: {} us; "
-                    "GPU execution is asynchronous and is not measured by this CPU timer",
-                    averageUs
+                    "[FrameGeneration][CPU] avg pre-swap frame-copy overhead over 120 frames: {} us",
+                    m_cpuCaptureMicros / 120
                 );
-                m_cpuSubmitMicros = 0;
+                m_cpuCaptureMicros = 0;
+            }
+            return captured && m_validFrames == 2;
+        }
+
+        // Called only after the current real frame has successfully reached EGL.
+        // This keeps the expensive motion search and reconstruction off the
+        // critical path to the real-frame swap.
+        bool generate() {
+            if (m_validFrames < 2 || m_width <= 0 || m_height <= 0) return false;
+            auto const cpuSubmitStart = std::chrono::steady_clock::now();
+            m_gpuTimer.begin();
+
+            bool generated = false;
+            auto const previousIndex = m_writeIndex;
+            auto const currentIndex = 1 - m_writeIndex;
+            if (m_gpuTimer.shouldInterpolate() &&
+                m_interpolator.prepare(m_width, m_height) &&
+                m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])) {
+                generated = true;
+                if (!m_pairLogged) {
+                    m_pairLogged = true;
+                    log::info("[FrameGeneration] Forward prediction generated after the real-frame swap");
+                }
+            }
+            else if (!m_generationWarningLogged) {
+                m_generationWarningLogged = true;
+                log::warn("[FrameGeneration] Forward prediction skipped; the real frame has already been presented");
+            }
+
+            // Keep the GPU query open through the generated-frame draw;
+            // otherwise the budget ignores the final presentation pass.
+            if (!generated) m_gpuTimer.end();
+            ++m_profiledGenerations;
+            auto const elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - cpuSubmitStart
+            ).count();
+            m_cpuGenerationMicros += static_cast<std::uint64_t>(std::max<std::int64_t>(0, elapsedUs));
+            if ((m_profiledGenerations % 120) == 0) {
+                log::info(
+                    "[FrameGeneration][CPU] avg post-swap prediction submission over 120 frames: {} us",
+                    m_cpuGenerationMicros / 120
+                );
+                m_cpuGenerationMicros = 0;
             }
             return generated;
         }
 
-        bool presentMidpoint() {
-            return m_interpolator.present();
-        }
-        bool presentNativeFrame() {
-            if (!m_pendingTexture) return false;
-            auto const texture = m_pendingTexture;
-            auto const presented = m_interpolator.presentTexture(texture);
-            if (presented) m_pendingTexture = 0;
+        bool presentGeneratedFrame() {
+            auto const presented = m_interpolator.present();
+            // Include the fullscreen presentation draw in the same measured
+            // budget as motion estimation and reconstruction.
+            m_gpuTimer.end();
             return presented;
         }
         void finishPresentation(EGLDisplay display) {
@@ -1175,9 +1330,10 @@ namespace {
             }
         }
         std::uint64_t m_profiledCaptures = 0;
-        std::uint64_t m_cpuSubmitMicros = 0;
+        std::uint64_t m_profiledGenerations = 0;
+        std::uint64_t m_cpuCaptureMicros = 0;
+        std::uint64_t m_cpuGenerationMicros = 0;
         std::array<GLuint, 2> m_textures = {};
-        GLuint m_pendingTexture = 0;
         bv::render::FrameInterpolationRenderer m_interpolator;
         AndroidGpuTimer m_gpuTimer;
         EGLSyncKHR m_gpuFence = EGL_NO_SYNC_KHR;
@@ -1192,7 +1348,7 @@ namespace {
         bool m_generationWarningLogged = false;
     };
 
-    AndroidFrameHistory g_androidFrameHistory;
+        AndroidFrameHistory g_androidFrameHistory;
     EGLBoolean betterVisualsEglSwapBuffers(EGLDisplay display, EGLSurface surface) {
         auto const context = eglGetCurrentContext();
         auto const currentDisplay = eglGetCurrentDisplay();
@@ -1211,39 +1367,38 @@ namespace {
             isGamePresentationContext &&
             g_frameHistoryEnabled.load(std::memory_order_relaxed);
 
-        // This opt-in path performs two EGL swaps only when
-        // frame-history-capture is enabled by the user.
+        // The current real frame is always swapped first. Only after that
+        // succeeds do we draw and swap the predicted frame. If prediction or
+        // presentation fails, the real frame has already reached EGL and is
+        // never delayed or replaced by a stale generated texture.
+        bool const usePresentationScheduler =
+            isGamePresentationContext &&
+            g_framePacingEnabled.load(std::memory_order_relaxed) &&
+            !g_lowLatencyEnabled.load(std::memory_order_relaxed);
+
         if (frameGenerationEnabled) {
-            bool const generated = g_androidFrameHistory.capture(display, surface, context);
-            if (generated && g_androidFrameHistory.presentMidpoint()) {
-                // TulipHook's ARM64 handler advances its per-thread chain index
-                // for nested calls. Calling eglSwapBuffers here therefore invokes
-                // the next hook/original function, not this detour recursively.
-                // Present order is: previous native frame (already on screen),
-                // generated midpoint, then the just-captured native frame.
-                auto const midpointSwap = eglSwapBuffers(display, surface);
-                if (midpointSwap != EGL_TRUE) {
-                    result = midpointSwap;
-                }
-                else if (g_androidFrameHistory.presentNativeFrame()) {
-                    g_androidFrameHistory.finishPresentation(display);
-                    result = eglSwapBuffers(display, surface);
-                }
-                else {
-                    log::warn("[FrameGeneration] Native-frame restore failed after midpoint swap");
-                    result = EGL_FALSE;
-                }
-            }
-            else {
-                // If interpolation is unavailable for this pair, keep the
-                // original native frame rather than presenting a stale midpoint.
-                if (generated) {
-                    (void)g_androidFrameHistory.presentNativeFrame();
-                }
+            bool const frameReady = g_androidFrameHistory.capture(display, surface, context);
+            androidPresentationScheduler().scheduleRealFrame(
+                display, surface, usePresentationScheduler
+            );
+            // Submit the real frame before motion estimation or reconstruction.
+            // TulipHook's ARM64 handler advances its per-thread chain index for
+            // nested calls, so the second swap reaches the next hook/original target.
+            // If prediction misses its budget or fails, nothing replaces the real frame.
+            result = eglSwapBuffers(display, surface);
+            if (result == EGL_TRUE && frameReady && g_androidFrameHistory.generate() &&
+                g_androidFrameHistory.presentGeneratedFrame()) {
+                androidPresentationScheduler().scheduleGeneratedFrame(
+                    display, surface, usePresentationScheduler
+                );
+                g_androidFrameHistory.finishPresentation(display);
                 result = eglSwapBuffers(display, surface);
             }
         }
         else {
+            androidPresentationScheduler().scheduleRealFrame(
+                display, surface, usePresentationScheduler
+            );
             result = eglSwapBuffers(display, surface);
         }
 
@@ -1310,6 +1465,7 @@ $on_mod(Loaded) {
     bindStringSetting("upscale-method", updateUpscaleMethod);
     bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
     bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset);
+    bindStringSetting("sgsr-operation-mode", updateSgsrOperationMode);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {
         auto const wasSsaa = ssaaFactor(g_antiAliasingMethod.load(std::memory_order_relaxed)) > 1.f;

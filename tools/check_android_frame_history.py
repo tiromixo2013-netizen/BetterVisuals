@@ -20,6 +20,8 @@ required_source = (
     "previousTexture",
     "g_frameHistoryEnabled.load(std::memory_order_relaxed)",
     "g_androidFrameHistory.capture(display, surface, context)",
+    "g_androidFrameHistory.generate()",
+    "Forward prediction generated after the real-frame swap",
     "bool hasEglExtension(char const* extensions, std::string_view name)",
     "EGL_ANDROID_presentation_time",
     "EGL_ANDROID_get_frame_timestamps",
