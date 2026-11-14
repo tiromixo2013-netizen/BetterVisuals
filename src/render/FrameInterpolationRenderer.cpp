@@ -247,7 +247,12 @@ void main() {
         return;
     }
 
-    vec2 predictedCoord = clamp(v_uv - offset, 0.0, 1.0);
+    // The motion field maps the current pixel back to its previous-frame
+    // correspondence. Predict only halfway forward: one inserted frame per
+    // real-frame interval is a 1.5x cadence, not a full-frame extrapolation.
+    // Applying the full vector here would overshoot the midpoint and amplify
+    // ghosting on fast Geometry Dash objects.
+    vec2 predictedCoord = clamp(v_uv - offset * 0.5, 0.0, 1.0);
     vec4 predictedSample = texture2D(u_current, predictedCoord);
     gl_FragColor = predictedSample;
 }
