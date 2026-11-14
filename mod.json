@@ -106,13 +106,14 @@
         "Nearest",
         "Bilinear",
         "FSR 1",
+        "FSR Lite (6-Tap)",
         "SGSR 1"
       ]
     },
     "fsr-sharpness": {
       "type": "float",
       "name": "FSR Reconstruction Blend",
-      "description": "Blends bilinear sampling with full edge-adaptive EASU reconstruction: 0 is bilinear, 1 is full EASU.",
+      "description": "FSR 1: blends bilinear with EASU. FSR Lite: controls edge-guided reconstruction strength and its gradual bilinear fallback.",
       "default": 1,
       "min": 0,
       "max": 1,
