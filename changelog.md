@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.1
+
+- Added Qualcomm Snapdragon Game Super Resolution 1 with its own quality preset.
+- Added independent Android Frame Pacing and Low Latency swap-interval requests.
+- Clarified that Frame Generation currently creates a midpoint texture but does not yet present it as an extra display frame.
+
+
 ## 2.3.2
 
 - (hopefully) fixed solid textures after disabling the mod in pause menus and other bugs

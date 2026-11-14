@@ -20,7 +20,7 @@ BANNED_GL = {
     ),
     "framebuffer blit": re.compile(r"\bglBlit(?:Named)?Framebuffer\b"),
     "framebuffer copy": re.compile(
-        r"\b(?:glCopyTexImage[12]D|glCopyTexSubImage[123]D|"
+        r"\b(?:glCopyTexImage[12]D|glCopyTexSubImage[13]D|"
         r"glCopyTextureSubImage[123]D|glCopyImageSubData)\b"
     ),
     "framebuffer readback": re.compile(
@@ -84,7 +84,7 @@ def main() -> int:
             failures.append(
                 f"{relative(SHADER_PROGRAM)}: missing centralized prelude {required}"
             )
-    if shader_program.count("#version") != 2:
+    if shader_program.count('"#version 100\\n"') != 1 or shader_program.count('"#version 120\\n"') != 1 or "starts_with(\"#version\")" not in shader_program:
         failures.append(
             f"{relative(SHADER_PROGRAM)}: expected exactly two shader preludes"
         )

@@ -90,3 +90,6 @@ Other credits, citations, and licenses can be found in the mod's source code
 - works perfectly thanks !! /Unlisted YouTube GD showcase/
 - No phone overheat after the upscale update
 - no wait i made it work LMAO from 400fps to 900fps :fire:
+
+
+<!-- Build validation trigger: Android repair branch -->

@@ -19,6 +19,7 @@ namespace bv::render {
         void bind() const;
         static void draw();
         void reset();
+        void abandonContext() { m_vbo = 0; }
 
     private:
         GLuint m_vbo = 0;

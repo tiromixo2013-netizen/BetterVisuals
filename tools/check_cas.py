@@ -1,5 +1,6 @@
 from itertools import product
 from math import isclose, isfinite, sqrt
+from pathlib import Path
 
 
 def peak(strength: float) -> float:
@@ -27,6 +28,12 @@ def filter_channel(
 
 
 def main() -> None:
+    shader = (Path(__file__).resolve().parents[1] / "src/shaders/sharpen/CasShader.cpp").read_text(encoding="utf-8")
+    assert "vec3 weight = amplify * peak;" in shader
+    assert "(north + south + east + west) * weight + center" in shader
+    assert "/ (vec3(1.0) + 4.0 * weight)" in shader
+    assert "amplify.g * peak" not in shader
+
     assert isclose(peak(0.0), -0.125)
     assert isclose(peak(1.0), -0.2)
 

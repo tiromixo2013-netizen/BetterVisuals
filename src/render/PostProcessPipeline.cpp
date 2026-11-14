@@ -102,7 +102,19 @@ namespace bv::render {
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glDepthMask(GL_TRUE);
         glStencilMask(~0u);
+
+        // This capture is often only the GJBaseGameLayer, with the parent
+        // scene/background already rendered behind it. Never inherit the
+        // game's opaque clear alpha here: transparent pixels must stay
+        // transparent so SGSR can composite the layer over the real background.
+        std::array<GLfloat, 4> previousClearColor = {};
+        glGetFloatv(GL_COLOR_CLEAR_VALUE, previousClearColor.data());
+        glClearColor(0.f, 0.f, 0.f, 0.f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        glClearColor(
+            previousClearColor[0], previousClearColor[1],
+            previousClearColor[2], previousClearColor[3]
+        );
 
         glColorMask(colorWriteMask[0], colorWriteMask[1], colorWriteMask[2], colorWriteMask[3]);
         glDepthMask(depthWriteMask);

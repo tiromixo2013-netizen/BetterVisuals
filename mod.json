@@ -1,257 +1,313 @@
 {
-	"geode": "5.9.0",
-	"gd": {
-		"win": "2.2081",
-		"android": "2.2081",
-		"mac": "2.2081",
-		"ios": "2.2081"
-	},
-	"id": "imes.bettervisuals",
-	"name": "Better Visuals and FPS",
-	"version": "v2.3.2",
-	"developer": "imes",
-	"description": "Neat upscaling and post-processing mod.",
-	"tags": [
-		"universal",
-		"enhancement",
-		"performance",
-		"customization"
-	],
-	"links": {
-		"community": "https://discord.gg/E8f6D6XqbW",
-		"source": "https://github.com/ItMe12s/BetterVisuals"
-	},
-	"dependencies": {
-		"geode.node-ids": ">=1.23.3"
-	},
-	"resources": {
-		"sprites": [
-			"resources/*.png"
-		]
-	},
-	"settings": {
-		"master-title": {
-			"type": "title",
-			"name": "Master Settings"
-		},
-		"enabled": {
-			"type": "bool",
-			"name": "Enable Mod",
-			"description": "Master toggle for all effects.",
-			"default": true
-		},
-		"enable-fun": {
-			"type": "bool",
-			"name": "Enable Fun Shaders",
-			"description": "Master toggle for fun/gimmick effects.",
-			"default": true,
-			"enable-if": "enabled"
-		},
-		"full-scene-effects": {
-			"type": "bool",
-			"name": "Full-Scene Effects",
-			"description": "Apply all enabled effects to everything, not just levels and the editor.",
-			"default": false,
-			"enable-if": "enabled"
-		},
-		"menu-title": {
-			"type": "title",
-			"name": "Pause Menu Buttons"
-		},
-		"pause-menu-button": {
-			"type": "bool",
-			"name": "Show in Level Pause Menu",
-			"description": "Show the mod settings button in the level pause menu.",
-			"default": true
-		},
-		"editor-pause-button": {
-			"type": "bool",
-			"name": "Show in Editor Pause Menu",
-			"description": "Show the mod settings button in the editor pause menu.",
-			"default": true
-		},
-		"rendering-title": {
-			"type": "title",
-			"name": "Rendering"
-		},
-		"render-scale": {
-			"type": "float",
-			"name": "Render Scale",
-			"description": "Render at a lower internal resolution, upscale to the current window size.",
-			"default": 1.0,
-			"min": 0.25,
-			"max": 1.0,
-			"control": {
-				"arrows": true,
-				"arrow-step": 0.05,
-				"slider": true,
-				"slider-step": 0.01
-			}
-		},
-		"upscale-method": {
-			"type": "string",
-			"name": "Upscale Method",
-			"description": "How the game is scaled back up. Turn off automatically at 1x scale.",
-			"default": "Bilinear",
-			"one-of": [
-				"Nearest",
-				"Bilinear",
-				"FSR 1"
-			]
-		},
-		"fsr-sharpness": {
-			"type": "float",
-			"name": "FSR Sharpness",
-			"description": "FSR 1 reconstruction strength. Lower is smoother, 1 is sharpest.",
-			"default": 0.5,
-			"min": 0.0,
-			"max": 1.0,
-			"control": {
-				"arrows": true,
-				"arrow-step": 0.1,
-				"slider": true,
-				"slider-step": 0.05
-			}
-		},
-		"aa-title": {
-			"type": "title",
-			"name": "Anti-aliasing"
-		},
-		"aa-method": {
-			"type": "string",
-			"name": "AA Method",
-			"description": "Fullscreen (whole game window) anti-aliasing method.",
-			"default": "SMAA High",
-			"one-of": [
-				"Off",
-				"FXAA",
-				"SMAA High",
-				"SMAA Ultra",
-				"SSAA 1.5x",
-				"SSAA 2x",
-				"SSAA 3x"
-			]
-		},
-		"sharpening-title": {
-			"type": "title",
-			"name": "Sharpening"
-		},
-		"cas-enabled": {
-			"type": "bool",
-			"name": "AMD FidelityFX CAS",
-			"description": "Apply contrast-adaptive sharpening.",
-			"default": false
-		},
-		"cas-sharpness": {
-			"type": "float",
-			"name": "CAS Sharpness",
-			"description": "Sharpening strength. 0 has less ringing, 1 is strongest.",
-			"default": 0.0,
-			"min": 0.0,
-			"max": 1.0,
-			"control": {
-				"arrows": true,
-				"arrow-step": 0.1,
-				"slider": true,
-				"slider-step": 0.05
-			}
-		},
-		"fun-title": {
-			"type": "title",
-			"name": "Fun"
-		},
-		"bloom-enabled": {
-			"type": "bool",
-			"name": "Bloom",
-			"description": "Apply a mild bloom glow.",
-			"default": false
-		},
-		"bloom-threshold": {
-			"type": "float",
-			"name": "Bloom Threshold",
-			"description": "Brightness cutoff. Higher means only brighter pixels glow.",
-			"default": 0.7,
-			"min": 0.0,
-			"max": 1.0,
-			"enable-if": "bloom-enabled",
-			"control": {
-				"arrows": true,
-				"arrow-step": 0.05,
-				"slider": true,
-				"slider-step": 0.01
-			}
-		},
-		"bloom-intensity": {
-			"type": "float",
-			"name": "Bloom Intensity",
-			"description": "Strength of the glow over the original image.",
-			"default": 0.3,
-			"min": 0.0,
-			"max": 1.5,
-			"enable-if": "bloom-enabled",
-			"control": {
-				"arrows": true,
-				"arrow-step": 0.05,
-				"slider": true,
-				"slider-step": 0.01
-			}
-		},
-		"bloom-radius": {
-			"type": "float",
-			"name": "Bloom Radius",
-			"description": "Spread of the glow in pixels at 1080p (scales with resolution).",
-			"default": 8.0,
-			"min": 0.0,
-			"max": 16.0,
-			"enable-if": "bloom-enabled",
-			"control": {
-				"arrows": true,
-				"arrow-step": 1.0,
-				"slider": true,
-				"slider-step": 0.5
-			}
-		},
-		"grayscale-enabled": {
-			"type": "bool",
-			"name": "Grayscale",
-			"description": "Apply a grayscale filter.",
-			"default": false
-		},
-		"pixelate-enabled": {
-			"type": "bool",
-			"name": "Pixelate",
-			"description": "Apply a pixelated effect.",
-			"default": false
-		},
-		"invert-enabled": {
-			"type": "bool",
-			"name": "Invert",
-			"description": "Invert the colors.",
-			"default": false
-		},
-		"flip-enabled": {
-			"type": "bool",
-			"name": "Flip",
-			"description": "Flip the image upside down.",
-			"default": false
-		},
-		"dithering-enabled": {
-			"type": "bool",
-			"name": "Dithering Filter",
-			"description": "Apply an 8-bit color palette dithering.",
-			"default": false
-		},
-		"vhs-enabled": {
-			"type": "bool",
-			"name": "VHS Filter",
-			"description": "Apply an animated VHS-style filter.",
-			"default": false
-		},
-		"crt-enabled": {
-			"type": "bool",
-			"name": "CRT Filter",
-			"description": "Apply a CRT-style filter.",
-			"default": false
-		}
-	}
+  "geode": "5.9.0",
+  "gd": {
+    "win": "2.2081",
+    "android": "2.2081",
+    "mac": "2.2081",
+    "ios": "2.2081"
+  },
+  "id": "tiromixo2013.bettervisuals-gsr",
+  "name": "Better Visuals and FPS",
+  "version": "2.4.1",
+  "developer": "tiromixo2013",
+  "description": "Neat upscaling and post-processing mod.",
+  "tags": [
+    "universal",
+    "enhancement",
+    "performance",
+    "customization"
+  ],
+  "links": {
+    "community": "https://discord.gg/E8f6D6XqbW",
+    "source": "https://github.com/tiromixo2013-netizen/BetterVisuals"
+  },
+  "dependencies": {
+    "geode.node-ids": ">=1.23.3"
+  },
+  "resources": {
+    "sprites": [
+      "resources/*.png"
+    ]
+  },
+  "settings": {
+    "master-title": {
+      "type": "title",
+      "name": "Master Settings"
+    },
+    "enabled": {
+      "type": "bool",
+      "name": "Enable Mod",
+      "description": "Master toggle for all effects.",
+      "default": true
+    },
+    "enable-fun": {
+      "type": "bool",
+      "name": "Enable Fun Shaders",
+      "description": "Master toggle for fun/gimmick effects.",
+      "default": true,
+      "enable-if": "enabled"
+    },
+    "full-scene-effects": {
+      "type": "bool",
+      "name": "Full-Scene Effects",
+      "description": "Apply all enabled effects to everything, not just levels and the editor.",
+      "default": false,
+      "enable-if": "enabled"
+    },
+    "menu-title": {
+      "type": "title",
+      "name": "Pause Menu Buttons"
+    },
+    "pause-menu-button": {
+      "type": "bool",
+      "name": "Show in Level Pause Menu",
+      "description": "Show the mod settings button in the level pause menu.",
+      "default": true
+    },
+    "editor-pause-button": {
+      "type": "bool",
+      "name": "Show in Editor Pause Menu",
+      "description": "Show the mod settings button in the editor pause menu.",
+      "default": true
+    },
+    "rendering-title": {
+      "type": "title",
+      "name": "Rendering"
+    },
+    "frame-history-capture": {
+      "type": "bool",
+      "name": "Frame Generation (Experimental, Android)",
+      "description": "Experimental Android frame interpolation. Uses conservative motion matching and rejects uncertain pixels to reduce ghosting. When GPU timer queries are supported, interpolation pauses if its measured GPU cost exceeds 4 ms and probes again after a cooldown. It can still reduce performance and does not increase game simulation FPS.",
+      "default": false,
+      "platforms": [
+        "android"
+      ]
+    },
+    "render-scale": {
+      "type": "float",
+      "name": "Render Scale",
+      "description": "Multiplier applied after the selected FSR 1 or SGSR 1 quality preset (100% keeps the preset resolution). Custom uses the slider as the base resolution. Spatial-upscaler input is capped at native resolution.",
+      "default": 1,
+      "min": 0.25,
+      "max": 1.2,
+      "control": {
+        "arrows": true,
+        "arrow-step": 0.05,
+        "slider": true,
+        "slider-step": 0.01
+      }
+    },
+    "upscale-method": {
+      "type": "string",
+      "name": "Upscale Method",
+      "description": "How the game is scaled back up. Turn off automatically at 1x scale.",
+      "default": "Bilinear",
+      "one-of": [
+        "Nearest",
+        "Bilinear",
+        "FSR 1",
+        "SGSR 1"
+      ]
+    },
+    "fsr-sharpness": {
+      "type": "float",
+      "name": "FSR Reconstruction Blend",
+      "description": "Blends bilinear sampling with full edge-adaptive EASU reconstruction: 0 is bilinear, 1 is full EASU.",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "control": {
+        "arrows": true,
+        "arrow-step": 0.1,
+        "slider": true,
+        "slider-step": 0.05
+      }
+    },
+    "aa-title": {
+      "type": "title",
+      "name": "Anti-aliasing"
+    },
+    "aa-method": {
+      "type": "string",
+      "name": "AA Method",
+      "description": "Fullscreen (whole game window) anti-aliasing method.",
+      "default": "SMAA High",
+      "one-of": [
+        "Off",
+        "FXAA",
+        "SMAA High",
+        "SMAA Ultra",
+        "SSAA 1.5x",
+        "SSAA 2x",
+        "SSAA 3x"
+      ]
+    },
+    "sharpening-title": {
+      "type": "title",
+      "name": "Sharpening"
+    },
+    "cas-enabled": {
+      "type": "bool",
+      "name": "AMD FidelityFX CAS",
+      "description": "Apply contrast-adaptive sharpening.",
+      "default": false
+    },
+    "cas-sharpness": {
+      "type": "float",
+      "name": "CAS Sharpness",
+      "description": "Sharpening strength. 0 has less ringing, 1 is strongest.",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "control": {
+        "arrows": true,
+        "arrow-step": 0.1,
+        "slider": true,
+        "slider-step": 0.05
+      }
+    },
+    "fun-title": {
+      "type": "title",
+      "name": "Fun"
+    },
+    "bloom-enabled": {
+      "type": "bool",
+      "name": "Bloom",
+      "description": "Apply a mild bloom glow.",
+      "default": false
+    },
+    "bloom-threshold": {
+      "type": "float",
+      "name": "Bloom Threshold",
+      "description": "Brightness cutoff. Higher means only brighter pixels glow.",
+      "default": 0.7,
+      "min": 0,
+      "max": 1,
+      "enable-if": "bloom-enabled",
+      "control": {
+        "arrows": true,
+        "arrow-step": 0.05,
+        "slider": true,
+        "slider-step": 0.01
+      }
+    },
+    "bloom-intensity": {
+      "type": "float",
+      "name": "Bloom Intensity",
+      "description": "Strength of the glow over the original image.",
+      "default": 0.3,
+      "min": 0,
+      "max": 1.5,
+      "enable-if": "bloom-enabled",
+      "control": {
+        "arrows": true,
+        "arrow-step": 0.05,
+        "slider": true,
+        "slider-step": 0.01
+      }
+    },
+    "bloom-radius": {
+      "type": "float",
+      "name": "Bloom Radius",
+      "description": "Spread of the glow in pixels at 1080p (scales with resolution).",
+      "default": 8,
+      "min": 0,
+      "max": 16,
+      "enable-if": "bloom-enabled",
+      "control": {
+        "arrows": true,
+        "arrow-step": 1,
+        "slider": true,
+        "slider-step": 0.5
+      }
+    },
+    "grayscale-enabled": {
+      "type": "bool",
+      "name": "Grayscale",
+      "description": "Apply a grayscale filter.",
+      "default": false
+    },
+    "pixelate-enabled": {
+      "type": "bool",
+      "name": "Pixelate",
+      "description": "Apply a pixelated effect.",
+      "default": false
+    },
+    "invert-enabled": {
+      "type": "bool",
+      "name": "Invert",
+      "description": "Invert the colors.",
+      "default": false
+    },
+    "flip-enabled": {
+      "type": "bool",
+      "name": "Flip",
+      "description": "Flip the image upside down.",
+      "default": false
+    },
+    "dithering-enabled": {
+      "type": "bool",
+      "name": "Dithering Filter",
+      "description": "Apply an 8-bit color palette dithering.",
+      "default": false
+    },
+    "vhs-enabled": {
+      "type": "bool",
+      "name": "VHS Filter",
+      "description": "Apply an animated VHS-style filter.",
+      "default": false
+    },
+    "crt-enabled": {
+      "type": "bool",
+      "name": "CRT Filter",
+      "description": "Apply a CRT-style filter.",
+      "default": false
+    },
+    "fsr-quality-preset": {
+      "type": "string",
+      "name": "FSR 1 Quality Preset",
+      "description": "Selects the base FSR 1 input resolution. Render Scale is an additional multiplier. Custom uses the Render Scale slider without a preset ratio.",
+      "default": "Custom",
+      "one-of": [
+        "Custom",
+        "Ultra Quality",
+        "Quality",
+        "Balanced",
+        "Performance",
+        "Ultra Performance"
+      ]
+    },
+    "frame-pacing-enabled": {
+      "type": "bool",
+      "name": "Frame Pacing (Android)",
+      "description": "Requests EGL swap interval 1 for display-synchronized presentation. Android's compositor and GPU driver still control the actual buffer queue.",
+      "default": false,
+      "platforms": [
+        "android"
+      ]
+    },
+    "low-latency-enabled": {
+      "type": "bool",
+      "name": "Low Latency (Android)",
+      "description": "Requests EGL swap interval 0 to avoid the app-side vsync wait where supported. May cause uneven pacing or tearing; it does not change GPU queue depth. Takes precedence over Frame Pacing if both are enabled.",
+      "default": false,
+      "platforms": [
+        "android"
+      ]
+    },
+    "sgsr-quality-preset": {
+      "type": "string",
+      "name": "SGSR 1 Quality Preset",
+      "description": "Experimental SGSR 1 input-resolution presets. Custom uses Render Scale without a preset ratio. Lower presets reduce capture resolution; if transparency artifacts appear, return to Custom while the capture path is validated.",
+      "default": "Custom",
+      "one-of": [
+        "Custom",
+        "Ultra Quality",
+        "Quality",
+        "Balanced",
+        "Performance",
+        "Ultra Performance"
+      ]
+    }
+  }
 }
