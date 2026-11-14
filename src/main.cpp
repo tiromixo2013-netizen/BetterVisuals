@@ -982,8 +982,8 @@ namespace {
         return api;
     }
 
-    // Two GPU-resident snapshots of the final EGL window surface, plus an
-    // experimental motion-matched midpoint texture. Display pacing is separate.
+    // Two GPU-resident snapshots of the final EGL window surface, plus a
+    // forward-predicted frame texture. Display pacing is separate.
     class AndroidFrameHistory final {
     public:
         bool capture(EGLDisplay display, EGLSurface surface, EGLContext context) {
@@ -1001,7 +1001,6 @@ namespace {
             if (!retirePreviousFence(display)) return false;
 
             if (m_context != context) {
-                m_pendingTexture = 0;
                 // GL names from a lost context are invalid in the new context;
                 // do not attempt to delete them through the replacement context.
                 m_textures = {};
@@ -1024,7 +1023,6 @@ namespace {
             }
 
             if (width != m_width || height != m_height) {
-                m_pendingTexture = 0;
                 if (m_textures[0] || m_textures[1]) {
                     glDeleteTextures(static_cast<GLsizei>(m_textures.size()), m_textures.data());
                 }
@@ -1096,18 +1094,17 @@ namespace {
                     if (m_gpuTimer.shouldInterpolate() &&
                         m_interpolator.prepare(width, height) &&
                         m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])) {
-                        // Keep the interpolated frame off-screen until the native
-                        // frame boundary is handled by the EGL swap detour.
-                        m_pendingTexture = m_textures[currentIndex];
+                        // Keep the predicted frame off-screen until the current
+                        // real frame has been presented by the EGL swap detour.
                         generated = true;
                         if (!m_pairLogged) {
                             m_pairLogged = true;
-                            log::info("[FrameGeneration] GPU midpoint generated; queued for alternating presentation");
+                            log::info("[FrameGeneration] GPU forward prediction generated; queued after the real frame");
                         }
                     }
                     else if (!m_generationWarningLogged) {
                         m_generationWarningLogged = true;
-                        log::warn("[FrameGeneration] Midpoint reconstruction could not be initialized; capture history remains available");
+                        log::warn("[FrameGeneration] Forward prediction could not be initialized; real-frame presentation remains available");
                     }
                 }
             }
@@ -1130,15 +1127,8 @@ namespace {
             return generated;
         }
 
-        bool presentMidpoint() {
+        bool presentGeneratedFrame() {
             return m_interpolator.present();
-        }
-        bool presentNativeFrame() {
-            if (!m_pendingTexture) return false;
-            auto const texture = m_pendingTexture;
-            auto const presented = m_interpolator.presentTexture(texture);
-            if (presented) m_pendingTexture = 0;
-            return presented;
         }
         void finishPresentation(EGLDisplay display) {
             createCompletionFence(display);
@@ -1177,7 +1167,6 @@ namespace {
         std::uint64_t m_profiledCaptures = 0;
         std::uint64_t m_cpuSubmitMicros = 0;
         std::array<GLuint, 2> m_textures = {};
-        GLuint m_pendingTexture = 0;
         bv::render::FrameInterpolationRenderer m_interpolator;
         AndroidGpuTimer m_gpuTimer;
         EGLSyncKHR m_gpuFence = EGL_NO_SYNC_KHR;
@@ -1211,35 +1200,22 @@ namespace {
             isGamePresentationContext &&
             g_frameHistoryEnabled.load(std::memory_order_relaxed);
 
-        // This opt-in path performs two EGL swaps only when
-        // frame-history-capture is enabled by the user.
+        // The current real frame is always swapped first. Only after that
+        // succeeds do we draw and swap the predicted frame. If prediction or
+        // presentation fails, the real frame has already reached EGL and is
+        // never delayed or replaced by a stale generated texture.
         if (frameGenerationEnabled) {
             bool const generated = g_androidFrameHistory.capture(display, surface, context);
-            if (generated && g_androidFrameHistory.presentMidpoint()) {
+            if (generated) {
                 // TulipHook's ARM64 handler advances its per-thread chain index
-                // for nested calls. Calling eglSwapBuffers here therefore invokes
-                // the next hook/original function, not this detour recursively.
-                // Present order is: previous native frame (already on screen),
-                // generated midpoint, then the just-captured native frame.
-                auto const midpointSwap = eglSwapBuffers(display, surface);
-                if (midpointSwap != EGL_TRUE) {
-                    result = midpointSwap;
-                }
-                else if (g_androidFrameHistory.presentNativeFrame()) {
+                // for nested calls, so this invokes the next hook/original target.
+                result = eglSwapBuffers(display, surface);
+                if (result == EGL_TRUE && g_androidFrameHistory.presentGeneratedFrame()) {
                     g_androidFrameHistory.finishPresentation(display);
                     result = eglSwapBuffers(display, surface);
                 }
-                else {
-                    log::warn("[FrameGeneration] Native-frame restore failed after midpoint swap");
-                    result = EGL_FALSE;
-                }
             }
             else {
-                // If interpolation is unavailable for this pair, keep the
-                // original native frame rather than presenting a stale midpoint.
-                if (generated) {
-                    (void)g_androidFrameHistory.presentNativeFrame();
-                }
                 result = eglSwapBuffers(display, surface);
             }
         }
