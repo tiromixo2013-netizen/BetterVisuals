@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static regression checks for Android forward-predictive frame generation.
+"""Static regression checks for Android and Windows forward-predictive frame generation.
 
 These checks validate source wiring and prediction direction. They do not
 execute GLSL, measure GPU cost, or establish visual quality on a device.
@@ -117,3 +117,26 @@ assert abs(stable_x - current_x - 0.01) < 1e-9, "stable motion must use half dis
 assert abs(fast_x - current_x - 0.005) < 1e-9, "fast motion must use quarter displacement"
 
 print("Android forward-predictive frame-generation source checks passed (static only).")
+
+
+# Windows uses the same interpolation renderer but a GLFW/WGL swap hook.
+windows = main.split("#ifdef GEODE_IS_WINDOWS\nnamespace {\n    std::atomic<bool> g_windowsFrameHistoryEnabled", 1)[1].split("\n#endif", 1)[0]
+for token in (
+    "class WindowsFrameHistory final",
+    "m_interpolator.prepare(m_width, m_height)",
+    "m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])",
+    "m_timer.shouldInterpolate()",
+    "m_fence.retire()",
+    "glCopyTexSubImage2D",
+    "glfwGetFramebufferSize",
+):
+    assert token in windows, f"missing Windows frame-history path: {token}"
+
+windows_hook = main.split("class $modify(BetterVisualsEGLView, CCEGLView)", 1)[1].split("\n};", 1)[0]
+assert "void swapBuffers()" in windows_hook
+assert "bool const frameReady = g_windowsFrameHistory.capture(window)" in windows_hook
+assert windows_hook.index("bool const frameReady") < windows_hook.index("CCEGLView::swapBuffers(); // Always submit the real frame first.")
+assert windows_hook.index("CCEGLView::swapBuffers(); // Always submit the real frame first.") < windows_hook.index("g_windowsFrameHistory.presentGeneratedFrame()")
+assert "CCEGLView::swapBuffers(); // Submit one generated frame for each real interval (2x target)." in windows_hook
+
+print("Windows GLFW/WGL frame-generation source checks passed (static only).")
