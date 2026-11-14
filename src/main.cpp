@@ -65,6 +65,7 @@ namespace {
         Nearest,
         Bilinear,
         Fsr,
+        FsrLite,
         Sgsr,
     };
 
@@ -148,6 +149,7 @@ namespace {
     bv::render::PostProcessRenderer g_ssaaRenderer;
     bv::render::PostProcessRenderer g_renderScaleRenderer;
     bv::render::PostProcessRenderer g_fsrRenderer;
+    bv::render::PostProcessRenderer g_fsrLiteRenderer;
     bv::render::SgsrRenderer g_sgsrRenderer;
     bv::render::PostProcessRenderer g_casRenderer;
     bv::render::BloomRenderer g_bloomRenderer;
@@ -191,6 +193,7 @@ namespace {
         g_ssaaRenderer.reset();
         g_renderScaleRenderer.reset();
         g_fsrRenderer.reset();
+        g_fsrLiteRenderer.reset();
         g_sgsrRenderer.reset();
         g_casRenderer.reset();
         g_bloomRenderer.reset();
@@ -264,6 +267,10 @@ namespace {
         }
         if (value == "FSR 1") {
             g_upscaleMethod.store(UpscaleMethod::Fsr, std::memory_order_relaxed);
+            return;
+        }
+        if (value == "FSR Lite (6-Tap)") {
+            g_upscaleMethod.store(UpscaleMethod::FsrLite, std::memory_order_relaxed);
             return;
         }
         if (value == "SGSR 1") {
@@ -453,11 +460,19 @@ namespace {
             }
             else if (config.upscaling == UpscaleMethod::Fsr) {
                 g_renderScaleRenderer.reset();
+                g_fsrLiteRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_fsrRenderer.prepare(bv::shaders::kFsrShader, key.width, key.height);
             }
+            else if (config.upscaling == UpscaleMethod::FsrLite) {
+                g_renderScaleRenderer.reset();
+                g_fsrRenderer.reset();
+                g_ssaaRenderer.reset();
+                prepared = g_fsrLiteRenderer.prepare(bv::shaders::kFsrLiteShader, key.width, key.height);
+            }
             else {
                 g_fsrRenderer.reset();
+                g_fsrLiteRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_renderScaleRenderer.prepare(
                     bv::shaders::kRenderScaleShader, key.width, key.height
@@ -467,6 +482,7 @@ namespace {
         else if (!key.needsPresentation) {
             g_renderScaleRenderer.reset();
             g_fsrRenderer.reset();
+            g_fsrLiteRenderer.reset();
             g_ssaaRenderer.reset();
         }
 
@@ -562,14 +578,16 @@ namespace {
 
         auto const effectCount = config.effectCount();
         auto const configuredScale = g_renderScale.load(std::memory_order_relaxed);
-        auto const presetScale = config.upscaling == UpscaleMethod::Fsr ?
+        auto const presetScale = (config.upscaling == UpscaleMethod::Fsr ||
+            config.upscaling == UpscaleMethod::FsrLite) ?
             g_fsrPresetScale.load(std::memory_order_relaxed) :
             (config.upscaling == UpscaleMethod::Sgsr ?
                 g_sgsrPresetScale.load(std::memory_order_relaxed) : 0.f);
         auto const requestedScale =
             (presetScale > 0.f ? presetScale : 1.f) * configuredScale;
         auto const usesSpatialUpscaler =
-            config.upscaling == UpscaleMethod::Fsr || config.upscaling == UpscaleMethod::Sgsr;
+            config.upscaling == UpscaleMethod::Fsr || config.upscaling == UpscaleMethod::FsrLite ||
+            config.upscaling == UpscaleMethod::Sgsr;
         auto const renderScale = std::clamp(requestedScale, 0.25f, usesSpatialUpscaler ? 1.f : 1.2f);
         // A selected spatial-upscaler quality preset owns the base resolution.
         // SSAA must not override its input size or route it through downsampling.
@@ -673,7 +691,7 @@ namespace {
 
                 auto const linearSampling =
                     needsDownsample || config.upscaling == UpscaleMethod::Bilinear ||
-                    config.upscaling == UpscaleMethod::Sgsr;
+                    config.upscaling == UpscaleMethod::FsrLite || config.upscaling == UpscaleMethod::Sgsr;
                 glTexParameteri(
                     GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linearSampling ? GL_LINEAR : GL_NEAREST
                 );
@@ -687,6 +705,9 @@ namespace {
                 }
                 else if (config.upscaling == UpscaleMethod::Fsr) {
                     g_fsrRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
+                }
+                else if (config.upscaling == UpscaleMethod::FsrLite) {
+                    g_fsrLiteRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
                 }
                 else if (config.upscaling == UpscaleMethod::Sgsr) {
                     if (!g_sgsrRenderer.apply(sourceTexture, internalWidth, internalHeight, width, height)) {
