@@ -1374,7 +1374,9 @@ namespace {
                 display, surface, usePresentationScheduler
             );
             // Submit the real frame before motion estimation or reconstruction.
-            // If the prediction misses its budget or fails, nothing replaces it.
+            // TulipHook's ARM64 handler advances its per-thread chain index for
+            // nested calls, so the second swap reaches the next hook/original target.
+            // If prediction misses its budget or fails, nothing replaces the real frame.
             result = eglSwapBuffers(display, surface);
             if (result == EGL_TRUE && frameReady && g_androidFrameHistory.generate() &&
                 g_androidFrameHistory.presentGeneratedFrame()) {
