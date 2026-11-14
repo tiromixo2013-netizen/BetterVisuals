@@ -23,6 +23,8 @@ jobs:
       - name: Run rendering source checks
         run: |
           python3 tools/check_frame_interpolation.py
+          python3 tools/check_egl_presentation_hook.py
+          python3 tools/check_android_frame_history.py
           python3 tools/check_sgsr_alpha.py
 
       - name: Build Android64 Geode mod
