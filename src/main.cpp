@@ -975,6 +975,101 @@ namespace {
         GetQueryObjectui64v m_getQueryObjectui64v = nullptr;
     };
 
+    // Best-effort EGL_ANDROID_presentation_time scheduler. It estimates the
+    // application's real-frame cadence and places a generated frame halfway
+    // between real frames. If the extension is absent, normal EGL swap policy
+    // remains the fallback; no CPU sleeps or glFinish calls are introduced.
+    class AndroidPresentationScheduler final {
+    public:
+        void scheduleRealFrame(EGLDisplay display, EGLSurface surface, bool enabled) {
+            if (!enabled || !initialize()) return;
+            auto const now = std::chrono::steady_clock::now();
+            if (display != m_display || surface != m_surface) {
+                m_display = display;
+                m_surface = surface;
+                m_lastRealFrame = {};
+                m_period = std::chrono::nanoseconds(16'666'667);
+            }
+            if (m_lastRealFrame != std::chrono::steady_clock::time_point{}) {
+                auto const elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    now - m_lastRealFrame
+                );
+                if (elapsed >= std::chrono::milliseconds(5) &&
+                    elapsed <= std::chrono::milliseconds(50)) {
+                    m_period = (m_period * 7 + elapsed) / 8;
+                }
+            }
+            m_lastRealFrame = now;
+            m_realTarget = now;
+            submitTimestamp(display, surface, m_realTarget);
+        }
+
+        void scheduleGeneratedFrame(EGLDisplay display, EGLSurface surface, bool enabled) {
+            if (!enabled || !m_presentationTime ||
+                m_realTarget == std::chrono::steady_clock::time_point{}) return;
+            auto target = m_realTarget + m_period / 2;
+            auto const earliest = std::chrono::steady_clock::now() +
+                std::chrono::microseconds(500);
+            if (target < earliest) target = earliest;
+            submitTimestamp(display, surface, target);
+        }
+
+    private:
+        using PresentationTime = EGLBoolean (EGLAPIENTRYP)(
+            EGLDisplay, EGLSurface, EGLnsecsANDROID
+        );
+
+        bool initialize() {
+            if (m_checked) return m_presentationTime != nullptr;
+            m_checked = true;
+            auto const extensions = eglQueryString(eglGetCurrentDisplay(), EGL_EXTENSIONS);
+            if (!hasEglExtension(extensions, "EGL_ANDROID_presentation_time")) {
+                log::info("[Presentation] EGL_ANDROID_presentation_time unavailable; using EGL swap policy only");
+                return false;
+            }
+            m_presentationTime = reinterpret_cast<PresentationTime>(
+                eglGetProcAddress("eglPresentationTimeANDROID")
+            );
+            if (!m_presentationTime) {
+                log::warn("[Presentation] EGL presentation-time extension has no entry point");
+                return false;
+            }
+            log::info("[Presentation] EGL presentation-time scheduler enabled");
+            return true;
+        }
+
+        void submitTimestamp(
+            EGLDisplay display, EGLSurface surface,
+            std::chrono::steady_clock::time_point target
+        ) {
+            // Android's EGL extension uses CLOCK_MONOTONIC nanoseconds; Android
+            // steady_clock is backed by the same monotonic clock.
+            auto const timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                target.time_since_epoch()
+            ).count();
+            if (m_presentationTime(
+                display, surface, static_cast<EGLnsecsANDROID>(timestamp)
+            ) != EGL_TRUE && !m_warningLogged) {
+                m_warningLogged = true;
+                log::warn("[Presentation] eglPresentationTimeANDROID rejected a frame timestamp");
+            }
+        }
+
+        bool m_checked = false;
+        bool m_warningLogged = false;
+        PresentationTime m_presentationTime = nullptr;
+        EGLDisplay m_display = EGL_NO_DISPLAY;
+        EGLSurface m_surface = EGL_NO_SURFACE;
+        std::chrono::steady_clock::time_point m_lastRealFrame = {};
+        std::chrono::steady_clock::time_point m_realTarget = {};
+        std::chrono::nanoseconds m_period{16'666'667};
+    };
+
+    AndroidPresentationScheduler& androidPresentationScheduler() {
+        static AndroidPresentationScheduler scheduler;
+        return scheduler;
+    }
+
     struct AndroidEglFenceApi {
         using CreateSync = EGLSyncKHR (EGLAPIENTRYP)(EGLDisplay, EGLenum, EGLint const*);
         using ClientWaitSync = EGLint (EGLAPIENTRYP)(EGLDisplay, EGLSyncKHR, EGLint, EGLTimeKHR);
@@ -1227,13 +1322,24 @@ namespace {
         // succeeds do we draw and swap the predicted frame. If prediction or
         // presentation fails, the real frame has already reached EGL and is
         // never delayed or replaced by a stale generated texture.
+        bool const usePresentationScheduler =
+            isGamePresentationContext &&
+            g_framePacingEnabled.load(std::memory_order_relaxed) &&
+            !g_lowLatencyEnabled.load(std::memory_order_relaxed);
+
         if (frameGenerationEnabled) {
             bool const generated = g_androidFrameHistory.capture(display, surface, context);
+            androidPresentationScheduler().scheduleRealFrame(
+                display, surface, usePresentationScheduler
+            );
             if (generated) {
                 // TulipHook's ARM64 handler advances its per-thread chain index
                 // for nested calls, so this invokes the next hook/original target.
                 result = eglSwapBuffers(display, surface);
                 if (result == EGL_TRUE && g_androidFrameHistory.presentGeneratedFrame()) {
+                    androidPresentationScheduler().scheduleGeneratedFrame(
+                        display, surface, usePresentationScheduler
+                    );
                     g_androidFrameHistory.finishPresentation(display);
                     result = eglSwapBuffers(display, surface);
                 }
@@ -1243,6 +1349,9 @@ namespace {
             }
         }
         else {
+            androidPresentationScheduler().scheduleRealFrame(
+                display, surface, usePresentationScheduler
+            );
             result = eglSwapBuffers(display, surface);
         }
 
