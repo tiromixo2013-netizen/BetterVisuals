@@ -13,6 +13,7 @@ for token in (
     "m_lastAverageNs > 4'000'000ULL",
     "m_framesUntilProbe = 120",
     "m_probeQuery = m_active",
+    "A disjoint timer result is invalid",
     "m_interpolator.abandonContext()",
     "m_interpolator.prepare(width, height)",
     "m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])",
