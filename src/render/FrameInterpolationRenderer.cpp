@@ -129,6 +129,10 @@ void main() {
     if (reuseValid) {
         confidence = min(reused.a, clamp((0.055 - best) * 18.0, 0.0, 1.0));
     }
+    else if (u_hasReuse > 0.5 && reused.a < 0.65 && confidence > reused.a) {
+        // Confidence recovery is deliberately gradual after a protected frame.
+        confidence = mix(reused.a, confidence, 0.35);
+    }
     if (best > 0.075 || reverseBest > 0.075 || inconsistent) confidence = 0.0;
     if (reuseValid && (bestOffset.x * reusedOffset.x + bestOffset.y * reusedOffset.y) < 0.0) {
         confidence = 0.0;
@@ -180,10 +184,15 @@ void main() {
         matchCost(left, currentSample.rgb) + matchCost(right, currentSample.rgb),
         matchCost(up, currentSample.rgb) + matchCost(down, currentSample.rgb)
     );
-    bool refineEightPixelBlock = edgeComplexity > 0.075 || disagreement > 0.55;
+    // Protected Prediction is selected by low block confidence, complex
+    // local edges, or neighboring-block disagreement. It uses a stricter
+    // 8x8 refinement path; stable regions stay on the cheaper 16x16 vector.
+    bool protectedPrediction =
+        motion.a < 0.55 || edgeComplexity > 0.075 || disagreement > 0.55;
+    bool refineEightPixelBlock = protectedPrediction;
 
     float confidence = motion.a;
-    if (refineEightPixelBlock) {
+    if (protectedPrediction) {
         vec2 halfStep = searchStep * 0.5;
         float best = 1.0;
         float second = 1.0;
@@ -213,7 +222,7 @@ void main() {
         ).rgb);
         if (c < best) { second = best; best = c; refinedOffset = offset + vec2(0.0, halfStep.y); }
         else { second = min(second, c); }
-        confidence = min(confidence, clamp((second - best) * 10.0, 0.0, 1.0));
+        confidence = clamp((second - best) * 10.0, 0.0, 1.0);
         if (best > 0.075) confidence = 0.0;
         offset = refinedOffset;
     }
