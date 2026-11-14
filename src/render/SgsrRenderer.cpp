@@ -202,6 +202,10 @@ namespace bv::render {
         }
 
         GlStateGuard state;
+        GLint callerFramebuffer = 0;
+        GLint callerViewport[4] = {};
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &callerFramebuffer);
+        glGetIntegerv(GL_VIEWPORT, callerViewport);
         GLuint upscaleTexture = inputTexture;
 
         if (operationMode == 3) {
@@ -252,7 +256,8 @@ namespace bv::render {
 
         // SGSR operates on the game-layer capture and composites with
         // premultiplied alpha over the parent scene/background.
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(callerFramebuffer));
+        glViewport(callerViewport[0], callerViewport[1], callerViewport[2], callerViewport[3]);
         glEnable(GL_BLEND);
         glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         glDisable(GL_DEPTH_TEST);
