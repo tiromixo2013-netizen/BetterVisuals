@@ -45,8 +45,11 @@ void main() {
     float reconstructionWeight = edgeConfidence * clamp(u_sharpness, 0.0, 1.0);
     vec3 result = mix(bilinearFallback.rgb, directional, reconstructionWeight);
 
-    // Preserve premultiplied alpha exactly; only RGB is reconstructed.
-    gl_FragColor = vec4(result, center.a);
+    // Keep the smoothly filtered source alpha and constrain reconstructed
+    // premultiplied RGB to it, preventing transparent-edge halos.
+    float outputAlpha = bilinearFallback.a;
+    result = min(result, vec3(outputAlpha));
+    gl_FragColor = vec4(result, outputAlpha);
 }
 )glsl";
 
