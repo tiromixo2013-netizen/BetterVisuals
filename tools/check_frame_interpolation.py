@@ -21,6 +21,7 @@ for token in (
     "m_interpolator.prepare(m_width, m_height)",
     "m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])",
     "bool presentGeneratedFrame()",
+    "if (!generated) m_gpuTimer.end()",
 ):
     assert token in main, f"missing Android integration: {token}"
 
@@ -30,7 +31,7 @@ for token in (
     "vec2 searchStep = 2.0 * u_invResolution",
     "float second = 1.0",
     "reverseBest > 0.075 || inconsistent",
-    "vec2 predictedCoord = clamp(v_uv - offset, 0.0, 1.0)",
+    "vec2 predictedCoord = clamp(v_uv - offset * 0.5, 0.0, 1.0)",
     "vec4 predictedSample = texture2D(u_current, predictedCoord)",
     "gl_FragColor = predictedSample",
     "gl_FragColor = currentSample",
@@ -92,7 +93,8 @@ assert "m_pendingTexture" not in main
 # the negative previous-frame offset is subtracted to predict farther right.
 current_x = 0.50
 previous_offset_x = -0.02
-predicted_x = current_x - previous_offset_x
+predicted_x = current_x - previous_offset_x * 0.5
 assert predicted_x > current_x
+assert abs(predicted_x - current_x - 0.01) < 1e-9, "prediction must use half of the measured displacement"
 
 print("Android forward-predictive frame-generation source checks passed (static only).")
