@@ -1047,14 +1047,20 @@ namespace {
             submitTimestamp(display, surface, m_realTarget);
         }
 
-        void scheduleGeneratedFrame(EGLDisplay display, EGLSurface surface, bool enabled) {
-            if (!enabled || !m_presentationTime ||
-                m_realTarget == std::chrono::steady_clock::time_point{}) return;
-            auto target = m_realTarget + m_period / 2;
+        bool scheduleGeneratedFrame(EGLDisplay display, EGLSurface surface, bool enabled) {
+            if (!enabled) return true;
+            if (!m_presentationTime ||
+                m_realTarget == std::chrono::steady_clock::time_point{}) return false;
+
+            auto const target = m_realTarget + m_period / 2;
             auto const earliest = std::chrono::steady_clock::now() +
                 std::chrono::microseconds(500);
-            if (target < earliest) target = earliest;
+            // Never retime a late generated frame to an arbitrary later slot:
+            // that creates uneven cadence and can collide with the next real frame.
+            // Drop the generated frame instead; the already-swapped real frame wins.
+            if (target <= earliest) return false;
             submitTimestamp(display, surface, target);
+            return true;
         }
 
     private:
@@ -1431,18 +1437,22 @@ namespace {
                 bool const generated = g_androidFrameHistory.generate();
                 bool const drawn = generated && g_androidFrameHistory.presentGeneratedFrame();
                 if (drawn) {
-                    androidPresentationScheduler().scheduleGeneratedFrame(
-                        display, surface, usePresentationScheduler
-                    );
                     g_androidFrameHistory.finishPresentation(display);
-                    EGLBoolean const generatedSwapResult = eglSwapBuffers(display, surface);
-                    if (generatedSwapResult != EGL_TRUE) {
-                        auto const error = eglGetError();
-                        log::error("[FrameGeneration][Presentation] Generated buffer swap failed (EGL error 0x{:04x}); keeping the already-presented real frame",
-                            static_cast<unsigned>(error));
+                    if (androidPresentationScheduler().scheduleGeneratedFrame(
+                        display, surface, usePresentationScheduler
+                    )) {
+                        EGLBoolean const generatedSwapResult = eglSwapBuffers(display, surface);
+                        if (generatedSwapResult != EGL_TRUE) {
+                            auto const error = eglGetError();
+                            log::error("[FrameGeneration][Presentation] Generated buffer swap failed (EGL error 0x{:04x}); keeping the already-presented real frame",
+                                static_cast<unsigned>(error));
+                        }
+                        else if (!g_generatedSwapAcceptedLogged.exchange(true, std::memory_order_relaxed)) {
+                            log::info("[FrameGeneration][Presentation] EGL accepted the first generated-frame swap; physical display presentation still depends on SurfaceFlinger");
+                        }
                     }
-                    else if (!g_generatedSwapAcceptedLogged.exchange(true, std::memory_order_relaxed)) {
-                        log::info("[FrameGeneration][Presentation] EGL accepted the first generated-frame swap; physical display presentation still depends on SurfaceFlinger");
+                    else {
+                        log::warn("[FrameGeneration][Presentation] Generated frame missed its midpoint deadline; dropped to preserve real-frame pacing");
                     }
                 }
                 else {
