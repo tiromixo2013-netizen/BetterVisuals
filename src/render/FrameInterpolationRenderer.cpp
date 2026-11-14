@@ -122,6 +122,21 @@ void main() {
         clamp(previousUv + vec2(0.0, searchStep.y), 0.0, 1.0)));
     if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(0.0, searchStep.y); }
 
+    if (reverseBest > 0.055) {
+        c = matchCost(previous, texture2D(u_current,
+            clamp(previousUv + vec2(-searchStep.x, -searchStep.y), 0.0, 1.0)));
+        if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(-searchStep.x, -searchStep.y); }
+        c = matchCost(previous, texture2D(u_current,
+            clamp(previousUv + vec2(searchStep.x, -searchStep.y), 0.0, 1.0)));
+        if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(searchStep.x, -searchStep.y); }
+        c = matchCost(previous, texture2D(u_current,
+            clamp(previousUv + vec2(-searchStep.x, searchStep.y), 0.0, 1.0)));
+        if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(-searchStep.x, searchStep.y); }
+        c = matchCost(previous, texture2D(u_current,
+            clamp(previousUv + vec2(searchStep.x, searchStep.y), 0.0, 1.0)));
+        if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(searchStep.x, searchStep.y); }
+    }
+
     bool inconsistent =
         abs(reverseOffset.x + bestOffset.x) > searchStep.x * 0.55 ||
         abs(reverseOffset.y + bestOffset.y) > searchStep.y * 0.55;
