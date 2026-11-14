@@ -310,7 +310,7 @@
     "sgsr-quality-preset": {
       "type": "string",
       "name": "SGSR 1 Quality Preset",
-      "description": "Experimental SGSR 1 input-resolution presets. Custom uses Render Scale without a preset ratio. Lower presets reduce capture resolution; if transparency artifacts appear, return to Custom while the capture path is validated.",
+      "description": "Controls SGSR1 input resolution independently from Operation Mode. Custom uses Render Scale without a preset ratio; lower presets reduce capture resolution.",
       "default": "Custom",
       "one-of": [
         "Custom",
