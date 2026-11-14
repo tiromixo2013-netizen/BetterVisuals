@@ -23,9 +23,7 @@ void main() {
 }
 )glsl";
 
-    // Pass 1: one motion estimate per 16x16 output-pixel block. Previous
-    // vectors are reused only when the current pair validates their direction
-    // and appearance; otherwise a bounded five-position search is performed.
+    // Pass 1: coarse block motion with conditional diagonal probes for fast movement.
     constexpr char kMotionFragment[] = R"glsl(
 precision mediump float;
 varying vec2 v_uv;
@@ -36,118 +34,113 @@ uniform vec2 u_invResolution;
 uniform vec2 u_motionGridSize;
 uniform float u_hasReuse;
 
-float matchCost(vec3 a, vec3 b) {
-    vec3 d = abs(a - b);
-    return max(d.r, max(d.g, d.b));
+float matchCost(vec4 a, vec4 b) {
+    float alphaCost = abs(a.a - b.a);
+    float colorCost = 0.0;
+    if (a.a > 0.02 && b.a > 0.02) {
+        vec3 d = abs(a.rgb - b.rgb);
+        colorCost = max(d.r, max(d.g, d.b));
+    }
+    return max(colorCost, alphaCost * 0.85);
 }
 
 void main() {
     vec2 blockIndex = floor(v_uv * u_motionGridSize);
-    vec2 blockUv = clamp(
-        (blockIndex * 16.0 + vec2(8.0)) * u_invResolution,
-        0.5 * u_invResolution, vec2(1.0) - 0.5 * u_invResolution
-    );
-    vec2 searchStep = 2.0 * u_invResolution;
-    vec3 current = texture2D(u_current, blockUv).rgb;
-
+    vec2 blockUv = clamp((blockIndex * 16.0 + vec2(8.0)) * u_invResolution,
+        0.5 * u_invResolution, vec2(1.0) - 0.5 * u_invResolution);
+    vec2 searchStep = 4.0 * u_invResolution;
+    vec4 current = texture2D(u_current, blockUv);
     float best = 1.0;
     float second = 1.0;
     vec2 bestOffset = vec2(0.0);
 
-    // Reuse last frame's vector only when the old confidence is high and its
-    // predicted correspondence still matches this frame. A reversal or scene
-    // transition naturally fails validation and triggers a fresh search.
     vec4 reused = texture2D(u_reusedMotion, blockUv);
     vec2 reusedOffset = (reused.rg * 2.0 - 1.0) * searchStep;
-    float reusedCost = matchCost(
-        current, texture2D(u_previous, clamp(blockUv + reusedOffset, 0.0, 1.0)).rgb
-    );
-    bool reuseValid = u_hasReuse > 0.5 && reused.a > 0.45 && reusedCost < 0.055;
+    float reusedCost = matchCost(current, texture2D(
+        u_previous, clamp(blockUv + reusedOffset, 0.0, 1.0)));
+    bool reuseValid = u_hasReuse > 0.5 && reused.a > 0.45 && reusedCost < 0.065;
+
     if (reuseValid) {
         best = reusedCost;
         bestOffset = reusedOffset;
         second = reusedCost + 0.02;
-    }
-
-    if (!reuseValid) {
-        best = matchCost(current, texture2D(u_previous, blockUv).rgb);
+    } else {
+        best = matchCost(current, texture2D(u_previous, blockUv));
         second = 1.0;
-        bestOffset = vec2(0.0);
-
-        float c = matchCost(current, texture2D(
-            u_previous, clamp(blockUv + vec2(-searchStep.x, 0.0), 0.0, 1.0)
-        ).rgb);
+        float c = matchCost(current, texture2D(u_previous,
+            clamp(blockUv + vec2(-searchStep.x, 0.0), 0.0, 1.0)));
         if (c < best) { second = best; best = c; bestOffset = vec2(-searchStep.x, 0.0); }
         else { second = min(second, c); }
-
-        c = matchCost(current, texture2D(
-            u_previous, clamp(blockUv + vec2(searchStep.x, 0.0), 0.0, 1.0)
-        ).rgb);
+        c = matchCost(current, texture2D(u_previous,
+            clamp(blockUv + vec2(searchStep.x, 0.0), 0.0, 1.0)));
         if (c < best) { second = best; best = c; bestOffset = vec2(searchStep.x, 0.0); }
         else { second = min(second, c); }
-
-        c = matchCost(current, texture2D(
-            u_previous, clamp(blockUv + vec2(0.0, -searchStep.y), 0.0, 1.0)
-        ).rgb);
+        c = matchCost(current, texture2D(u_previous,
+            clamp(blockUv + vec2(0.0, -searchStep.y), 0.0, 1.0)));
         if (c < best) { second = best; best = c; bestOffset = vec2(0.0, -searchStep.y); }
         else { second = min(second, c); }
-
-        c = matchCost(current, texture2D(
-            u_previous, clamp(blockUv + vec2(0.0, searchStep.y), 0.0, 1.0)
-        ).rgb);
+        c = matchCost(current, texture2D(u_previous,
+            clamp(blockUv + vec2(0.0, searchStep.y), 0.0, 1.0)));
         if (c < best) { second = best; best = c; bestOffset = vec2(0.0, searchStep.y); }
         else { second = min(second, c); }
+
+        // Extra diagonal taps only when the ordinary search is inconclusive.
+        if (best > 0.055) {
+            c = matchCost(current, texture2D(u_previous,
+                clamp(blockUv + vec2(-searchStep.x, -searchStep.y), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; bestOffset = vec2(-searchStep.x, -searchStep.y); }
+            else { second = min(second, c); }
+            c = matchCost(current, texture2D(u_previous,
+                clamp(blockUv + vec2(searchStep.x, -searchStep.y), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; bestOffset = vec2(searchStep.x, -searchStep.y); }
+            else { second = min(second, c); }
+            c = matchCost(current, texture2D(u_previous,
+                clamp(blockUv + vec2(-searchStep.x, searchStep.y), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; bestOffset = vec2(-searchStep.x, searchStep.y); }
+            else { second = min(second, c); }
+            c = matchCost(current, texture2D(u_previous,
+                clamp(blockUv + vec2(searchStep.x, searchStep.y), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; bestOffset = vec2(searchStep.x, searchStep.y); }
+            else { second = min(second, c); }
+        }
     }
 
-    // Bidirectional validation rejects occlusions and newly exposed regions.
     vec2 previousUv = clamp(blockUv + bestOffset, 0.0, 1.0);
-    vec3 previous = texture2D(u_previous, previousUv).rgb;
-    float reverseBest = matchCost(previous, texture2D(u_current, previousUv).rgb);
+    vec4 previous = texture2D(u_previous, previousUv);
+    float reverseBest = matchCost(previous, texture2D(u_current, previousUv));
     vec2 reverseOffset = vec2(0.0);
-    float c = matchCost(previous, texture2D(
-        u_current, clamp(previousUv - vec2(searchStep.x, 0.0), 0.0, 1.0)
-    ).rgb);
+    float c = matchCost(previous, texture2D(u_current,
+        clamp(previousUv - vec2(searchStep.x, 0.0), 0.0, 1.0)));
     if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(-searchStep.x, 0.0); }
-    c = matchCost(previous, texture2D(
-        u_current, clamp(previousUv + vec2(searchStep.x, 0.0), 0.0, 1.0)
-    ).rgb);
+    c = matchCost(previous, texture2D(u_current,
+        clamp(previousUv + vec2(searchStep.x, 0.0), 0.0, 1.0)));
     if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(searchStep.x, 0.0); }
-    c = matchCost(previous, texture2D(
-        u_current, clamp(previousUv - vec2(0.0, searchStep.y), 0.0, 1.0)
-    ).rgb);
+    c = matchCost(previous, texture2D(u_current,
+        clamp(previousUv - vec2(0.0, searchStep.y), 0.0, 1.0)));
     if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(0.0, -searchStep.y); }
-    c = matchCost(previous, texture2D(
-        u_current, clamp(previousUv + vec2(0.0, searchStep.y), 0.0, 1.0)
-    ).rgb);
+    c = matchCost(previous, texture2D(u_current,
+        clamp(previousUv + vec2(0.0, searchStep.y), 0.0, 1.0)));
     if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(0.0, searchStep.y); }
 
     bool inconsistent =
-        abs(reverseOffset.x + bestOffset.x) > searchStep.x * 0.5 ||
-        abs(reverseOffset.y + bestOffset.y) > searchStep.y * 0.5;
+        abs(reverseOffset.x + bestOffset.x) > searchStep.x * 0.55 ||
+        abs(reverseOffset.y + bestOffset.y) > searchStep.y * 0.55;
     float confidence = clamp((second - best) * 12.0, 0.0, 1.0) *
-        clamp((0.085 - best) * 12.0, 0.0, 1.0);
-    if (reuseValid) {
-        confidence = min(reused.a, clamp((0.055 - best) * 18.0, 0.0, 1.0));
-    }
-    else if (u_hasReuse > 0.5 && reused.a < 0.65 && confidence > reused.a) {
-        // Confidence recovery is deliberately gradual after a protected frame.
+        clamp((0.12 - best) * 9.0, 0.0, 1.0);
+    if (reuseValid) confidence = min(reused.a, clamp((0.065 - best) * 16.0, 0.0, 1.0));
+    else if (u_hasReuse > 0.5 && reused.a < 0.65 && confidence > reused.a)
         confidence = mix(reused.a, confidence, 0.35);
-    }
-    if (best > 0.075 || reverseBest > 0.075 || inconsistent) confidence = 0.0;
-    bool directionReversal =
-        u_hasReuse > 0.5 && reused.a > 0.45 && !reuseValid &&
-        (bestOffset.x * reusedOffset.x + bestOffset.y * reusedOffset.y) < -0.000001;
+    if (best > 0.105 || reverseBest > 0.105 || inconsistent) confidence = 0.0;
+    bool directionReversal = u_hasReuse > 0.5 && reused.a > 0.45 &&
+        !reuseValid && dot(bestOffset, reusedOffset) < -0.000001;
     if (directionReversal) confidence = 0.0;
-
-    vec2 encodedOffset = clamp(bestOffset / max(searchStep, vec2(0.000001)), -1.0, 1.0) * 0.5 + 0.5;
+    vec2 encodedOffset = clamp(bestOffset / max(searchStep, vec2(0.000001)),
+        -1.0, 1.0) * 0.5 + 0.5;
     gl_FragColor = vec4(encodedOffset, clamp(best, 0.0, 1.0), confidence);
 }
 )glsl";
 
-    // Pass 2: reuse the 16x16 motion field for ordinary regions. High edge
-    // complexity or disagreement between neighboring blocks activates a
-    // bounded 8x8 local refinement. Any low-confidence result preserves the
-    // current real pixel, so no generated holes or transparent black appear.
+    // Pass 2: alpha-aware reconstruction; fast motion uses a conservative 0.25 step.
     constexpr char kFragment[] = R"glsl(
 precision mediump float;
 varying vec2 v_uv;
@@ -157,30 +150,29 @@ uniform sampler2D u_motion;
 uniform vec2 u_invResolution;
 uniform vec2 u_motionTexel;
 
-float matchCost(vec3 a, vec3 b) {
-    vec3 d = abs(a - b);
-    return max(d.r, max(d.g, d.b));
+float matchCost(vec4 a, vec4 b) {
+    float alphaCost = abs(a.a - b.a);
+    float colorCost = 0.0;
+    if (a.a > 0.02 && b.a > 0.02) {
+        vec3 d = abs(a.rgb - b.rgb);
+        colorCost = max(d.r, max(d.g, d.b));
+    }
+    return max(colorCost, alphaCost * 0.85);
 }
 
 void main() {
     vec4 currentSample = texture2D(u_current, v_uv);
     vec2 outputPixel = floor(v_uv / u_invResolution);
     vec2 coarseBlockIndex = floor(outputPixel / 16.0);
-    vec2 coarseBlockUv = clamp(
-        (coarseBlockIndex * 16.0 + vec2(8.0)) * u_invResolution,
-        0.5 * u_invResolution, vec2(1.0) - 0.5 * u_invResolution
-    );
-    // Complex 16x16 regions split into four 8x8 refinement blocks. Every
-    // fragment in the same sub-block uses the same refined motion vector.
+    vec2 coarseBlockUv = clamp((coarseBlockIndex * 16.0 + vec2(8.0)) * u_invResolution,
+        0.5 * u_invResolution, vec2(1.0) - 0.5 * u_invResolution);
     vec2 refineBlockIndex = floor(outputPixel / 8.0);
-    vec2 refineUv = clamp(
-        (refineBlockIndex * 8.0 + vec2(4.0)) * u_invResolution,
-        0.5 * u_invResolution, vec2(1.0) - 0.5 * u_invResolution
-    );
-    vec4 motion = texture2D(u_motion, coarseBlockUv);
-    vec2 searchStep = 2.0 * u_invResolution;
-    vec2 offset = (motion.rg * 2.0 - 1.0) * searchStep;
+    vec2 refineUv = clamp((refineBlockIndex * 8.0 + vec2(4.0)) * u_invResolution,
+        0.5 * u_invResolution, vec2(1.0) - 0.5 * u_invResolution);
 
+    vec4 motion = texture2D(u_motion, coarseBlockUv);
+    vec2 searchStep = 4.0 * u_invResolution;
+    vec2 offset = (motion.rg * 2.0 - 1.0) * searchStep;
     vec2 motionLeft = (texture2D(u_motion, coarseBlockUv - vec2(u_motionTexel.x, 0.0)).rg * 2.0 - 1.0) * searchStep;
     vec2 motionRight = (texture2D(u_motion, coarseBlockUv + vec2(u_motionTexel.x, 0.0)).rg * 2.0 - 1.0) * searchStep;
     vec2 motionUp = (texture2D(u_motion, coarseBlockUv - vec2(0.0, u_motionTexel.y)).rg * 2.0 - 1.0) * searchStep;
@@ -190,25 +182,18 @@ void main() {
         max(length(motionUp - offset), length(motionDown - offset))
     ) / max(length(searchStep), 0.000001);
 
-    // Most stable regions can use the coarse 16x16 vector directly.
-    // Defer the five edge-analysis texture reads until confidence and
-    // neighboring motion actually indicate that refinement may be needed.
     bool protectedPrediction = motion.a < 0.55 || disagreement > 0.55;
     if (!protectedPrediction) {
         vec4 edgeCenter = texture2D(u_current, refineUv);
-        vec3 left = texture2D(u_current, clamp(refineUv - searchStep, 0.0, 1.0)).rgb;
-        vec3 right = texture2D(u_current, clamp(refineUv + searchStep, 0.0, 1.0)).rgb;
-        vec3 up = texture2D(u_current, clamp(refineUv - vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
-        vec3 down = texture2D(u_current, clamp(refineUv + vec2(0.0, searchStep.y), 0.0, 1.0)).rgb;
+        vec4 left = texture2D(u_current, clamp(refineUv - searchStep, 0.0, 1.0));
+        vec4 right = texture2D(u_current, clamp(refineUv + searchStep, 0.0, 1.0));
+        vec4 up = texture2D(u_current, clamp(refineUv - vec2(0.0, searchStep.y), 0.0, 1.0));
+        vec4 down = texture2D(u_current, clamp(refineUv + vec2(0.0, searchStep.y), 0.0, 1.0));
         float edgeComplexity = max(
-            matchCost(left, edgeCenter.rgb) + matchCost(right, edgeCenter.rgb),
-            matchCost(up, edgeCenter.rgb) + matchCost(down, edgeCenter.rgb)
-        );
+            matchCost(left, edgeCenter) + matchCost(right, edgeCenter),
+            matchCost(up, edgeCenter) + matchCost(down, edgeCenter));
         protectedPrediction = edgeComplexity > 0.075;
     }
-    // Protected Prediction uses a stricter 8x8 refinement path; stable
-    // regions avoid the edge-analysis reads and keep the coarse vector.
-    bool refineEightPixelBlock = protectedPrediction;
 
     float confidence = motion.a;
     if (protectedPrediction) {
@@ -217,49 +202,73 @@ void main() {
         float best = 1.0;
         float second = 1.0;
         vec2 refinedOffset = offset;
-        float c = matchCost(
-            refineCurrentSample.rgb,
-            texture2D(u_previous, clamp(refineUv + offset, 0.0, 1.0)).rgb
-        );
+        float c = matchCost(refineCurrentSample, texture2D(u_previous,
+            clamp(refineUv + offset, 0.0, 1.0)));
         best = c;
-        c = matchCost(refineCurrentSample.rgb, texture2D(
-            u_previous, clamp(refineUv + offset + vec2(-halfStep.x, 0.0), 0.0, 1.0)
-        ).rgb);
+        c = matchCost(refineCurrentSample, texture2D(u_previous,
+            clamp(refineUv + offset + vec2(-halfStep.x, 0.0), 0.0, 1.0)));
         if (c < best) { second = best; best = c; refinedOffset = offset + vec2(-halfStep.x, 0.0); }
         else { second = min(second, c); }
-        c = matchCost(refineCurrentSample.rgb, texture2D(
-            u_previous, clamp(refineUv + offset + vec2(halfStep.x, 0.0), 0.0, 1.0)
-        ).rgb);
+        c = matchCost(refineCurrentSample, texture2D(u_previous,
+            clamp(refineUv + offset + vec2(halfStep.x, 0.0), 0.0, 1.0)));
         if (c < best) { second = best; best = c; refinedOffset = offset + vec2(halfStep.x, 0.0); }
         else { second = min(second, c); }
-        c = matchCost(refineCurrentSample.rgb, texture2D(
-            u_previous, clamp(refineUv + offset + vec2(0.0, -halfStep.y), 0.0, 1.0)
-        ).rgb);
+        c = matchCost(refineCurrentSample, texture2D(u_previous,
+            clamp(refineUv + offset + vec2(0.0, -halfStep.y), 0.0, 1.0)));
         if (c < best) { second = best; best = c; refinedOffset = offset + vec2(0.0, -halfStep.y); }
         else { second = min(second, c); }
-        c = matchCost(refineCurrentSample.rgb, texture2D(
-            u_previous, clamp(refineUv + offset + vec2(0.0, halfStep.y), 0.0, 1.0)
-        ).rgb);
+        c = matchCost(refineCurrentSample, texture2D(u_previous,
+            clamp(refineUv + offset + vec2(0.0, halfStep.y), 0.0, 1.0)));
         if (c < best) { second = best; best = c; refinedOffset = offset + vec2(0.0, halfStep.y); }
         else { second = min(second, c); }
+        if (best > 0.045) {
+            c = matchCost(refineCurrentSample, texture2D(u_previous,
+                clamp(refineUv + offset + vec2(-halfStep.x, -halfStep.y), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; refinedOffset = offset + vec2(-halfStep.x, -halfStep.y); }
+            else { second = min(second, c); }
+            c = matchCost(refineCurrentSample, texture2D(u_previous,
+                clamp(refineUv + offset + vec2(halfStep.x, -halfStep.y), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; refinedOffset = offset + vec2(halfStep.x, -halfStep.y); }
+            else { second = min(second, c); }
+            c = matchCost(refineCurrentSample, texture2D(u_previous,
+                clamp(refineUv + offset + vec2(-halfStep.x, halfStep.y), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; refinedOffset = offset + vec2(-halfStep.x, halfStep.y); }
+            else { second = min(second, c); }
+            c = matchCost(refineCurrentSample, texture2D(u_previous,
+                clamp(refineUv + offset + vec2(halfStep.x, halfStep.y), 0.0, 1.0)));
+            if (c < best) { second = best; best = c; refinedOffset = offset + vec2(halfStep.x, halfStep.y); }
+            else { second = min(second, c); }
+        }
         confidence = clamp((second - best) * 10.0, 0.0, 1.0);
-        if (best > 0.075) confidence = 0.0;
+        if (best > 0.105) confidence = 0.0;
         offset = refinedOffset;
     }
 
-    if (confidence < 0.30 || (disagreement > 1.15 && !refineEightPixelBlock)) {
-        gl_FragColor = currentSample;
+    if (confidence < 0.30 || (disagreement > 1.15 && !protectedPrediction)) {
+        vec4 previousSample = texture2D(u_previous, v_uv);
+        float previousLuma = dot(previousSample.rgb, vec3(0.299, 0.587, 0.114));
+        float currentLuma = dot(currentSample.rgb, vec3(0.299, 0.587, 0.114));
+        vec3 previousChroma = previousSample.rgb / max(previousLuma, 0.025);
+        vec3 currentChroma = currentSample.rgb / max(currentLuma, 0.025);
+        vec3 chromaDelta = abs(previousChroma - currentChroma);
+        float chromaCost = max(chromaDelta.r, max(chromaDelta.g, chromaDelta.b));
+        float lumaDelta = abs(currentLuma - previousLuma);
+        float alphaDelta = abs(currentSample.a - previousSample.a);
+        bool photometricTransition = chromaCost < 0.075 &&
+            lumaDelta > 0.008 && lumaDelta < 0.42;
+        bool alphaTransition = alphaDelta > 0.02 &&
+            matchCost(previousSample, currentSample) < 0.08;
+        if (photometricTransition || alphaTransition)
+            gl_FragColor = mix(previousSample, currentSample, 0.5);
+        else
+            gl_FragColor = currentSample;
         return;
     }
 
-    // The motion field maps the current pixel back to its previous-frame
-    // correspondence. Predict only halfway forward: one inserted frame per
-    // real-frame interval is a 1.5x cadence, not a full-frame extrapolation.
-    // Applying the full vector here would overshoot the midpoint and amplify
-    // ghosting on fast Geometry Dash objects.
-    vec2 predictedCoord = clamp(v_uv - offset * 0.5, 0.0, 1.0);
-    vec4 predictedSample = texture2D(u_current, predictedCoord);
-    gl_FragColor = predictedSample;
+    float motionMagnitude = length(offset) / max(length(searchStep), 0.000001);
+    float predictionFraction = (motionMagnitude > 0.72 || confidence < 0.55) ? 0.25 : 0.5;
+    vec2 predictedCoord = clamp(v_uv - offset * predictionFraction, 0.0, 1.0);
+    gl_FragColor = texture2D(u_current, predictedCoord);
 }
 )glsl";
 
