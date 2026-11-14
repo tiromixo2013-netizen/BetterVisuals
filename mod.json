@@ -296,6 +296,17 @@
         "android"
       ]
     },
+    "sgsr-operation-mode": {
+      "type": "string",
+      "name": "SGSR 1 Operation Mode",
+      "description": "RGBA uses green-channel luma, RGBY uses a temporary luma-in-alpha conversion while preserving original transparency, and LERP uses linear sampling without edge sharpening.",
+      "default": "RGBA",
+      "one-of": [
+        "RGBA",
+        "RGBY",
+        "LERP"
+      ]
+    },
     "sgsr-quality-preset": {
       "type": "string",
       "name": "SGSR 1 Quality Preset",
