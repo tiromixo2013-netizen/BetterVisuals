@@ -799,6 +799,11 @@ namespace {
             m_beginQuery(0x88BF, m_queries[index]);
             m_active = static_cast<int>(index);
         }
+        bool shouldInterpolate() const {
+            // If timer queries are unavailable, preserve the user-requested
+            // behavior rather than guessing at GPU load.
+            return !m_supported || m_interpolationAllowed;
+        }
         void abandonContext() {
             // Query names belong to the lost GL context; do not delete them in a replacement context.
             m_queries = {};
@@ -809,6 +814,9 @@ namespace {
             m_next = 0;
             m_samples = 0;
             m_totalNs = 0;
+            m_windowSamples = 0;
+            m_lastAverageNs = 0;
+            m_interpolationAllowed = true;
             m_genQueries = nullptr;
             m_deleteQueries = nullptr;
             m_beginQuery = nullptr;
@@ -874,10 +882,24 @@ namespace {
                     m_getQueryObjectui64v(m_queries[i], 0x8866, &elapsedNs);
                     m_totalNs += elapsedNs;
                     ++m_samples;
-                    if ((m_samples % 120) == 0) {
-                        log::info("[FrameGeneration][GPU] average frame capture + interpolation GPU time over 120 samples: {} us",
-                            (m_totalNs / 120) / 1000);
+                    ++m_windowSamples;
+                    if (m_windowSamples >= 30) {
+                        m_lastAverageNs = m_totalNs / m_windowSamples;
+                        // Keep interpolation from monopolizing the mobile GPU.
+                        // Disable above 4 ms and only re-enable below 2.5 ms to
+                        // avoid rapid toggling around a single threshold.
+                        if (m_interpolationAllowed && m_lastAverageNs > 4'000'000ULL) {
+                            m_interpolationAllowed = false;
+                            log::warn("[FrameGeneration][GPU] interpolation throttled: average capture + interpolation cost {} us",
+                                m_lastAverageNs / 1000);
+                        }
+                        else if (!m_interpolationAllowed && m_lastAverageNs < 2'500'000ULL) {
+                            m_interpolationAllowed = true;
+                            log::info("[FrameGeneration][GPU] interpolation resumed: average capture + interpolation cost {} us",
+                                m_lastAverageNs / 1000);
+                        }
                         m_totalNs = 0;
+                        m_windowSamples = 0;
                     }
                 }
                 m_pending[i] = false;
@@ -891,6 +913,9 @@ namespace {
         std::array<bool, 4> m_pending = {};
         std::uint64_t m_samples = 0;
         std::uint64_t m_totalNs = 0;
+        std::uint32_t m_windowSamples = 0;
+        std::uint64_t m_lastAverageNs = 0;
+        bool m_interpolationAllowed = true;
         GenQueries m_genQueries = nullptr;
         DeleteQueries m_deleteQueries = nullptr;
         BeginQuery m_beginQuery = nullptr;
@@ -1039,7 +1064,8 @@ namespace {
                 if (m_validFrames == 2) {
                     auto const previousIndex = m_writeIndex;
                     auto const currentIndex = 1 - m_writeIndex;
-                    if (m_interpolator.prepare(width, height) &&
+                    if (m_gpuTimer.shouldInterpolate() &&
+                        m_interpolator.prepare(width, height) &&
                         m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])) {
                         // Keep the interpolated frame off-screen until the native
                         // frame boundary is handled by the EGL swap detour.
