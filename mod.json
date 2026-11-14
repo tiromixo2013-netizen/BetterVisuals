@@ -294,20 +294,6 @@
 			"platforms": [
 				"android"
 			]
-		},
-		"sgsr-quality-preset": {
-			"type": "string",
-			"name": "SGSR 1 Quality Preset",
-			"description": "Selects the SGSR 1 input resolution. Presets multiply the Render Scale slider; Custom uses the slider alone. Custom is the safe default so SGSR does not silently force a reduced render resolution.",
-			"default": "Custom",
-			"one-of": [
-				"Custom",
-				"Ultra Quality",
-				"Quality",
-				"Balanced",
-				"Performance",
-				"Ultra Performance"
-			]
 		}
 	}
 }
