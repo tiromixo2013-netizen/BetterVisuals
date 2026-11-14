@@ -134,9 +134,10 @@ void main() {
         confidence = mix(reused.a, confidence, 0.35);
     }
     if (best > 0.075 || reverseBest > 0.075 || inconsistent) confidence = 0.0;
-    if (reuseValid && (bestOffset.x * reusedOffset.x + bestOffset.y * reusedOffset.y) < 0.0) {
-        confidence = 0.0;
-    }
+    bool directionReversal =
+        u_hasReuse > 0.5 && reused.a > 0.45 && !reuseValid &&
+        (bestOffset.x * reusedOffset.x + bestOffset.y * reusedOffset.y) < -0.000001;
+    if (directionReversal) confidence = 0.0;
 
     vec2 encodedOffset = clamp(bestOffset / max(searchStep, vec2(0.000001)), -1.0, 1.0) * 0.5 + 0.5;
     gl_FragColor = vec4(encodedOffset, clamp(best, 0.0, 1.0), confidence);
