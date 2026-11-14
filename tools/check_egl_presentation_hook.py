@@ -17,6 +17,10 @@ def main() -> None:
     )[0]
     assert detour.count("eglSwapBuffers(display, surface)") == 4
     assert "presentGeneratedFrame()" in detour
+    assert "scheduleRealFrame" in detour
+    assert "scheduleGeneratedFrame" in detour
+    assert "EGL_ANDROID_presentation_time" in source
+    assert "m_period / 2" in source
     assert "The current real frame is always swapped first" in detour
     assert detour.index("result = eglSwapBuffers(display, surface)") < detour.index(
         "presentGeneratedFrame()"
