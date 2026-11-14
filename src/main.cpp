@@ -1681,12 +1681,12 @@ namespace {
     class WindowsFrameHistory final {
     public:
         bool capture(GLFWwindow* window) {
-            if (!window || !WindowsGlFenceReady()) return false;
-            if (!m_fence.retire()) return false;
+            if (!window) return false;
             if (m_window != window) {
                 abandon();
                 m_window = window;
             }
+            if (!m_fence.retire()) return false;
             int width = 0, height = 0;
             glfwGetFramebufferSize(window, &width, &height);
             if (width <= 0 || height <= 0) return false;
@@ -1732,7 +1732,7 @@ namespace {
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 glBindTexture(GL_TEXTURE_2D, m_textures[m_writeIndex]);
                 glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
-                captured = glGetError() == GL_NO_ERROR;
+                captured = true;
             }
             glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
             glActiveTexture(static_cast<GLenum>(previousActiveTexture));
@@ -1765,7 +1765,6 @@ namespace {
         void finishPresentation() { m_fence.insert(); }
         void reset() { abandon(); }
     private:
-        static bool WindowsGlFenceReady() { return true; }
         void abandon() {
             m_fence.reset();
             if (m_textures[0] || m_textures[1]) glDeleteTextures(2, m_textures.data());
