@@ -281,7 +281,7 @@
     "frame-pacing-enabled": {
       "type": "bool",
       "name": "Frame Pacing (Android)",
-      "description": "Requests EGL swap interval 1 for display-synchronized presentation. Android's compositor and GPU driver still control the actual buffer queue.",
+      "description": "Requests EGL swap interval 1 and, when EGL_ANDROID_presentation_time is available, timestamps real frames and places generated frames halfway through the measured app-frame interval. Falls back to normal EGL swap pacing when unsupported; the compositor still controls final presentation.",
       "default": false,
       "platforms": [
         "android"
