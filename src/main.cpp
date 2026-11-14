@@ -451,6 +451,7 @@ namespace {
         if (prepared && key.needsPresentation) {
             if (key.needsDownsample) {
                 g_fsrRenderer.reset();
+                g_fsrLiteRenderer.reset();
                 g_renderScaleRenderer.reset();
                 g_ssaaRenderer.reset();
                 auto const& ssaaShader = config.aa == AntiAliasingMethod::Ssaa300 ?
