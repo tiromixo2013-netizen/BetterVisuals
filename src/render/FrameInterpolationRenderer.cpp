@@ -126,6 +126,9 @@ void main() {
         abs(reverseOffset.y + bestOffset.y) > searchStep.y * 0.5;
     float confidence = clamp((second - best) * 12.0, 0.0, 1.0) *
         clamp((0.085 - best) * 12.0, 0.0, 1.0);
+    if (reuseValid) {
+        confidence = min(reused.a, clamp((0.055 - best) * 18.0, 0.0, 1.0));
+    }
     if (best > 0.075 || reverseBest > 0.075 || inconsistent) confidence = 0.0;
     if (reuseValid && (bestOffset.x * reusedOffset.x + bestOffset.y * reusedOffset.y) < 0.0) {
         confidence = 0.0;
