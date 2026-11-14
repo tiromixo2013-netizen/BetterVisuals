@@ -118,9 +118,9 @@ namespace {
 
     std::atomic<AntiAliasingMethod> g_antiAliasingMethod = AntiAliasingMethod::SmaaHigh;
     std::atomic<UpscaleMethod> g_upscaleMethod = UpscaleMethod::Nearest;
-    // Zero selects the Custom base (1.0); positive values are the base
-    // source-resolution ratios for the FSR 1 quality presets.
+    // Zero selects Custom (1.0); positive values are source-resolution ratios.
     std::atomic<float> g_fsrPresetScale = 0.f;
+    std::atomic<float> g_sgsrPresetScale = 0.f;
     std::atomic<float> g_renderScale = 1.f;
     std::atomic<bool> g_casEnabled = false;
     std::atomic<float> g_casSharpness = 0.f;
@@ -288,6 +288,19 @@ namespace {
             log::warn("Unknown FSR 1 quality preset '{}', using Custom", value);
         }
         g_fsrPresetScale.store(scale, std::memory_order_relaxed);
+    }
+
+    void updateFsrQualityPreset(std::string_view value) {
+        float scale = 0.f;
+        if (value == "Ultra Quality") scale = 0.77f;
+        else if (value == "Quality") scale = 0.67f;
+        else if (value == "Balanced") scale = 0.59f;
+        else if (value == "Performance") scale = 0.50f;
+        else if (value == "Ultra Performance") scale = 0.33f;
+        else if (value != "Custom") {
+            log::warn("Unknown SGSR 1 quality preset '{}', using Custom", value);
+        }
+        g_sgsrPresetScale.store(scale, std::memory_order_relaxed);
     }
 
     void bindBoolSetting(char const* name, std::atomic<bool>& value) {
@@ -549,21 +562,17 @@ namespace {
 
         auto const effectCount = config.effectCount();
         auto const configuredScale = g_renderScale.load(std::memory_order_relaxed);
-        auto const fsrPresetScale = config.upscaling == UpscaleMethod::Fsr ?
-            g_fsrPresetScale.load(std::memory_order_relaxed) : 0.f;
-        // SGSR 1 preset scaling is isolated until the Android capture viewport,
-        // scissor and alpha path is validated at non-native resolutions. The
-        // explicit Render Scale remains available for controlled testing.
-        // FSR presets still select their own base input resolution.
-        auto const presetScale = fsrPresetScale;
+        auto const presetScale = config.upscaling == UpscaleMethod::Fsr ?
+            g_fsrPresetScale.load(std::memory_order_relaxed) :
+            (config.upscaling == UpscaleMethod::Sgsr ?
+                g_sgsrPresetScale.load(std::memory_order_relaxed) : 0.f);
         auto const requestedScale =
             (presetScale > 0.f ? presetScale : 1.f) * configuredScale;
         auto const usesSpatialUpscaler =
             config.upscaling == UpscaleMethod::Fsr || config.upscaling == UpscaleMethod::Sgsr;
         auto const renderScale = std::clamp(requestedScale, 0.25f, usesSpatialUpscaler ? 1.f : 1.2f);
-        // A selected FSR quality preset owns the base resolution. SSAA's
-        // supersampling multiplier would otherwise push it above native and
-        // route presentation through the SSAA downsampler instead of EASU.
+        // A selected spatial-upscaler quality preset owns the base resolution.
+        // SSAA must not override its input size or route it through downsampling.
         auto const aaScale = presetScale > 0.f ? 1.f : ssaaFactor(config.aa);
         auto const effectiveScale = renderScale * aaScale;
         GLint maxTextureSize = 0;
@@ -935,11 +944,6 @@ namespace {
                 width <= 0 || height <= 0) {
                 return false;
             }
-            GLint maxTextureSize = 0;
-            glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
-            if (maxTextureSize <= 0 || width > maxTextureSize || height > maxTextureSize) {
-                return false;
-            }
             if (!retirePreviousFence(display)) return false;
 
             if (m_context != context) {
@@ -954,6 +958,15 @@ namespace {
                 m_interpolator.abandonContext();
                 m_gpuTimer.abandonContext();
                 m_context = context;
+                m_maxTextureSize = 0;
+            }
+            // GL_MAX_TEXTURE_SIZE is invariant for a live context. Cache it
+            // instead of issuing a synchronous driver query on every swap.
+            if (m_maxTextureSize <= 0) {
+                glGetIntegerv(GL_MAX_TEXTURE_SIZE, &m_maxTextureSize);
+            }
+            if (m_maxTextureSize <= 0 || width > m_maxTextureSize || height > m_maxTextureSize) {
+                return false;
             }
 
             if (width != m_width || height != m_height) {
@@ -1117,6 +1130,7 @@ namespace {
         EGLContext m_context = EGL_NO_CONTEXT;
         EGLint m_width = 0;
         EGLint m_height = 0;
+        GLint m_maxTextureSize = 0;
         std::size_t m_writeIndex = 0;
         std::size_t m_validFrames = 0;
         bool m_pairLogged = false;
@@ -1240,6 +1254,7 @@ $on_mod(Loaded) {
     bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.2f, 1.f);
     bindStringSetting("upscale-method", updateUpscaleMethod);
     bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
+    bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {
         auto const wasSsaa = ssaaFactor(g_antiAliasingMethod.load(std::memory_order_relaxed)) > 1.f;
