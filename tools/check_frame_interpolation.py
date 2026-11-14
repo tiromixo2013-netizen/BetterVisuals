@@ -18,7 +18,7 @@ for token in (
     "m_probeQuery = m_active",
     "A disjoint timer result is invalid",
     "m_interpolator.abandonContext()",
-    "m_interpolator.prepare(width, height)",
+    "m_interpolator.prepare(m_width, m_height)",
     "m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])",
     "bool presentGeneratedFrame()",
 ):
