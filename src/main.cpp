@@ -1155,6 +1155,8 @@ namespace {
                 m_context = context;
                 m_maxTextureSize = 0;
             }
+            // GL_MAX_TEXTURE_SIZE is invariant for a live context; cache it
+            // rather than issuing a synchronous driver query on every swap.
             if (m_maxTextureSize <= 0) {
                 glGetIntegerv(GL_MAX_TEXTURE_SIZE, &m_maxTextureSize);
             }
