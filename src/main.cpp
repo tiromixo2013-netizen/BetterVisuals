@@ -923,6 +923,13 @@ namespace {
                         }
                     }
                 }
+                else if (static_cast<int>(i) == m_probeQuery) {
+                    // A disjoint timer result is invalid; discard the probe and
+                    // retry after the normal cooldown instead of trusting it.
+                    m_probeQuery = -1;
+                    m_interpolationAllowed = false;
+                    m_framesUntilProbe = 120;
+                }
                 m_pending[i] = false;
             }
         }
