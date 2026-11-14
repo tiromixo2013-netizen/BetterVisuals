@@ -270,7 +270,7 @@ void main() {
         float lumaDelta = abs(currentLuma - previousLuma);
         float alphaDelta = abs(currentSample.a - previousSample.a);
         bool fadeFromBlack = min(previousLuma, currentLuma) < 0.025 &&
-            max(previousLuma, currentLuma) < 0.42;
+            max(previousLuma, currentLuma) < 0.42 && chromaCost < 0.65;
         bool photometricTransition = (chromaCost < 0.20 || fadeFromBlack) &&
             lumaDelta > 0.008 && lumaDelta < 0.42;
         vec3 alphaRgbDelta = abs(previousSample.rgb - currentSample.rgb);
