@@ -23,7 +23,8 @@ assert "g_sgsrPresetScale" in main
 assert "updateSgsrQualityPreset" in main
 assert 'bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset)' in main
 assert "config.upscaling == UpscaleMethod::Sgsr" in main
-assert "auto const presetScale = config.upscaling == UpscaleMethod::Fsr ?" in main
+assert "auto const presetScale = (config.upscaling == UpscaleMethod::Fsr ||" in main
+assert "config.upscaling == UpscaleMethod::FsrLite)" in main
 
 # Avoid repeating a synchronous capability query on every frame-history swap.
 assert "GL_MAX_TEXTURE_SIZE is invariant for a live context" in main
