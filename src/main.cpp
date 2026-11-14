@@ -24,6 +24,8 @@
 #endif
 #ifdef GEODE_IS_WINDOWS
     #include <Geode/modify/CCEGLView.hpp>
+    #include <windows.h>
+    #include <GL/gl.h>
 #endif
 #ifdef GEODE_IS_MOBILE
     #include <Geode/modify/AppDelegate.hpp>
@@ -1508,6 +1510,29 @@ namespace {
 namespace {
     std::atomic<bool> g_windowsFrameHistoryEnabled = false;
     bool g_windowsFrameGenerationSwapInterval = false;
+    using WglSwapInterval = BOOL (WINAPI*)(int);
+    using WglGetSwapInterval = int (WINAPI*)();
+
+    template <class T>
+    T loadWindowsGlProc(char const* name) {
+        auto proc = wglGetProcAddress(name);
+        auto const value = reinterpret_cast<std::intptr_t>(proc);
+        if (!proc || value == 1 || value == 2 || value == 3 || value == -1) {
+            auto module = GetModuleHandleA("opengl32.dll");
+            proc = module ? reinterpret_cast<PROC>(GetProcAddress(module, name)) : nullptr;
+        }
+        return reinterpret_cast<T>(proc);
+    }
+
+    void setWindowsSwapInterval(int interval) {
+        auto setInterval = loadWindowsGlProc<WglSwapInterval>("wglSwapIntervalEXT");
+        if (setInterval) setInterval(interval);
+    }
+
+    int getWindowsSwapInterval() {
+        auto getInterval = loadWindowsGlProc<WglGetSwapInterval>("wglGetSwapIntervalEXT");
+        return getInterval ? getInterval() : 1;
+    }
 
     class WindowsGpuTimer final {
     public:
@@ -1548,7 +1573,7 @@ namespace {
 
         template <class T>
         static T load(char const* name) {
-            return reinterpret_cast<T>(glfwGetProcAddress(name));
+            return loadWindowsGlProc<T>(name);
         }
         void initialize() {
             if (m_checked) return;
@@ -1641,9 +1666,9 @@ namespace {
         void initialize() {
             if (m_checked) return;
             m_checked = true;
-            m_fenceSync = reinterpret_cast<FenceSync>(glfwGetProcAddress("glFenceSync"));
-            m_clientWaitSync = reinterpret_cast<ClientWaitSync>(glfwGetProcAddress("glClientWaitSync"));
-            m_deleteSync = reinterpret_cast<DeleteSync>(glfwGetProcAddress("glDeleteSync"));
+            m_fenceSync = loadWindowsGlProc<FenceSync>("glFenceSync");
+            m_clientWaitSync = loadWindowsGlProc<ClientWaitSync>("glClientWaitSync");
+            m_deleteSync = loadWindowsGlProc<DeleteSync>("glDeleteSync");
             if (!m_fenceSync || !m_clientWaitSync || !m_deleteSync) {
                 m_fenceSync = nullptr;
                 m_clientWaitSync = nullptr;
@@ -1680,15 +1705,14 @@ namespace {
 
     class WindowsFrameHistory final {
     public:
-        bool capture(GLFWwindow* window) {
-            if (!window) return false;
-            if (m_window != window) {
-                abandon();
-                m_window = window;
-            }
+        bool capture() {
             if (!m_fence.retire()) return false;
-            int width = 0, height = 0;
-            glfwGetFramebufferSize(window, &width, &height);
+            auto const dc = wglGetCurrentDC();
+            auto const window = dc ? WindowFromDC(dc) : nullptr;
+            RECT client = {};
+            if (!window || !GetClientRect(window, &client)) return false;
+            int const width = client.right - client.left;
+            int const height = client.bottom - client.top;
             if (width <= 0 || height <= 0) return false;
             GLint maxTextureSize = 0;
             glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
@@ -1772,13 +1796,11 @@ namespace {
             m_width = m_height = 0;
             m_writeIndex = m_validFrames = 0;
             m_interpolator.reset();
-            m_window = nullptr;
         }
         std::array<GLuint, 2> m_textures = {};
         bv::render::FrameInterpolationRenderer m_interpolator;
         WindowsGpuTimer m_timer;
         WindowsGlFence m_fence;
-        GLFWwindow* m_window = nullptr;
         GLsizei m_width = 0, m_height = 0;
         std::size_t m_writeIndex = 0, m_validFrames = 0;
     };
@@ -1933,11 +1955,10 @@ class $modify(BetterVisualsSceneVisitHook, CCNode) {
 #ifdef GEODE_IS_WINDOWS
 class $modify(BetterVisualsEGLView, CCEGLView) {
     void swapBuffers() {
-        auto* window = this->getWindow();
         bool const enabled = g_windowsFrameHistoryEnabled.load(std::memory_order_relaxed);
-        if (!enabled || !window) {
+        if (!enabled) {
             if (g_windowsFrameGenerationSwapInterval) {
-                glfwSwapInterval(1);
+                setWindowsSwapInterval(getWindowsSwapInterval() == 0 ? 1 : 1);
                 g_windowsFrameGenerationSwapInterval = false;
                 g_windowsFrameHistory.reset();
             }
@@ -1949,12 +1970,12 @@ class $modify(BetterVisualsEGLView, CCEGLView) {
         // wait while inserting the extra buffer; the desktop compositor and
         // monitor still determine which submitted buffers are physically shown.
         if (!g_windowsFrameGenerationSwapInterval) {
-            glfwSwapInterval(0);
+            setWindowsSwapInterval(0);
             g_windowsFrameGenerationSwapInterval = true;
-            log::info("[FrameGeneration][Windows] GLFW swap interval set to 0 for generated-buffer submission");
+            log::info("[FrameGeneration][Windows] WGL swap interval set to 0 for generated-buffer submission");
         }
 
-        bool const frameReady = g_windowsFrameHistory.capture(window);
+        bool const frameReady = g_windowsFrameHistory.capture();
         CCEGLView::swapBuffers(); // Always submit the real frame first.
         if (frameReady && g_windowsFrameHistory.generate() &&
             g_windowsFrameHistory.presentGeneratedFrame()) {
