@@ -77,7 +77,7 @@
     "frame-history-capture": {
       "type": "bool",
       "name": "Frame Generation (Experimental, Android)",
-      "description": "Experimental lightweight one-sided midpoint reprojection. Ambiguous pixels fall back to the current frame to avoid blended double images. Adds capture and presentation work; it may reduce game performance and does not increase the game simulation FPS.",
+      "description": "Experimental Android frame interpolation. Uses conservative motion matching and rejects uncertain pixels to reduce ghosting. When GPU timer queries are supported, interpolation pauses if its measured GPU cost exceeds 4 ms and probes again after a cooldown. It can still reduce performance and does not increase game simulation FPS.",
       "default": false,
       "platforms": [
         "android"
@@ -298,7 +298,7 @@
     "sgsr-quality-preset": {
       "type": "string",
       "name": "SGSR 1 Quality Preset",
-      "description": "Selects SGSR 1 input resolution. Custom uses Render Scale without a preset ratio. Lower presets reduce capture resolution and GPU work; transparency is preserved by the SGSR alpha-safe path.",
+      "description": "Experimental SGSR 1 input-resolution presets. Custom uses Render Scale without a preset ratio. Lower presets reduce capture resolution; if transparency artifacts appear, return to Custom while the capture path is validated.",
       "default": "Custom",
       "one-of": [
         "Custom",
