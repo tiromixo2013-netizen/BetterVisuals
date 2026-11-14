@@ -244,13 +244,13 @@ namespace bv::render {
             std::array<std::string_view, 1> vertexSources{kVertex};
             std::array<std::string_view, 1> fragmentSources{kFragment};
             m_program = compileShaderProgram(
-                "Android frame interpolation", vertexSources, fragmentSources
+                "Android predictive frame generation", vertexSources, fragmentSources
             );
             if (m_program == 0) return false;
 
             std::array<std::string_view, 1> presentSources{kPresentFragment};
             m_presentProgram = compileShaderProgram(
-                "Android midpoint presentation", vertexSources, presentSources
+                "Android generated-frame presentation", vertexSources, presentSources
             );
             if (m_presentProgram == 0) {
                 destroyResources();
