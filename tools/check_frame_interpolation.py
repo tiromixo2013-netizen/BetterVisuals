@@ -22,6 +22,12 @@ for token in (
     "m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])",
     "bool presentGeneratedFrame()",
     "if (!generated) m_gpuTimer.end()",
+    "supportsAndroidPresentationTime(display)",
+    "shouldGenerateOnThisInterval",
+    "m_realFrameSequence % 2",
+    "EGLBoolean const realSwapResult = eglSwapBuffers(display, surface)",
+    "generatedSwapResult",
+    "keeping the already-presented real frame",
 ):
     assert token in main, f"missing Android integration: {token}"
 
@@ -82,9 +88,10 @@ assert prepare_body.index("m_motionProgram && m_program && m_presentProgram") < 
 hook = main.split("EGLBoolean betterVisualsEglSwapBuffers", 1)[1].split(
     "void installAndroidEglSwapHook", 1
 )[0]
-native_swap = hook.index("result = eglSwapBuffers(display, surface)")
+native_swap = hook.index("EGLBoolean const realSwapResult = eglSwapBuffers(display, surface)")
 generated_draw = hook.index("g_androidFrameHistory.presentGeneratedFrame()")
 assert native_swap < generated_draw, "the real frame must be presented before the predicted frame"
+assert "if (realSwapResult == EGL_TRUE && frameReady && generateOnThisInterval)" in hook
 assert "presentNativeFrame" not in main
 assert "m_pendingTexture" not in main
 
