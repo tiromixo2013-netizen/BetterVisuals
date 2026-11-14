@@ -6,8 +6,8 @@
 
 namespace bv::render {
 
-    // Lightweight dense block-match motion estimate and midpoint reconstruction.
-    // Generates a GPU midpoint texture and can draw it into the active EGL back buffer.
+    // Legacy class name retained for source compatibility. Estimates forward motion
+    // from two real frames and generates a one-frame-ahead prediction texture.
     class FrameInterpolationRenderer final {
     public:
         FrameInterpolationRenderer() = default;
@@ -33,8 +33,8 @@ namespace bv::render {
         GLint m_currentUniform = -1;
         GLint m_invResolutionUniform = -1;
         GLint m_presentTextureUniform = -1;
-        // Internal midpoint is rendered at half the surface dimensions to cut
-        // the per-pixel motion-search workload on mobile GPUs.
+        // Prediction is rendered at half the surface dimensions to bound the
+        // per-pixel motion-search workload on mobile GPUs.
         GLsizei m_width = 0;
         GLsizei m_height = 0;
         GLsizei m_surfaceWidth = 0;
