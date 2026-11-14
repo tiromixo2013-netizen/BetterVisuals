@@ -9,6 +9,9 @@ renderer = Path("src/render/FrameInterpolationRenderer.cpp").read_text(encoding=
 
 for token in (
     "FrameInterpolationRenderer m_interpolator",
+    "m_gpuTimer.shouldInterpolate()",
+    "m_lastAverageNs > 4'000'000ULL",
+    "m_lastAverageNs < 2'500'000ULL",
     "m_interpolator.abandonContext()",
     "m_interpolator.prepare(width, height)",
     "m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])",
