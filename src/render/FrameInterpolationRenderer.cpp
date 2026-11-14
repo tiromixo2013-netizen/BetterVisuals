@@ -30,13 +30,11 @@ uniform sampler2D u_texture;
 void main() { gl_FragColor = texture2D(u_texture, v_uv); }
 )glsl";
 
-    // Low-cost bidirectional cross search. Five candidates in each direction
-    // replace the previous 3x3 + 3x3 search (18 match samples). Output remains
-    // half resolution; uncertain motion falls back to the native current frame.
-    // Minimal one-sided midpoint reprojection. Five inexpensive previous-frame
-    // candidates estimate motion; uncertain/ambiguous pixels use the current
-    // frame. A single source sample is used for accepted pixels (no temporal
-    // cross-blend), avoiding the double-image ghosting caused by averaging.
+    // Forward predictive reconstruction. Motion is estimated by matching the
+    // current pixel against the previous frame. The displacement is then
+    // extrapolated forward by one frame using the current image as the source.
+    // Ambiguous or inconsistent matches fall back to the current real frame.
+    // The output remains half-resolution to bound mobile GPU cost.
     constexpr char kFragment[] = R"glsl(
 precision mediump float;
 varying vec2 v_uv;
@@ -50,50 +48,49 @@ float matchCost(vec3 a, vec3 b) {
 }
 
 void main() {
-    vec3 current = texture2D(u_current, v_uv).rgb;
+    vec4 currentSample = texture2D(u_current, v_uv);
+    vec3 current = currentSample.rgb;
     vec2 searchStep = 2.0 * u_invResolution;
 
     float best = matchCost(current, texture2D(u_previous, v_uv).rgb);
     float second = 1.0;
-    vec2 offset = vec2(0.0);
+    vec2 previousOffset = vec2(0.0);
 
     float c = matchCost(current, texture2D(
         u_previous, clamp(v_uv + vec2(-searchStep.x, 0.0), 0.0, 1.0)
     ).rgb);
-    if (c < best) { second = best; best = c; offset = vec2(-searchStep.x, 0.0); }
+    if (c < best) { second = best; best = c; previousOffset = vec2(-searchStep.x, 0.0); }
     else { second = min(second, c); }
 
     c = matchCost(current, texture2D(
         u_previous, clamp(v_uv + vec2(searchStep.x, 0.0), 0.0, 1.0)
     ).rgb);
-    if (c < best) { second = best; best = c; offset = vec2(searchStep.x, 0.0); }
+    if (c < best) { second = best; best = c; previousOffset = vec2(searchStep.x, 0.0); }
     else { second = min(second, c); }
 
     c = matchCost(current, texture2D(
         u_previous, clamp(v_uv + vec2(0.0, -searchStep.y), 0.0, 1.0)
     ).rgb);
-    if (c < best) { second = best; best = c; offset = vec2(0.0, -searchStep.y); }
+    if (c < best) { second = best; best = c; previousOffset = vec2(0.0, -searchStep.y); }
     else { second = min(second, c); }
 
     c = matchCost(current, texture2D(
         u_previous, clamp(v_uv + vec2(0.0, searchStep.y), 0.0, 1.0)
     ).rgb);
-    if (c < best) { second = best; best = c; offset = vec2(0.0, searchStep.y); }
+    if (c < best) { second = best; best = c; previousOffset = vec2(0.0, searchStep.y); }
     else { second = min(second, c); }
 
-    // Reject weak and ambiguous matches. Falling back to the
-    // current frame avoids blending two unrelated positions into a ghost.
+    // A weak or ambiguous match is not safe to extrapolate.
     if (best > 0.08 || (second - best) < 0.003) {
-        gl_FragColor = vec4(current, 1.0);
+        gl_FragColor = currentSample;
         return;
     }
 
-    // Most confident pixels need no extra work. For borderline matches,
-    // verify that searching back from the previous-frame candidate recovers
-    // the opposite displacement. This conditional reverse check targets
-    // false matches at moving edges without doubling the cost on every pixel.
-    if (best > 0.02 && dot(offset, offset) > 0.0) {
-        vec2 previousCoord = clamp(v_uv + offset, 0.0, 1.0);
+    // Check that the previous-to-current correspondence is reversible.
+    // A disagreement indicates an occlusion, newly exposed region, or
+    // unreliable motion estimate; preserve the current real pixel there.
+    if (best > 0.02 && dot(previousOffset, previousOffset) > 0.0) {
+        vec2 previousCoord = clamp(v_uv + previousOffset, 0.0, 1.0);
         vec3 previousSample = texture2D(u_previous, previousCoord).rgb;
         float reverseBest = matchCost(
             previousSample, texture2D(u_current, previousCoord).rgb
@@ -121,20 +118,20 @@ void main() {
         if (c < reverseBest) { reverseBest = c; reverseOffset = vec2(0.0, searchStep.y); }
 
         bool inconsistent =
-            abs(reverseOffset.x + offset.x) > searchStep.x * 0.5 ||
-            abs(reverseOffset.y + offset.y) > searchStep.y * 0.5;
+            abs(reverseOffset.x + previousOffset.x) > searchStep.x * 0.5 ||
+            abs(reverseOffset.y + previousOffset.y) > searchStep.y * 0.5;
         if (reverseBest > 0.08 || inconsistent) {
-            gl_FragColor = vec4(current, 1.0);
+            gl_FragColor = currentSample;
             return;
         }
     }
 
-    // One-sided midpoint reprojection: use a single previous-frame sample.
-    // No temporal cross-blend is performed, avoiding double-image ghosting.
-    vec3 midpoint = texture2D(
-        u_previous, clamp(v_uv + offset * 0.5, 0.0, 1.0)
-    ).rgb;
-    gl_FragColor = vec4(midpoint, 1.0);
+    // previousOffset points from the current pixel back to its previous
+    // location. Sampling the current image in the opposite direction
+    // extrapolates the observed motion by one frame (not a midpoint).
+    vec2 predictedCoord = clamp(v_uv - previousOffset, 0.0, 1.0);
+    vec4 predictedSample = texture2D(u_current, predictedCoord);
+    gl_FragColor = predictedSample;
 }
 )glsl";
 
