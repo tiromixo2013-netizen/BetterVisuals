@@ -24,6 +24,8 @@
 #endif
 #ifdef GEODE_IS_WINDOWS
     #include <Geode/modify/CCEGLView.hpp>
+    #include <windows.h>
+    #include <GL/gl.h>
 #endif
 #ifdef GEODE_IS_MOBILE
     #include <Geode/modify/AppDelegate.hpp>
@@ -1503,6 +1505,311 @@ namespace {
 }
 #endif
 
+
+#ifdef GEODE_IS_WINDOWS
+namespace {
+    std::atomic<bool> g_windowsFrameHistoryEnabled = false;
+    bool g_windowsFrameGenerationSwapInterval = false;
+    int g_windowsPreviousSwapInterval = 1;
+    using WglSwapInterval = BOOL (WINAPI*)(int);
+    using WglGetSwapInterval = int (WINAPI*)();
+
+    template <class T>
+    T loadWindowsGlProc(char const* name) {
+        auto proc = wglGetProcAddress(name);
+        auto const value = reinterpret_cast<std::intptr_t>(proc);
+        if (!proc || value == 1 || value == 2 || value == 3 || value == -1) {
+            auto module = GetModuleHandleA("opengl32.dll");
+            proc = module ? reinterpret_cast<PROC>(GetProcAddress(module, name)) : nullptr;
+        }
+        return reinterpret_cast<T>(proc);
+    }
+
+    void setWindowsSwapInterval(int interval) {
+        auto setInterval = loadWindowsGlProc<WglSwapInterval>("wglSwapIntervalEXT");
+        if (setInterval) setInterval(interval);
+    }
+
+    int getWindowsSwapInterval() {
+        auto getInterval = loadWindowsGlProc<WglGetSwapInterval>("wglGetSwapIntervalEXT");
+        return getInterval ? getInterval() : 1;
+    }
+
+    class WindowsGpuTimer final {
+    public:
+        void begin() {
+            initialize();
+            if (!m_supported || m_active >= 0) return;
+            poll();
+            auto const index = m_next;
+            if (m_pending[index]) return;
+            m_beginQuery(0x88BF, m_queries[index]);
+            m_active = static_cast<int>(index);
+        }
+        bool shouldInterpolate() {
+            if (!m_supported || m_interpolationAllowed) return true;
+            if (m_framesUntilProbe > 0) {
+                --m_framesUntilProbe;
+                return false;
+            }
+            if (m_active < 0) return false;
+            m_probeQuery = m_active;
+            m_interpolationAllowed = true;
+            return true;
+        }
+        void end() {
+            if (m_active < 0) return;
+            m_endQuery(0x88BF);
+            m_pending[static_cast<std::size_t>(m_active)] = true;
+            m_next = (static_cast<std::size_t>(m_active) + 1) % m_queries.size();
+            m_active = -1;
+        }
+    private:
+        using GenQueries = void (APIENTRY*)(GLsizei, GLuint*);
+        using DeleteQueries = void (APIENTRY*)(GLsizei, GLuint const*);
+        using BeginQuery = void (APIENTRY*)(GLenum, GLuint);
+        using EndQuery = void (APIENTRY*)(GLenum);
+        using GetQueryObjectuiv = void (APIENTRY*)(GLuint, GLenum, GLuint*);
+        using GetQueryObjectui64v = void (APIENTRY*)(GLuint, GLenum, GLuint64*);
+
+        template <class T>
+        static T load(char const* name) {
+            return loadWindowsGlProc<T>(name);
+        }
+        void initialize() {
+            if (m_checked) return;
+            m_checked = true;
+            auto const raw = reinterpret_cast<char const*>(glGetString(GL_EXTENSIONS));
+            if (!raw) return;
+            std::string_view extensions(raw);
+            if (extensions.find("GL_ARB_timer_query") == std::string_view::npos &&
+                extensions.find("GL_EXT_timer_query") == std::string_view::npos) {
+                log::info("[FrameGeneration][Windows][GPU] Timer queries unavailable; adaptive GPU budget disabled");
+                return;
+            }
+            m_genQueries = load<GenQueries>("glGenQueries");
+            m_deleteQueries = load<DeleteQueries>("glDeleteQueries");
+            m_beginQuery = load<BeginQuery>("glBeginQuery");
+            m_endQuery = load<EndQuery>("glEndQuery");
+            m_getQueryObjectuiv = load<GetQueryObjectuiv>("glGetQueryObjectuiv");
+            m_getQueryObjectui64v = load<GetQueryObjectui64v>("glGetQueryObjectui64v");
+            if (!m_genQueries || !m_deleteQueries || !m_beginQuery || !m_endQuery ||
+                !m_getQueryObjectuiv || !m_getQueryObjectui64v) {
+                log::warn("[FrameGeneration][Windows][GPU] Timer-query entry points incomplete");
+                return;
+            }
+            m_genQueries(static_cast<GLsizei>(m_queries.size()), m_queries.data());
+            for (auto query : m_queries) {
+                if (!query) {
+                    if (m_queries[0]) m_deleteQueries(static_cast<GLsizei>(m_queries.size()), m_queries.data());
+                    m_queries = {};
+                    return;
+                }
+            }
+            m_supported = true;
+            log::info("[FrameGeneration][Windows][GPU] OpenGL timer queries enabled");
+        }
+        void poll() {
+            for (std::size_t i = 0; i < m_queries.size(); ++i) {
+                if (!m_pending[i]) continue;
+                GLuint available = GL_FALSE;
+                m_getQueryObjectuiv(m_queries[i], 0x8867, &available);
+                if (!available) continue;
+                GLuint64 elapsedNs = 0;
+                m_getQueryObjectui64v(m_queries[i], 0x8866, &elapsedNs);
+                if (static_cast<int>(i) == m_probeQuery) {
+                    m_probeQuery = -1;
+                    m_interpolationAllowed = elapsedNs <= 4'000'000ULL;
+                    if (!m_interpolationAllowed) m_framesUntilProbe = 120;
+                }
+                else if (m_interpolationAllowed) {
+                    m_totalNs += elapsedNs;
+                    ++m_windowSamples;
+                    if (m_windowSamples >= 30) {
+                        auto const average = m_totalNs / m_windowSamples;
+                        if (average > 4'000'000ULL) {
+                            m_interpolationAllowed = false;
+                            m_framesUntilProbe = 120;
+                            log::warn("[FrameGeneration][Windows][GPU] Paused for 120 frames after {} us average cost",
+                                average / 1000);
+                        }
+                        m_totalNs = 0;
+                        m_windowSamples = 0;
+                    }
+                }
+                m_pending[i] = false;
+            }
+        }
+        bool m_checked = false;
+        bool m_supported = false;
+        bool m_interpolationAllowed = true;
+        int m_active = -1;
+        int m_probeQuery = -1;
+        std::size_t m_next = 0;
+        std::uint32_t m_framesUntilProbe = 0;
+        std::uint32_t m_windowSamples = 0;
+        std::uint64_t m_totalNs = 0;
+        std::array<GLuint, 4> m_queries = {};
+        std::array<bool, 4> m_pending = {};
+        GenQueries m_genQueries = nullptr;
+        DeleteQueries m_deleteQueries = nullptr;
+        BeginQuery m_beginQuery = nullptr;
+        EndQuery m_endQuery = nullptr;
+        GetQueryObjectuiv m_getQueryObjectuiv = nullptr;
+        GetQueryObjectui64v m_getQueryObjectui64v = nullptr;
+    };
+
+    class WindowsGlFence final {
+    public:
+        using FenceSync = void* (APIENTRY*)(GLenum, GLbitfield);
+        using ClientWaitSync = GLenum (APIENTRY*)(void*, GLbitfield, GLuint64);
+        using DeleteSync = void (APIENTRY*)(void*);
+        void initialize() {
+            if (m_checked) return;
+            m_checked = true;
+            m_fenceSync = loadWindowsGlProc<FenceSync>("glFenceSync");
+            m_clientWaitSync = loadWindowsGlProc<ClientWaitSync>("glClientWaitSync");
+            m_deleteSync = loadWindowsGlProc<DeleteSync>("glDeleteSync");
+            if (!m_fenceSync || !m_clientWaitSync || !m_deleteSync) {
+                m_fenceSync = nullptr;
+                m_clientWaitSync = nullptr;
+                m_deleteSync = nullptr;
+                log::warn("[FrameGeneration][Windows][Fence] GL sync unavailable; frame history will use same-context command ordering");
+            }
+        }
+        bool retire() {
+            initialize();
+            if (!m_sync || !m_clientWaitSync || !m_deleteSync) return true;
+            auto const status = m_clientWaitSync(m_sync, 0, 0);
+            if (status == 0x911B) return false; // GL_TIMEOUT_EXPIRED
+            m_deleteSync(m_sync);
+            m_sync = nullptr;
+            return status == 0x911A || status == 0x911C; // already signaled / condition satisfied
+        }
+        void insert() {
+            initialize();
+            if (!m_fenceSync) return;
+            if (m_sync && m_deleteSync) m_deleteSync(m_sync);
+            m_sync = m_fenceSync(0x9117, 0); // GL_SYNC_GPU_COMMANDS_COMPLETE
+        }
+        void reset() {
+            if (m_sync && m_deleteSync) m_deleteSync(m_sync);
+            m_sync = nullptr;
+        }
+    private:
+        bool m_checked = false;
+        void* m_sync = nullptr;
+        FenceSync m_fenceSync = nullptr;
+        ClientWaitSync m_clientWaitSync = nullptr;
+        DeleteSync m_deleteSync = nullptr;
+    };
+
+    class WindowsFrameHistory final {
+    public:
+        bool capture() {
+            if (!m_fence.retire()) return false;
+            auto const dc = wglGetCurrentDC();
+            auto const window = dc ? WindowFromDC(dc) : nullptr;
+            RECT client = {};
+            if (!window || !GetClientRect(window, &client)) return false;
+            int const width = client.right - client.left;
+            int const height = client.bottom - client.top;
+            if (width <= 0 || height <= 0) return false;
+            GLint maxTextureSize = 0;
+            glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+            if (maxTextureSize <= 0 || width > maxTextureSize || height > maxTextureSize) return false;
+            if (width != m_width || height != m_height) {
+                if (m_textures[0] || m_textures[1]) {
+                    glDeleteTextures(static_cast<GLsizei>(m_textures.size()), m_textures.data());
+                }
+                m_textures = {};
+                m_width = width;
+                m_height = height;
+                m_writeIndex = 0;
+                m_validFrames = 0;
+                m_interpolator.reset();
+            }
+
+            GLint previousFramebuffer = 0, previousActiveTexture = GL_TEXTURE0, previousTexture = 0;
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+            glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+            glActiveTexture(GL_TEXTURE0);
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+            if (!m_textures[0] && !m_textures[1]) {
+                glGenTextures(2, m_textures.data());
+                if (!m_textures[0] || !m_textures[1]) {
+                    if (m_textures[0] || m_textures[1]) glDeleteTextures(2, m_textures.data());
+                    m_textures = {};
+                }
+                else {
+                    for (auto texture : m_textures) {
+                        glBindTexture(GL_TEXTURE_2D, texture);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                    }
+                }
+            }
+            bool captured = false;
+            if (m_textures[0] && m_textures[1]) {
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                glBindTexture(GL_TEXTURE_2D, m_textures[m_writeIndex]);
+                glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+                captured = true;
+            }
+            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+            glActiveTexture(static_cast<GLenum>(previousActiveTexture));
+            glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
+            if (captured) {
+                m_writeIndex = 1 - m_writeIndex;
+                if (m_validFrames < 2) ++m_validFrames;
+            }
+            return captured && m_validFrames == 2;
+        }
+
+        bool generate() {
+            if (m_validFrames < 2 || m_width <= 0 || m_height <= 0) return false;
+            m_timer.begin();
+            auto const previousIndex = m_writeIndex;
+            auto const currentIndex = 1 - m_writeIndex;
+            if (m_timer.shouldInterpolate() &&
+                m_interpolator.prepare(m_width, m_height) &&
+                m_interpolator.generate(m_textures[previousIndex], m_textures[currentIndex])) {
+                return true;
+            }
+            m_timer.end();
+            return false;
+        }
+        bool presentGeneratedFrame() {
+            auto const result = m_interpolator.present();
+            m_timer.end();
+            return result;
+        }
+        void finishPresentation() { m_fence.insert(); }
+        void reset() { abandon(); }
+    private:
+        void abandon() {
+            m_fence.reset();
+            if (m_textures[0] || m_textures[1]) glDeleteTextures(2, m_textures.data());
+            m_textures = {};
+            m_width = m_height = 0;
+            m_writeIndex = m_validFrames = 0;
+            m_interpolator.reset();
+        }
+        std::array<GLuint, 2> m_textures = {};
+        bv::render::FrameInterpolationRenderer m_interpolator;
+        WindowsGpuTimer m_timer;
+        WindowsGlFence m_fence;
+        GLsizei m_width = 0, m_height = 0;
+        std::size_t m_writeIndex = 0, m_validFrames = 0;
+    };
+
+    WindowsFrameHistory g_windowsFrameHistory;
+}
+#endif
+
 $on_mod(Loaded) {
 #ifdef GEODE_IS_ANDROID
     installAndroidEglSwapHook();
@@ -1513,6 +1820,9 @@ $on_mod(Loaded) {
     bindBoolSetting("frame-history-capture", g_frameHistoryEnabled);
     bindBoolSetting("frame-pacing-enabled", g_framePacingEnabled);
     bindBoolSetting("low-latency-enabled", g_lowLatencyEnabled);
+#endif
+#ifdef GEODE_IS_WINDOWS
+    bindBoolSetting("frame-history-capture", g_windowsFrameHistoryEnabled);
 #endif
 
     auto applyFullScene = [](bool on) {
@@ -1645,7 +1955,39 @@ class $modify(BetterVisualsSceneVisitHook, CCNode) {
 
 #ifdef GEODE_IS_WINDOWS
 class $modify(BetterVisualsEGLView, CCEGLView) {
+    void swapBuffers() {
+        bool const enabled = g_windowsFrameHistoryEnabled.load(std::memory_order_relaxed);
+        if (!enabled) {
+            if (g_windowsFrameGenerationSwapInterval) {
+                setWindowsSwapInterval(g_windowsPreviousSwapInterval);
+                g_windowsFrameGenerationSwapInterval = false;
+                g_windowsFrameHistory.reset();
+            }
+            CCEGLView::swapBuffers();
+            return;
+        }
+
+        // The Windows path uses GLFW/WGL. Disable the driver's per-swap VSync
+        // wait while inserting the extra buffer; the desktop compositor and
+        // monitor still determine which submitted buffers are physically shown.
+        if (!g_windowsFrameGenerationSwapInterval) {
+            g_windowsPreviousSwapInterval = getWindowsSwapInterval();
+            setWindowsSwapInterval(0);
+            g_windowsFrameGenerationSwapInterval = true;
+            log::info("[FrameGeneration][Windows] WGL swap interval set to 0 for generated-buffer submission");
+        }
+
+        bool const frameReady = g_windowsFrameHistory.capture();
+        CCEGLView::swapBuffers(); // Always submit the real frame first.
+        if (frameReady && g_windowsFrameHistory.generate() &&
+            g_windowsFrameHistory.presentGeneratedFrame()) {
+            g_windowsFrameHistory.finishPresentation();
+            CCEGLView::swapBuffers(); // Submit one generated frame for each real interval (2x target).
+        }
+    }
+
     void toggleFullScreen(bool value, bool borderless, bool fix) {
+        g_windowsFrameHistory.reset();
         if (!g_temporarilyDisabled.exchange(true)) {
             resetRenderResources();
         }
