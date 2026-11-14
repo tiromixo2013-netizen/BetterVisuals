@@ -46,6 +46,8 @@ for token in (
     "reuseValid",
     "directionReversal",
     "m_motionTextures",
+    "auto const writeIndex = 1 - m_motionReadIndex",
+    "never simultaneously sampled as reuse history",
     "m_hasMotionHistory",
     "outputWidth = std::max<GLsizei>(1, (width + 1) / 2)",
     "outputHeight = std::max<GLsizei>(1, (height + 1) / 2)",
