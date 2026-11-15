@@ -177,7 +177,6 @@ $on_mod(Loaded) {
     );
     listenForSettingChanges<bool>("windows-frame-generation", [](bool enabled) {
         g_windowsFrameGenerationEnabled.store(enabled, std::memory_order_relaxed);
-        if (!enabled) g_windowsFrameHistory.disable();
     });
 }
 
