@@ -28,19 +28,10 @@ namespace {
             auto const dc = wglGetCurrentDC();
             if (!context || !dc) return false;
 
-            // The only cadence we attempt is two VSync-paced swaps on a
-            // reported 120 Hz output with the application's interval already 1:
-            // real frame, then generated midpoint. DWM/driver composition can
-            // still alter final display cadence, so this is not a display guarantee.
+            // No refresh-rate minimum: allow any display frequency.
+            // Keep the game's existing VSync interval unchanged; desktop
+            // composition/driver policy still determine actual presentation cadence.
             // Do not force interval 0: that explicitly removes retrace sync.
-            auto const refreshRate = GetDeviceCaps(dc, VREFRESH);
-            if (refreshRate != 120) {
-                if (!m_refreshWarningLogged) {
-                    m_refreshWarningLogged = true;
-                    log::warn("[FrameGeneration][Windows] Safe two-swap cadence currently requires a reported 120 Hz display; no swap policy will be changed");
-                }
-                return false;
-            }
 
             if (m_context != context) {
                 m_renderer.abandonContext();
@@ -57,7 +48,7 @@ namespace {
             glGetIntegerv(GL_FRAMEBUFFER_BINDING, &framebuffer);
             glGetIntegerv(GL_VIEWPORT, viewport);
             if (framebuffer != 0 || viewport[2] <= 0 || viewport[3] <= 0) return false;
-            if (!hasSafeVsyncCadence(context)) return false;
+            if (!hasSafeVsyncCadence()) return false;
 
             auto const width = viewport[2];
             auto const height = viewport[3];
@@ -123,7 +114,7 @@ namespace {
                 proc != reinterpret_cast<T>(-1);
         }
 
-        bool hasSafeVsyncCadence(HGLRC context) {
+        bool hasSafeVsyncCadence() {
             auto const getInterval = reinterpret_cast<WglGetSwapInterval>(
                 wglGetProcAddress("wglGetSwapIntervalEXT"));
             if (!isValidWglProc(getInterval)) {
@@ -145,7 +136,7 @@ namespace {
 
             if (!m_cadenceInfoLogged) {
                 m_cadenceInfoLogged = true;
-                log::info("[FrameGeneration][Windows] Existing VSync interval 1 confirmed on 120 Hz; WGL swap policy remains untouched");
+                log::info("[FrameGeneration][Windows] Existing VSync interval 1 confirmed; refresh-rate restriction is disabled and WGL swap policy remains untouched");
             }
             return true;
         }
@@ -170,7 +161,6 @@ namespace {
         std::size_t m_writeIndex = 0;
         std::size_t m_currentIndex = 0;
         std::size_t m_validFrames = 0;
-        bool m_refreshWarningLogged = false;
         bool m_swapExtensionWarningLogged = false;
         bool m_swapCadenceWarningLogged = false;
         bool m_cadenceInfoLogged = false;
