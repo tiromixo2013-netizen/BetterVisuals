@@ -49,7 +49,6 @@ namespace {
                 m_writeIndex = 0;
                 m_validFrames = 0;
                 m_context = context;
-                m_contextWithCadence = nullptr;
             }
 
             GLint framebuffer = 0;
@@ -124,7 +123,6 @@ namespace {
         }
 
         bool hasSafeVsyncCadence(HGLRC context) {
-            if (m_contextWithCadence == context) return true;
             auto const getInterval = reinterpret_cast<WglGetSwapInterval>(
                 wglGetProcAddress("wglGetSwapIntervalEXT"));
             if (!isValidWglProc(getInterval)) {
@@ -144,8 +142,10 @@ namespace {
                 return false;
             }
 
-            m_contextWithCadence = context;
-            log::info("[FrameGeneration][Windows] Using existing VSync interval 1 on 120 Hz; WGL swap policy remains untouched");
+            if (!m_cadenceInfoLogged) {
+                m_cadenceInfoLogged = true;
+                log::info("[FrameGeneration][Windows] Existing VSync interval 1 confirmed on 120 Hz; WGL swap policy remains untouched");
+            }
             return true;
         }
 
@@ -164,7 +164,6 @@ namespace {
         bv::render::FrameInterpolationRenderer m_renderer;
         std::array<GLuint, 2> m_textures{};
         HGLRC m_context = nullptr;
-        HGLRC m_contextWithCadence = nullptr;
         GLsizei m_width = 0;
         GLsizei m_height = 0;
         std::size_t m_writeIndex = 0;
@@ -173,6 +172,7 @@ namespace {
         bool m_refreshWarningLogged = false;
         bool m_swapExtensionWarningLogged = false;
         bool m_swapCadenceWarningLogged = false;
+        bool m_cadenceInfoLogged = false;
     };
 
     WindowsFrameHistory g_windowsFrameHistory;
