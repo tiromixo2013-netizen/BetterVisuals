@@ -27,7 +27,7 @@ namespace {
         bool beginFrame() {
             auto const context = wglGetCurrentContext();
             auto const dc = wglGetCurrentDC();
-            if (!context || !dc || !enableUnpacedSwap(context)) return false;
+            if (!context || !dc) return false;
 
             // Frame generation is only useful when the active output can scan
             // at least twice the game's nominal 60 Hz source cadence.
@@ -55,6 +55,7 @@ namespace {
             glGetIntegerv(GL_FRAMEBUFFER_BINDING, &framebuffer);
             glGetIntegerv(GL_VIEWPORT, viewport);
             if (framebuffer != 0 || viewport[2] <= 0 || viewport[3] <= 0) return false;
+            if (!enableUnpacedSwap(context)) return false;
 
             auto const width = viewport[2];
             auto const height = viewport[3];
@@ -195,6 +196,7 @@ class $modify(BetterVisualsWindowsFrameGenerationHook, CCEGLView) {
 
         g_insideWindowsFrameGenerationHook = true;
         bool const captured = g_windowsFrameHistory.beginFrame();
+        if (!captured) g_windowsFrameHistory.disable();
 
         // Always present the genuine game frame first. A failed capture,
         // reconstruction, or generated swap can never replace the real frame.
