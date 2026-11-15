@@ -86,7 +86,7 @@
     "windows-frame-generation": {
       "type": "bool",
       "name": "Frame Generation (Experimental, Windows)",
-      "description": "Creates one GPU-reconstructed midpoint frame after each real frame on Windows. Requires a 100 Hz or faster display and WGL swap-control support. Uses the existing adaptive block-motion shader at half resolution and keeps the real frame first; Windows desktop composition still controls whether every generated swap reaches the display. Experimental and disabled by default.",
+      "description": "Creates one GPU-reconstructed midpoint frame after each real frame on Windows, using two VSync-paced swaps. Currently activates only when the active window reports 120 Hz and the existing WGL swap interval is already 1; it never changes the game's swap interval. Other refresh rates, unavailable WGL queries, or non-VSync configurations fall back to normal real-frame presentation. Uses the adaptive block-motion shader at half resolution. Windows desktop composition and driver policy still determine final display cadence. Experimental and disabled by default.",
       "default": false,
       "platforms": [
         "win"
