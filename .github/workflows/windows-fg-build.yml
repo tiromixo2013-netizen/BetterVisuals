@@ -1,0 +1,42 @@
+name: Windows Frame Generation Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - windows-frame-generation-integration
+    paths:
+      - "src/**"
+      - "include/**"
+      - "mod.json"
+      - "CMakeLists.txt"
+      - ".github/workflows/windows-fg-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build BetterVisuals Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Build Geode mod (Win64)
+        id: build
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          sdk: given
+          target: Win64
+          build-config: Release
+          use-lto: false
+
+      - name: Upload Windows .geode
+        uses: actions/upload-artifact@v4
+        with:
+          name: BetterVisuals-Windows-FG
+          path: ${{ steps.build.outputs.build-output }}/*.geode
+          if-no-files-found: error
+          retention-days: 14
