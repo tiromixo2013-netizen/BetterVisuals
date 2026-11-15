@@ -205,6 +205,11 @@ class $modify(BetterVisualsWindowsFrameGenerationHook, CCEGLView) {
         if (captured && g_windowsFrameHistory.generateAndPresent()) {
             CCEGLView::swapBuffers();
         }
+        else {
+            // If no midpoint was produced (including the first history frame),
+            // restore the game's original swap interval instead of leaving it uncapped.
+            g_windowsFrameHistory.disable();
+        }
         g_insideWindowsFrameGenerationHook = false;
     }
 };
