@@ -25,7 +25,9 @@ void main() {
 
     // Pass 1: coarse block motion with conditional diagonal probes for fast movement.
     constexpr char kMotionFragment[] = R"glsl(
+#ifdef GL_ES
 precision mediump float;
+#endif
 varying vec2 v_uv;
 uniform sampler2D u_previous;
 uniform sampler2D u_current;
@@ -157,7 +159,9 @@ void main() {
 
     // Pass 2: alpha-aware reconstruction; fast motion uses a conservative 0.25 step.
     constexpr char kFragment[] = R"glsl(
+#ifdef GL_ES
 precision mediump float;
+#endif
 varying vec2 v_uv;
 uniform sampler2D u_previous;
 uniform sampler2D u_current;
@@ -441,15 +445,15 @@ namespace bv::render {
             std::array<std::string_view, 1> vertexSources{kVertex};
             std::array<std::string_view, 1> motionSources{kMotionFragment};
             m_motionProgram = compileShaderProgram(
-                "Android adaptive block motion estimation", vertexSources, motionSources
+                "Adaptive block motion estimation", vertexSources, motionSources
             );
             std::array<std::string_view, 1> fragmentSources{kFragment};
             m_program = compileShaderProgram(
-                "Android predictive frame reconstruction", vertexSources, fragmentSources
+                "Predictive frame reconstruction", vertexSources, fragmentSources
             );
             std::array<std::string_view, 1> presentSources{kPresentFragment};
             m_presentProgram = compileShaderProgram(
-                "Android generated-frame presentation", vertexSources, presentSources
+                "Generated-frame presentation", vertexSources, presentSources
             );
             if (!m_motionProgram || !m_program || !m_presentProgram) {
                 destroyResources();
