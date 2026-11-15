@@ -17,7 +17,6 @@
 using namespace geode::prelude;
 
 namespace {
-    using WglSetSwapInterval = BOOL (WINAPI*)(int);
     using WglGetSwapInterval = int (WINAPI*)();
 
     std::atomic<bool> g_windowsFrameGenerationEnabled{false};
@@ -29,13 +28,15 @@ namespace {
             auto const dc = wglGetCurrentDC();
             if (!context || !dc) return false;
 
-            // Frame generation is only useful when the active output can scan
-            // at least twice the game's nominal 60 Hz source cadence.
+            // This two-swap path has a deterministic cadence only on a 120 Hz
+            // output with the application's existing interval set to 1:
+            // real frame at one retrace, generated midpoint at the next.
+            // Do not force interval 0: that explicitly removes retrace sync.
             auto const refreshRate = GetDeviceCaps(dc, VREFRESH);
-            if (refreshRate < 100) {
+            if (refreshRate != 120) {
                 if (!m_refreshWarningLogged) {
                     m_refreshWarningLogged = true;
-                    log::warn("[FrameGeneration][Windows] A 100 Hz or faster display is required; generation remains inactive");
+                    log::warn("[FrameGeneration][Windows] Safe two-swap cadence currently requires a reported 120 Hz display; no swap policy will be changed");
                 }
                 return false;
             }
@@ -48,6 +49,7 @@ namespace {
                 m_writeIndex = 0;
                 m_validFrames = 0;
                 m_context = context;
+                m_contextWithCadence = nullptr;
             }
 
             GLint framebuffer = 0;
@@ -55,7 +57,7 @@ namespace {
             glGetIntegerv(GL_FRAMEBUFFER_BINDING, &framebuffer);
             glGetIntegerv(GL_VIEWPORT, viewport);
             if (framebuffer != 0 || viewport[2] <= 0 || viewport[3] <= 0) return false;
-            if (!enableUnpacedSwap(context)) return false;
+            if (!hasSafeVsyncCadence(context)) return false;
 
             auto const width = viewport[2];
             auto const height = viewport[3];
@@ -105,38 +107,46 @@ namespace {
         }
 
         void disable() {
-            restoreSwapInterval();
+            // Intentionally no swap-state mutation: this hook never changes
+            // the game's WGL swap interval, so there is nothing to restore.
         }
 
     private:
-        bool enableUnpacedSwap(HGLRC context) {
-            if (m_contextWithSwapPolicy == context && m_swapPolicyReady) return true;
-            auto const setInterval = reinterpret_cast<WglSetSwapInterval>(
-                wglGetProcAddress("wglSwapIntervalEXT"));
+        template <typename T>
+        static bool isValidWglProc(T proc) {
+            // wglGetProcAddress may return the legacy invalid sentinels 1, 2,
+            // 3, or -1 rather than nullptr.
+            return proc &&
+                proc != reinterpret_cast<T>(1) &&
+                proc != reinterpret_cast<T>(2) &&
+                proc != reinterpret_cast<T>(3) &&
+                proc != reinterpret_cast<T>(-1);
+        }
+
+        bool hasSafeVsyncCadence(HGLRC context) {
+            if (m_contextWithCadence == context) return true;
             auto const getInterval = reinterpret_cast<WglGetSwapInterval>(
                 wglGetProcAddress("wglGetSwapIntervalEXT"));
-            if (!setInterval || !getInterval) {
+            if (!isValidWglProc(getInterval)) {
                 if (!m_swapExtensionWarningLogged) {
                     m_swapExtensionWarningLogged = true;
-                    log::warn("[FrameGeneration][Windows] WGL swap-control extensions unavailable; generated swaps are disabled");
+                    log::warn("[FrameGeneration][Windows] WGL swap-control query unavailable; generated swaps remain disabled");
                 }
                 return false;
             }
-            m_originalSwapInterval = getInterval();
-            if (setInterval(0) != TRUE) return false;
-            m_contextWithSwapPolicy = context;
-            m_swapPolicyReady = true;
-            log::info("[FrameGeneration][Windows] WGL swap interval set to 0 for best-effort 2x presentation");
-            return true;
-        }
 
-        void restoreSwapInterval() {
-            if (!m_swapPolicyReady) return;
-            auto const setInterval = reinterpret_cast<WglSetSwapInterval>(
-                wglGetProcAddress("wglSwapIntervalEXT"));
-            if (setInterval) (void)setInterval(m_originalSwapInterval);
-            m_swapPolicyReady = false;
-            m_contextWithSwapPolicy = nullptr;
+            auto const interval = getInterval();
+            if (interval != 1) {
+                if (!m_swapCadenceWarningLogged) {
+                    m_swapCadenceWarningLogged = true;
+                    log::warn("[FrameGeneration][Windows] Existing WGL swap interval is not 1; refusing unsafe generated swaps and leaving the game's setting unchanged");
+                }
+                return false;
+            }
+
+            m_contextWithCadence = context;
+            log::info("[FrameGeneration][Windows] Using existing VSync interval 1 on 120 Hz; WGL swap policy remains untouched");
+            return true;
         }
 
         void releaseSizeResources() {
@@ -154,16 +164,15 @@ namespace {
         bv::render::FrameInterpolationRenderer m_renderer;
         std::array<GLuint, 2> m_textures{};
         HGLRC m_context = nullptr;
-        HGLRC m_contextWithSwapPolicy = nullptr;
+        HGLRC m_contextWithCadence = nullptr;
         GLsizei m_width = 0;
         GLsizei m_height = 0;
         std::size_t m_writeIndex = 0;
         std::size_t m_currentIndex = 0;
         std::size_t m_validFrames = 0;
-        int m_originalSwapInterval = 1;
-        bool m_swapPolicyReady = false;
         bool m_refreshWarningLogged = false;
         bool m_swapExtensionWarningLogged = false;
+        bool m_swapCadenceWarningLogged = false;
     };
 
     WindowsFrameHistory g_windowsFrameHistory;
