@@ -28,9 +28,10 @@ namespace {
             auto const dc = wglGetCurrentDC();
             if (!context || !dc) return false;
 
-            // This two-swap path has a deterministic cadence only on a 120 Hz
-            // output with the application's existing interval set to 1:
-            // real frame at one retrace, generated midpoint at the next.
+            // The only cadence we attempt is two VSync-paced swaps on a
+            // reported 120 Hz output with the application's interval already 1:
+            // real frame, then generated midpoint. DWM/driver composition can
+            // still alter final display cadence, so this is not a display guarantee.
             // Do not force interval 0: that explicitly removes retrace sync.
             auto const refreshRate = GetDeviceCaps(dc, VREFRESH);
             if (refreshRate != 120) {
