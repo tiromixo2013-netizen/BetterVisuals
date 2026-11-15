@@ -83,6 +83,15 @@
         "android"
       ]
     },
+    "windows-frame-generation": {
+      "type": "bool",
+      "name": "Frame Generation (Experimental, Windows)",
+      "description": "Creates one GPU-reconstructed midpoint frame after each real frame on Windows. Requires a 100 Hz or faster display and WGL swap-control support. Uses the existing adaptive block-motion shader at half resolution and keeps the real frame first; Windows desktop composition still controls whether every generated swap reaches the display. Experimental and disabled by default.",
+      "default": false,
+      "platforms": [
+        "win"
+      ]
+    },
     "render-scale": {
       "type": "float",
       "name": "Render Scale",
