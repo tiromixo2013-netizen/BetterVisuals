@@ -68,6 +68,7 @@ namespace {
         FsrLite,
         Sgsr,
         Integer,
+        SmartInteger,
     };
 
     struct PostProcessConfig {
@@ -284,6 +285,10 @@ namespace {
             g_upscaleMethod.store(UpscaleMethod::Integer, std::memory_order_relaxed);
             return;
         }
+        if (value == "Integer Smart Reconstruction") {
+            g_upscaleMethod.store(UpscaleMethod::SmartInteger, std::memory_order_relaxed);
+            return;
+        }
 
         if (value != "Nearest") {
             log::warn("Unknown upscale method '{}', using nearest neighbour", value);
@@ -498,7 +503,8 @@ namespace {
                 g_ssaaRenderer.reset();
                 prepared = g_fsrRenderer.prepare(bv::shaders::kFsrShader, key.width, key.height);
             }
-            else if (config.upscaling == UpscaleMethod::FsrLite) {
+            else if (config.upscaling == UpscaleMethod::FsrLite ||
+                     config.upscaling == UpscaleMethod::SmartInteger) {
                 g_renderScaleRenderer.reset();
                 g_fsrRenderer.reset();
                 g_ssaaRenderer.reset();
@@ -617,7 +623,9 @@ namespace {
             g_fsrPresetScale.load(std::memory_order_relaxed) :
             (config.upscaling == UpscaleMethod::Sgsr ?
                 g_sgsrPresetScale.load(std::memory_order_relaxed) : 0.f);
-        auto const integerScaling = config.upscaling == UpscaleMethod::Integer;
+        auto const smartIntegerScaling = config.upscaling == UpscaleMethod::SmartInteger;
+        auto const integerScaling =
+            config.upscaling == UpscaleMethod::Integer || smartIntegerScaling;
         auto const integerFactor = integerScaling ?
             std::clamp(g_integerScaleFactor.load(std::memory_order_relaxed), 1, 3) : 1;
         auto const requestedScale =
@@ -743,7 +751,9 @@ namespace {
 
                 auto const linearSampling =
                     needsDownsample || config.upscaling == UpscaleMethod::Bilinear ||
-                    config.upscaling == UpscaleMethod::FsrLite || config.upscaling == UpscaleMethod::Sgsr;
+                    config.upscaling == UpscaleMethod::FsrLite ||
+                    config.upscaling == UpscaleMethod::SmartInteger ||
+                    config.upscaling == UpscaleMethod::Sgsr;
                 glTexParameteri(
                     GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linearSampling ? GL_LINEAR : GL_NEAREST
                 );
@@ -790,7 +800,8 @@ namespace {
                 else if (config.upscaling == UpscaleMethod::Fsr) {
                     g_fsrRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
                 }
-                else if (config.upscaling == UpscaleMethod::FsrLite) {
+                else if (config.upscaling == UpscaleMethod::FsrLite ||
+                         config.upscaling == UpscaleMethod::SmartInteger) {
                     g_fsrLiteRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
                 }
                 else if (config.upscaling == UpscaleMethod::Sgsr) {
