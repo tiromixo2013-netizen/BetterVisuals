@@ -8,6 +8,7 @@ def main() -> None:
     settings = json.loads(Path("mod.json").read_text(encoding="utf-8"))["settings"]
     methods = settings["upscale-method"]["one-of"]
     assert "Integer Scaling" in methods
+    assert "Integer Smart Reconstruction" in methods
 
     preset = settings["integer-scaling-quality-preset"]
     assert preset["default"] == "Performance (2x)"
@@ -19,6 +20,10 @@ def main() -> None:
 
     source = Path("src/main.cpp").read_text(encoding="utf-8")
     assert "Integer," in source
+    assert "SmartInteger," in source
+    assert 'value == "Integer Smart Reconstruction"' in source
+    assert "auto const smartIntegerScaling" in source
+    assert "UpscaleMethod::SmartInteger" in source
     assert 'value == "Integer Scaling"' in source
     assert 'bindStringSetting("integer-scaling-quality-preset", updateIntegerScalingPreset)' in source
     assert 'if (value == "Native (1x)") factor = 1;' in source
@@ -40,6 +45,7 @@ def main() -> None:
     assert "config.upscaling == UpscaleMethod::FsrLite" in source
     assert "config.upscaling == UpscaleMethod::Sgsr" in source
     assert "config.upscaling == UpscaleMethod::Integer" in source
+    assert "config.upscaling == UpscaleMethod::SmartInteger" in source
     assert "slider and SSAA multiplier are intentionally bypassed" in source
     print("Integer Scaling 1x/2x/3x integration checks passed (static checks only).")
 
