@@ -8,7 +8,7 @@ def main() -> None:
     settings = json.loads(Path("mod.json").read_text(encoding="utf-8"))["settings"]
     methods = settings["upscale-method"]["one-of"]
     assert "Integer Scaling" in methods
-    assert "Integer Smart Reconstruction" in methods
+    assert "UltraScale2D" in methods
 
     preset = settings["integer-scaling-quality-preset"]
     assert preset["default"] == "Performance (2x)"
@@ -21,7 +21,7 @@ def main() -> None:
     source = Path("src/main.cpp").read_text(encoding="utf-8")
     assert "Integer," in source
     assert "SmartInteger," in source
-    assert 'value == "Integer Smart Reconstruction"' in source
+    assert 'value == "UltraScale2D"' in source
     assert "auto const smartIntegerScaling" in source
     assert "UpscaleMethod::SmartInteger" in source
     assert "kSmartIntegerShader" in source
