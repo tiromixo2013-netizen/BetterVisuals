@@ -632,6 +632,131 @@ namespace {
         }
     }
 
+
+#ifdef GEODE_IS_ANDROID
+    // Independent, opt-in render-stage GPU profiler. Queries are asynchronous;
+    // a busy ring slot is skipped rather than stalling the render thread.
+    class AndroidRenderGpuProfiler final {
+    public:
+        void beginFrame() {
+            if (!m_enabled.load(std::memory_order_relaxed)) return;
+            initialize();
+            if (!m_supported) return;
+            poll();
+            m_slot = m_next;
+            if (m_pending[m_slot]) { m_slot = -1; return; }
+            m_frameActive = true;
+        }
+        void beginCapture() { beginStage(m_captureQueries); }
+        void endCapture() { endStage(); }
+        void beginUpscale() { beginStage(m_upscaleQueries); }
+        void endUpscale() {
+            endStage();
+            completeFrame();
+        }
+        void finishWithoutUpscale() { completeFrame(); }
+        void setEnabled(bool enabled) {
+            m_enabled.store(enabled, std::memory_order_relaxed);
+            if (!enabled) m_frameActive = false;
+        }
+        void abandonContext() {
+            m_captureQueries = {}; m_upscaleQueries = {}; m_pending = {};
+            m_checked = false; m_supported = false; m_frameActive = false;
+            m_active = false; m_slot = -1; m_next = 0;
+            m_gen = nullptr; m_del = nullptr; m_begin = nullptr; m_end = nullptr;
+            m_get = nullptr; m_get64 = nullptr;
+        }
+    private:
+        using Gen = void (*)(GLsizei, GLuint*);
+        using Del = void (*)(GLsizei, GLuint const*);
+        using Begin = void (*)(GLenum, GLuint);
+        using End = void (*)(GLenum);
+        using Get = void (*)(GLuint, GLenum, GLuint*);
+        using Get64 = void (*)(GLuint, GLenum, GLuint64*);
+        static constexpr std::size_t kSlots = 4;
+        static constexpr GLenum kElapsed = 0x88BF;
+        static constexpr GLenum kAvailable = 0x8867;
+        static constexpr GLenum kResult = 0x8866;
+        static constexpr GLenum kDisjoint = 0x8FBB;
+        std::atomic<bool> m_enabled = false;
+        bool m_checked = false, m_supported = false, m_frameActive = false, m_active = false;
+        int m_slot = -1;
+        std::size_t m_next = 0, m_samples = 0;
+        std::array<GLuint, kSlots> m_captureQueries{}, m_upscaleQueries{};
+        std::array<bool, kSlots> m_pending{};
+        Gen m_gen = nullptr; Del m_del = nullptr; Begin m_begin = nullptr; End m_end = nullptr;
+        Get m_get = nullptr; Get64 m_get64 = nullptr;
+        std::uint64_t m_captureTotal = 0, m_upscaleTotal = 0;
+        void initialize() {
+            if (m_checked) return;
+            m_checked = true;
+            auto const ext = reinterpret_cast<char const*>(glGetString(GL_EXTENSIONS));
+            if (!ext || std::string_view(ext).find("GL_EXT_disjoint_timer_query") == std::string_view::npos) {
+                log::info("[RenderGPU] GL_EXT_disjoint_timer_query unavailable; diagnostics disabled");
+                return;
+            }
+            m_gen = reinterpret_cast<Gen>(eglGetProcAddress("glGenQueriesEXT"));
+            m_del = reinterpret_cast<Del>(eglGetProcAddress("glDeleteQueriesEXT"));
+            m_begin = reinterpret_cast<Begin>(eglGetProcAddress("glBeginQueryEXT"));
+            m_end = reinterpret_cast<End>(eglGetProcAddress("glEndQueryEXT"));
+            m_get = reinterpret_cast<Get>(eglGetProcAddress("glGetQueryObjectuivEXT"));
+            m_get64 = reinterpret_cast<Get64>(eglGetProcAddress("glGetQueryObjectui64vEXT"));
+            m_supported = m_gen && m_del && m_begin && m_end && m_get && m_get64;
+            if (!m_supported) {
+                log::warn("[RenderGPU] Timer-query entry points incomplete; diagnostics disabled");
+                return;
+            }
+            m_gen(static_cast<GLsizei>(kSlots), m_captureQueries.data());
+            m_gen(static_cast<GLsizei>(kSlots), m_upscaleQueries.data());
+            log::info("[RenderGPU] Independent render-stage GPU timer enabled");
+        }
+        void beginStage(std::array<GLuint, kSlots> const& queries) {
+            if (!m_frameActive || m_slot < 0 || m_active) return;
+            m_begin(kElapsed, queries[static_cast<std::size_t>(m_slot)]);
+            m_active = true;
+        }
+        void endStage() {
+            if (!m_active) return;
+            m_end(kElapsed);
+            m_active = false;
+        }
+        void completeFrame() {
+            if (!m_frameActive || m_slot < 0) return;
+            m_pending[static_cast<std::size_t>(m_slot)] = true;
+            m_next = (static_cast<std::size_t>(m_slot) + 1) % kSlots;
+            m_frameActive = false;
+            m_slot = -1;
+        }
+        void poll() {
+            for (std::size_t i = 0; i < kSlots; ++i) {
+                if (!m_pending[i]) continue;
+                GLuint captureReady = 0, upscaleReady = 0;
+                m_get(m_captureQueries[i], kAvailable, &captureReady);
+                m_get(m_upscaleQueries[i], kAvailable, &upscaleReady);
+                if (!captureReady || !upscaleReady) continue;
+                GLint disjoint = GL_FALSE;
+                glGetIntegerv(kDisjoint, &disjoint);
+                if (disjoint != GL_TRUE) {
+                    GLuint64 captureNs = 0, upscaleNs = 0;
+                    m_get64(m_captureQueries[i], kResult, &captureNs);
+                    m_get64(m_upscaleQueries[i], kResult, &upscaleNs);
+                    m_captureTotal += captureNs;
+                    m_upscaleTotal += upscaleNs;
+                    if (++m_samples == 60) {
+                        auto const captureUs = static_cast<double>(m_captureTotal) / 60000.0;
+                        auto const upscaleUs = static_cast<double>(m_upscaleTotal) / 60000.0;
+                        log::info("[RenderGPU] 60-frame avg: Scene capture {:.1f} us | Upscale {:.1f} us | Measured total {:.1f} us",
+                            captureUs, upscaleUs, captureUs + upscaleUs);
+                        m_captureTotal = 0; m_upscaleTotal = 0; m_samples = 0;
+                    }
+                }
+                m_pending[i] = false;
+            }
+        }
+    };
+    AndroidRenderGpuProfiler g_renderGpuProfiler;
+#endif
+
     void renderSceneWithPostProcessing(auto&& visitNext) {
         auto const config = selectedPostProcessConfig();
         GLint callerFramebuffer = 0;
@@ -740,6 +865,10 @@ namespace {
             height,
         };
 
+#ifdef GEODE_IS_ANDROID
+        g_renderGpuProfiler.beginFrame();
+        g_renderGpuProfiler.beginCapture();
+#endif
         g_postProcessPipeline.beginSceneCapture();
         g_isSceneCaptureActive = true;
         g_captureWidth = internalWidth;
@@ -748,6 +877,10 @@ namespace {
         g_captureFullHeight = height;
         visitNext();
         g_isSceneCaptureActive = false;
+#ifdef GEODE_IS_ANDROID
+        g_renderGpuProfiler.endCapture();
+        if (!needsPresentation) g_renderGpuProfiler.finishWithoutUpscale();
+#endif
 
         {
             bv::render::GlStateGuard postSceneState;
@@ -826,6 +959,9 @@ namespace {
                 else {
                     glViewport(callerTarget.x, callerTarget.y, callerTarget.width, callerTarget.height);
                 }
+#ifdef GEODE_IS_ANDROID
+                g_renderGpuProfiler.beginUpscale();
+#endif
                 if (needsDownsample) {
                     g_ssaaRenderer.apply(sourceTexture);
                 }
@@ -850,6 +986,9 @@ namespace {
                     g_renderScaleRenderer.apply(sourceTexture);
                 }
 
+#ifdef GEODE_IS_ANDROID
+                g_renderGpuProfiler.endUpscale();
+#endif
                 glBindTexture(GL_TEXTURE_2D, sourceTexture);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, previousMinFilter);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, previousMagFilter);
@@ -1623,6 +1762,10 @@ $on_mod(Loaded) {
     bindBoolSetting("enable-fun", g_funEnabled);
 #ifdef GEODE_IS_ANDROID
     bindBoolSetting("frame-history-capture", g_frameHistoryEnabled);
+    g_renderGpuProfiler.setEnabled(Mod::get()->getSettingValue<bool>("render-gpu-diagnostics"));
+    listenForSettingChanges<bool>("render-gpu-diagnostics", [](bool enabled) {
+        g_renderGpuProfiler.setEnabled(enabled);
+    });
     bindBoolSetting("frame-pacing-enabled", g_framePacingEnabled);
     bindBoolSetting("low-latency-enabled", g_lowLatencyEnabled);
 #endif
