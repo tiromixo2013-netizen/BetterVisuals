@@ -1,5 +1,6 @@
 ## 2.4.2
 
+- Added experimental Integer Smart Reconstruction using the existing lightweight FSR Lite edge-guided pass at integer reduced render resolutions.
 - Added Integer Scaling with Native 1x, Performance 2x, and Ultra Performance 3x presets.
 - Uses exact nearest-neighbour integer output dimensions and centered remainder borders.
 - Keeps the existing FSR 1, FSR Lite, SGSR 1, frame-pacing, and frame-generation paths separate.
