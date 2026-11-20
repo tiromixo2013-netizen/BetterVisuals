@@ -784,7 +784,8 @@ namespace {
                 auto const linearSampling =
                     needsDownsample || config.upscaling == UpscaleMethod::Bilinear ||
                     config.upscaling == UpscaleMethod::FsrLite ||
-                    config.upscaling == UpscaleMethod::Sgsr;
+                    config.upscaling == UpscaleMethod::Sgsr ||
+                    config.upscaling == UpscaleMethod::SmartInteger;
                 glTexParameteri(
                     GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linearSampling ? GL_LINEAR : GL_NEAREST
                 );
