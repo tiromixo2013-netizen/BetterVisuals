@@ -100,7 +100,7 @@
     "upscale-method": {
       "type": "string",
       "name": "Upscale Method",
-      "description": "How the game is scaled back up. Turn off automatically at 1x scale.",
+      "description": "How the game is scaled back up. Integer Scaling uses sharp nearest-neighbor pixels; Integer Smart Reconstruction uses a lightweight edge-guided reconstruction pass at the same reduced internal resolution.",
       "default": "Bilinear",
       "one-of": [
         "Nearest",
@@ -108,7 +108,8 @@
         "FSR 1",
         "FSR Lite (6-Tap)",
         "SGSR 1",
-        "Integer Scaling"
+        "Integer Scaling",
+        "Integer Smart Reconstruction"
       ]
     },
     "fsr-sharpness": {
@@ -325,7 +326,7 @@
     "integer-scaling-quality-preset": {
       "type": "string",
       "name": "Integer Scaling Quality Preset",
-      "description": "Pixel-perfect nearest-neighbor scaling. Native keeps the original resolution; 2x and 3x render at half or one-third width and height, then upscale by the exact integer factor with centered borders for any remainder. This preset overrides Render Scale.",
+      "description": "Controls Native 1x, half-resolution 2x, or one-third-resolution 3x capture for both Integer Scaling and Integer Smart Reconstruction. Smart Reconstruction uses the lightweight edge-guided scaler instead of nearest-neighbor.",
       "default": "Performance (2x)",
       "one-of": [
         "Native (1x)",
