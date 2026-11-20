@@ -100,7 +100,7 @@
     "upscale-method": {
       "type": "string",
       "name": "Upscale Method",
-      "description": "How the game is scaled back up. Integer Scaling uses sharp nearest-neighbor pixels; Integer Smart Reconstruction uses a lightweight edge-guided reconstruction pass at the same reduced internal resolution.",
+      "description": "Integer Scaling uses nearest-neighbor pixels. Integer Smart Reconstruction uses a separate four-sample diagonal edge-directed shader (not FSR Lite) at the same reduced internal resolution.",
       "default": "Bilinear",
       "one-of": [
         "Nearest",
@@ -326,7 +326,7 @@
     "integer-scaling-quality-preset": {
       "type": "string",
       "name": "Integer Scaling Quality Preset",
-      "description": "Controls Native 1x, half-resolution 2x, or one-third-resolution 3x capture for both Integer Scaling and Integer Smart Reconstruction. Smart Reconstruction uses the lightweight edge-guided scaler instead of nearest-neighbor.",
+      "description": "Controls Native 1x, half-resolution 2x, or one-third-resolution 3x capture for Integer Scaling and Smart Reconstruction. Smart Reconstruction uses a dedicated four-sample diagonal edge-directed shader.",
       "default": "Performance (2x)",
       "one-of": [
         "Native (1x)",
