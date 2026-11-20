@@ -18,11 +18,27 @@ def main() -> None:
         "Ultra Performance (3x)",
     ]
 
+    ultra_preset = settings["ultrascale2d-quality-preset"]
+    assert ultra_preset["default"] == "Balanced"
+    assert ultra_preset["one-of"] == [
+        "Custom", "Native", "Ultra Quality", "Quality", "Balanced",
+        "Performance", "Ultra Performance",
+    ]
+
     source = Path("src/main.cpp").read_text(encoding="utf-8")
     assert "Integer," in source
     assert "SmartInteger," in source
     assert 'value == "UltraScale2D"' in source
     assert "auto const smartIntegerScaling" in source
+    assert "g_ultraScale2DPresetScale" in source
+    assert "updateUltraScale2DQualityPreset" in source
+    assert 'bindStringSetting("ultrascale2d-quality-preset", updateUltraScale2DQualityPreset)' in source
+    assert 'if (value == "Native") scale = 1.f;' in source
+    assert 'else if (value == "Ultra Quality") scale = 0.77f;' in source
+    assert 'else if (value == "Quality") scale = 0.67f;' in source
+    assert 'else if (value == "Balanced") scale = 0.59f;' in source
+    assert 'else if (value == "Performance") scale = 0.50f;' in source
+    assert 'else if (value == "Ultra Performance") scale = 0.33f;' in source
     assert "UpscaleMethod::SmartInteger" in source
     assert "kSmartIntegerShader" in source
     assert "g_smartIntegerRenderer.apply" in source
@@ -48,8 +64,8 @@ def main() -> None:
     assert "config.upscaling == UpscaleMethod::Sgsr" in source
     assert "config.upscaling == UpscaleMethod::Integer" in source
     assert "config.upscaling == UpscaleMethod::SmartInteger" in source
-    assert "slider and SSAA multiplier are intentionally bypassed" in source
-    print("Integer Scaling 1x/2x/3x integration checks passed (static checks only).")
+    assert "Integer Scaling owns its exact 1x/2x/3x ratio" in source
+    print("Integer Scaling and UltraScale2D quality-preset integration checks passed (static checks only).")
 
 
 if __name__ == "__main__":
