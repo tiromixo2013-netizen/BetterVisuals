@@ -43,7 +43,7 @@ Pixel-perfect nearest-neighbour upscaling with exact integer output ratios:
 
 If the viewport dimensions are not divisible by the selected factor, the unused remainder is centered as a thin black border rather than stretched. The Integer Scaling preset overrides the general Render Scale slider.
 
-**Integer Smart Reconstruction (experimental):** uses the same reduced 1x/2x/3x capture sizes, then applies the existing lightweight edge-guided FSR Lite shader instead of nearest-neighbour enlargement. It is designed to reduce blockiness while retaining much of the GPU savings. Actual quality and GPU cost must be measured on each device; it does not restore detail that was never rendered.
+**UltraScale2D (experimental):** uses the same reduced 1x/2x/3x capture sizes, then applies a dedicated four-sample diagonal edge-directed reconstruction shader in one presentation pass. It is independent of FSR Lite. It aims to reduce blockiness and preserve diagonal edges at low processing cost. Actual image quality and GPU savings must be measured on each device; it cannot recover details that were never rendered.
 
 ---
 
