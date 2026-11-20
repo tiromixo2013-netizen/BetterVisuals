@@ -124,6 +124,7 @@ namespace {
     // Zero selects Custom (1.0); positive values are source-resolution ratios.
     std::atomic<float> g_fsrPresetScale = 0.f;
     std::atomic<float> g_sgsrPresetScale = 0.f;
+    std::atomic<float> g_ultraScale2DPresetScale = 0.f;
     std::atomic<int> g_integerScaleFactor = 2;
     std::atomic<int> g_sgsrOperationMode = 1;
     std::atomic<float> g_renderScale = 1.f;
@@ -322,6 +323,20 @@ namespace {
             log::warn("Unknown SGSR 1 quality preset '{}', using Custom", value);
         }
         g_sgsrPresetScale.store(scale, std::memory_order_relaxed);
+    }
+
+    void updateUltraScale2DQualityPreset(std::string_view value) {
+        float scale = 0.f;
+        if (value == "Native") scale = 1.f;
+        else if (value == "Ultra Quality") scale = 0.77f;
+        else if (value == "Quality") scale = 0.67f;
+        else if (value == "Balanced") scale = 0.59f;
+        else if (value == "Performance") scale = 0.50f;
+        else if (value == "Ultra Performance") scale = 0.33f;
+        else if (value != "Custom") {
+            log::warn("Unknown UltraScale2D quality preset '{}', using Custom", value);
+        }
+        g_ultraScale2DPresetScale.store(scale, std::memory_order_relaxed);
     }
 
     void updateIntegerScalingPreset(std::string_view value) {
@@ -632,23 +647,26 @@ namespace {
 
         auto const effectCount = config.effectCount();
         auto const configuredScale = g_renderScale.load(std::memory_order_relaxed);
+        auto const smartIntegerScaling = config.upscaling == UpscaleMethod::SmartInteger;
         auto const presetScale = (config.upscaling == UpscaleMethod::Fsr ||
             config.upscaling == UpscaleMethod::FsrLite) ?
             g_fsrPresetScale.load(std::memory_order_relaxed) :
             (config.upscaling == UpscaleMethod::Sgsr ?
-                g_sgsrPresetScale.load(std::memory_order_relaxed) : 0.f);
-        auto const smartIntegerScaling = config.upscaling == UpscaleMethod::SmartInteger;
-        auto const integerScaling =
-            config.upscaling == UpscaleMethod::Integer || smartIntegerScaling;
+                g_sgsrPresetScale.load(std::memory_order_relaxed) :
+                (smartIntegerScaling ?
+                    g_ultraScale2DPresetScale.load(std::memory_order_relaxed) : 0.f));
+        auto const integerScaling = config.upscaling == UpscaleMethod::Integer;
         auto const integerFactor = integerScaling ?
             std::clamp(g_integerScaleFactor.load(std::memory_order_relaxed), 1, 3) : 1;
-        auto const requestedScale =
-            (presetScale > 0.f ? presetScale : 1.f) * configuredScale;
+        // Named UltraScale2D presets are exact input-resolution choices. Custom
+        // alone follows the general Render Scale slider.
+        auto const requestedScale = smartIntegerScaling && presetScale > 0.f ?
+            presetScale : (presetScale > 0.f ? presetScale * configuredScale : configuredScale);
         auto const usesSpatialUpscaler =
             config.upscaling == UpscaleMethod::Fsr || config.upscaling == UpscaleMethod::FsrLite ||
-            config.upscaling == UpscaleMethod::Sgsr;
-        // Integer Scaling owns its exact 1x/2x/3x ratio. The general Render Scale
-        // slider and SSAA multiplier are intentionally bypassed in this mode.
+            config.upscaling == UpscaleMethod::Sgsr || smartIntegerScaling;
+        // Integer Scaling owns its exact 1x/2x/3x ratio. UltraScale2D instead
+        // uses its own spatial quality presets and reconstructs to the full viewport.
         auto const renderScale = integerScaling ?
             (1.f / static_cast<float>(integerFactor)) :
             std::clamp(requestedScale, 0.25f, usesSpatialUpscaler ? 1.f : 1.2f);
@@ -1624,6 +1642,7 @@ $on_mod(Loaded) {
     bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
     bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset);
     bindStringSetting("integer-scaling-quality-preset", updateIntegerScalingPreset);
+    bindStringSetting("ultrascale2d-quality-preset", updateUltraScale2DQualityPreset);
     bindStringSetting("sgsr-operation-mode", updateSgsrOperationMode);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {
