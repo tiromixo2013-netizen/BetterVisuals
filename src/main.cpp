@@ -492,6 +492,7 @@ namespace {
             if (key.needsDownsample) {
                 g_fsrRenderer.reset();
                 g_fsrLiteRenderer.reset();
+                g_smartIntegerRenderer.reset();
                 g_renderScaleRenderer.reset();
                 g_ssaaRenderer.reset();
                 auto const& ssaaShader = config.aa == AntiAliasingMethod::Ssaa300 ?
@@ -502,6 +503,7 @@ namespace {
             else if (config.upscaling == UpscaleMethod::Fsr) {
                 g_renderScaleRenderer.reset();
                 g_fsrLiteRenderer.reset();
+                g_smartIntegerRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_fsrRenderer.prepare(bv::shaders::kFsrShader, key.width, key.height);
             }
