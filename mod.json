@@ -347,8 +347,7 @@
         "Balanced",
         "Performance",
         "Ultra Performance"
-      ],
-      "enable-if": "upscale-method == UltraScale2D"
+      ]
     }
   }
 }
