@@ -287,7 +287,7 @@ namespace {
             g_upscaleMethod.store(UpscaleMethod::Integer, std::memory_order_relaxed);
             return;
         }
-        if (value == "Integer Smart Reconstruction") {
+        if (value == "UltraScale2D") {
             g_upscaleMethod.store(UpscaleMethod::SmartInteger, std::memory_order_relaxed);
             return;
         }
