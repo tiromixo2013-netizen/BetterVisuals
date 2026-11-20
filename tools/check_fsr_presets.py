@@ -42,14 +42,15 @@ def main() -> None:
     assert "g_fsrPresetScale.load" in source
     assert "g_sgsrPresetScale.load" in source
     assert "config.upscaling == UpscaleMethod::Sgsr" in source
-    assert "(presetScale > 0.f ? presetScale : 1.f) * configuredScale" in source
+    assert "smartIntegerScaling && presetScale > 0.f" in source
+    assert "presetScale * configuredScale : configuredScale" in source
     assert "requestedScale, 0.25f, usesSpatialUpscaler ? 1.f : 1.2f" in source
     assert "auto const aaScale = (presetScale > 0.f || integerScaling) ? 1.f : ssaaFactor(config.aa)" in source
     assert 'bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.2f, 1.f)' in source
     assert "GL_MAX_TEXTURE_SIZE" in source
     assert "g_fsrReconstructionBlend = 1.f" in source
     assert 'bindDoubleSetting("fsr-sharpness", g_fsrReconstructionBlend, 0.f, 1.f, 1.f)' in source
-    print("FSR/SGSR preset base × Render Scale multiplier checks passed.")
+    print("FSR/SGSR multiplier behavior and independent UltraScale2D preset checks passed.")
 
 
 if __name__ == "__main__":
