@@ -654,7 +654,11 @@ namespace {
             endStage();
             completeFrame();
         }
-        void finishWithoutUpscale() { completeFrame(); }
+        void finishWithoutUpscale() {
+            // No presentation query was issued, so do not enqueue an incomplete pair.
+            m_frameActive = false;
+            m_slot = -1;
+        }
         void setEnabled(bool enabled) {
             m_enabled.store(enabled, std::memory_order_relaxed);
             if (!enabled) m_frameActive = false;
