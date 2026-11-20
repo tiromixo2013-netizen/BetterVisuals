@@ -100,7 +100,7 @@
     "upscale-method": {
       "type": "string",
       "name": "Upscale Method",
-      "description": "UltraScale2D is the dedicated four-sample diagonal edge-directed reconstruction mode, independent of FSR Lite, operating on reduced integer render resolutions.",
+      "description": "UltraScale2D is an ultra-light single-sample hardware-linear reconstruction pass. It minimizes shader work; use the Render Scale preset to reduce internal scene rendering resolution.",
       "default": "Bilinear",
       "one-of": [
         "Nearest",
