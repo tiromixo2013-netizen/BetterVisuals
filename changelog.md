@@ -1,3 +1,9 @@
+## 2.4.2
+
+- Added Integer Scaling with Native 1x, Performance 2x, and Ultra Performance 3x presets.
+- Uses exact nearest-neighbour integer output dimensions and centered remainder borders.
+- Keeps the existing FSR 1, FSR Lite, SGSR 1, frame-pacing, and frame-generation paths separate.
+
 # Changelog
 
 ## 2.4.1

@@ -8,7 +8,7 @@
   },
   "id": "tiromixo2013.bettervisuals-gsr",
   "name": "Better Visuals and FPS",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "developer": "tiromixo2013",
   "description": "Neat upscaling and post-processing mod.",
   "tags": [
@@ -86,7 +86,7 @@
     "render-scale": {
       "type": "float",
       "name": "Render Scale",
-      "description": "Multiplier applied after the selected FSR 1 or SGSR 1 quality preset (100% keeps the preset resolution). Custom uses the slider as the base resolution. Spatial-upscaler input is capped at native resolution.",
+      "description": "Multiplier applied after FSR 1 or SGSR 1 quality presets. Custom uses the slider as the base resolution. Ignored while Integer Scaling is selected.",
       "default": 1,
       "min": 0.25,
       "max": 1.2,
@@ -107,7 +107,8 @@
         "Bilinear",
         "FSR 1",
         "FSR Lite (6-Tap)",
-        "SGSR 1"
+        "SGSR 1",
+        "Integer Scaling"
       ]
     },
     "fsr-sharpness": {
@@ -319,6 +320,17 @@
         "Balanced",
         "Performance",
         "Ultra Performance"
+      ]
+    },
+    "integer-scaling-quality-preset": {
+      "type": "string",
+      "name": "Integer Scaling Quality Preset",
+      "description": "Pixel-perfect nearest-neighbor scaling. Native keeps the original resolution; 2x and 3x render at half or one-third width and height, then upscale by the exact integer factor with centered borders for any remainder. This preset overrides Render Scale.",
+      "default": "Performance (2x)",
+      "one-of": [
+        "Native (1x)",
+        "Performance (2x)",
+        "Ultra Performance (3x)"
       ]
     }
   }

@@ -67,6 +67,7 @@ namespace {
         Fsr,
         FsrLite,
         Sgsr,
+        Integer,
     };
 
     struct PostProcessConfig {
@@ -122,6 +123,7 @@ namespace {
     // Zero selects Custom (1.0); positive values are source-resolution ratios.
     std::atomic<float> g_fsrPresetScale = 0.f;
     std::atomic<float> g_sgsrPresetScale = 0.f;
+    std::atomic<int> g_integerScaleFactor = 2;
     std::atomic<int> g_sgsrOperationMode = 1;
     std::atomic<float> g_renderScale = 1.f;
     std::atomic<bool> g_casEnabled = false;
@@ -278,6 +280,10 @@ namespace {
             g_upscaleMethod.store(UpscaleMethod::Sgsr, std::memory_order_relaxed);
             return;
         }
+        if (value == "Integer Scaling") {
+            g_upscaleMethod.store(UpscaleMethod::Integer, std::memory_order_relaxed);
+            return;
+        }
 
         if (value != "Nearest") {
             log::warn("Unknown upscale method '{}', using nearest neighbour", value);
@@ -309,6 +315,17 @@ namespace {
             log::warn("Unknown SGSR 1 quality preset '{}', using Custom", value);
         }
         g_sgsrPresetScale.store(scale, std::memory_order_relaxed);
+    }
+
+    void updateIntegerScalingPreset(std::string_view value) {
+        int factor = 2;
+        if (value == "Native (1x)") factor = 1;
+        else if (value == "Performance (2x)") factor = 2;
+        else if (value == "Ultra Performance (3x)") factor = 3;
+        else {
+            log::warn("Unknown Integer Scaling preset '{}', using Performance (2x)", value);
+        }
+        g_integerScaleFactor.store(factor, std::memory_order_relaxed);
     }
 
     void updateSgsrOperationMode(std::string_view value) {
@@ -600,15 +617,22 @@ namespace {
             g_fsrPresetScale.load(std::memory_order_relaxed) :
             (config.upscaling == UpscaleMethod::Sgsr ?
                 g_sgsrPresetScale.load(std::memory_order_relaxed) : 0.f);
+        auto const integerScaling = config.upscaling == UpscaleMethod::Integer;
+        auto const integerFactor = integerScaling ?
+            std::clamp(g_integerScaleFactor.load(std::memory_order_relaxed), 1, 3) : 1;
         auto const requestedScale =
             (presetScale > 0.f ? presetScale : 1.f) * configuredScale;
         auto const usesSpatialUpscaler =
             config.upscaling == UpscaleMethod::Fsr || config.upscaling == UpscaleMethod::FsrLite ||
             config.upscaling == UpscaleMethod::Sgsr;
-        auto const renderScale = std::clamp(requestedScale, 0.25f, usesSpatialUpscaler ? 1.f : 1.2f);
+        // Integer Scaling owns its exact 1x/2x/3x ratio. The general Render Scale
+        // slider and SSAA multiplier are intentionally bypassed in this mode.
+        auto const renderScale = integerScaling ?
+            (1.f / static_cast<float>(integerFactor)) :
+            std::clamp(requestedScale, 0.25f, usesSpatialUpscaler ? 1.f : 1.2f);
         // A selected spatial-upscaler quality preset owns the base resolution.
         // SSAA must not override its input size or route it through downsampling.
-        auto const aaScale = presetScale > 0.f ? 1.f : ssaaFactor(config.aa);
+        auto const aaScale = (presetScale > 0.f || integerScaling) ? 1.f : ssaaFactor(config.aa);
         auto const effectiveScale = renderScale * aaScale;
         GLint maxTextureSize = 0;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
@@ -624,8 +648,19 @@ namespace {
             static_cast<float>(maxTextureSize) / static_cast<float>(height)
         );
         auto const boundedScale = std::min(effectiveScale, maxDimensionScale);
-        auto const internalWidth = scaledDimension(width, boundedScale);
-        auto const internalHeight = scaledDimension(height, boundedScale);
+        if (integerScaling && (integerFactor > width || integerFactor > height)) {
+            visitNext();
+            return;
+        }
+        auto const internalWidth = integerScaling ?
+            std::max<GLsizei>(1, width / integerFactor) : scaledDimension(width, boundedScale);
+        auto const internalHeight = integerScaling ?
+            std::max<GLsizei>(1, height / integerFactor) : scaledDimension(height, boundedScale);
+        if (integerScaling && (internalWidth > maxTextureSize || internalHeight > maxTextureSize)) {
+            log::warn("[IntegerScaling] Requested input exceeds GL_MAX_TEXTURE_SIZE; using native rendering");
+            visitNext();
+            return;
+        }
         auto const needsPresentation = internalWidth != width || internalHeight != height;
         auto const needsDownsample = internalWidth > width || internalHeight > height;
         if (effectCount == 0 && !needsPresentation) {
@@ -716,7 +751,39 @@ namespace {
                     GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, linearSampling ? GL_LINEAR : GL_NEAREST
                 );
                 glBindFramebuffer(GL_FRAMEBUFFER, callerTarget.framebuffer);
-                glViewport(callerTarget.x, callerTarget.y, callerTarget.width, callerTarget.height);
+                if (integerScaling) {
+                    // Pixel-perfect integer scaling: every source texel occupies
+                    // exactly N x N output pixels. Any non-divisible remainder is
+                    // centered as a thin black border instead of being stretched.
+                    auto const integerOutputWidth = internalWidth * integerFactor;
+                    auto const integerOutputHeight = internalHeight * integerFactor;
+                    auto const integerOutputX =
+                        callerTarget.x + (callerTarget.width - integerOutputWidth) / 2;
+                    auto const integerOutputY =
+                        callerTarget.y + (callerTarget.height - integerOutputHeight) / 2;
+                    if (integerOutputWidth != callerTarget.width ||
+                        integerOutputHeight != callerTarget.height) {
+                        glViewport(
+                            callerTarget.x, callerTarget.y,
+                            callerTarget.width, callerTarget.height
+                        );
+                        glEnable(GL_SCISSOR_TEST);
+                        glScissor(
+                            callerTarget.x, callerTarget.y,
+                            callerTarget.width, callerTarget.height
+                        );
+                        glClearColor(0.f, 0.f, 0.f, 1.f);
+                        glClear(GL_COLOR_BUFFER_BIT);
+                        glDisable(GL_SCISSOR_TEST);
+                    }
+                    glViewport(
+                        integerOutputX, integerOutputY,
+                        integerOutputWidth, integerOutputHeight
+                    );
+                }
+                else {
+                    glViewport(callerTarget.x, callerTarget.y, callerTarget.width, callerTarget.height);
+                }
                 if (needsDownsample) {
                     g_ssaaRenderer.apply(sourceTexture);
                 }
@@ -1530,6 +1597,7 @@ $on_mod(Loaded) {
     bindStringSetting("upscale-method", updateUpscaleMethod);
     bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
     bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset);
+    bindStringSetting("integer-scaling-quality-preset", updateIntegerScalingPreset);
     bindStringSetting("sgsr-operation-mode", updateSgsrOperationMode);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {

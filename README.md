@@ -33,6 +33,18 @@ FSR 1 produces sharper edges while upscaling with a small performance cost.
 
 ---
 
+## <c-47f0ff>Integer Scaling</c>
+
+Pixel-perfect nearest-neighbour upscaling with exact integer output ratios:
+
+- Native (1x): original resolution.
+- Performance (2x): render at half width and height, then scale each source pixel to exactly 2x2 output pixels.
+- Ultra Performance (3x): render at one-third width and height, then scale each source pixel to exactly 3x3 output pixels.
+
+If the viewport dimensions are not divisible by the selected factor, the unused remainder is centered as a thin black border rather than stretched. The Integer Scaling preset overrides the general Render Scale slider.
+
+---
+
 ## <c-c247ff>Anti-aliasing</c>
 
 Makes the game look better while playing levels.
