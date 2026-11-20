@@ -59,11 +59,13 @@ def main() -> None:
 
     # The existing presentation path selects GL_NEAREST unless a linear upscaler is active.
     assert "linearSampling ? GL_LINEAR : GL_NEAREST" in source
+    assert "config.upscaling == UpscaleMethod::SmartInteger;" in source
     assert "config.upscaling == UpscaleMethod::Bilinear" in source
     assert "config.upscaling == UpscaleMethod::FsrLite" in source
     assert "config.upscaling == UpscaleMethod::Sgsr" in source
     assert "config.upscaling == UpscaleMethod::Integer" in source
     assert "config.upscaling == UpscaleMethod::SmartInteger" in source
+    assert "config.upscaling == UpscaleMethod::SmartInteger;" in source or "config.upscaling == UpscaleMethod::SmartInteger;" in source
     assert "Integer Scaling owns its exact 1x/2x/3x ratio" in source
     print("Integer Scaling and UltraScale2D quality-preset integration checks passed (static checks only).")
 
