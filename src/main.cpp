@@ -154,6 +154,7 @@ namespace {
     bv::render::PostProcessRenderer g_renderScaleRenderer;
     bv::render::PostProcessRenderer g_fsrRenderer;
     bv::render::PostProcessRenderer g_fsrLiteRenderer;
+    bv::render::PostProcessRenderer g_smartIntegerRenderer;
     bv::render::SgsrRenderer g_sgsrRenderer;
     bv::render::PostProcessRenderer g_casRenderer;
     bv::render::BloomRenderer g_bloomRenderer;
@@ -198,6 +199,7 @@ namespace {
         g_renderScaleRenderer.reset();
         g_fsrRenderer.reset();
         g_fsrLiteRenderer.reset();
+        g_smartIntegerRenderer.reset();
         g_sgsrRenderer.reset();
         g_casRenderer.reset();
         g_bloomRenderer.reset();
@@ -503,12 +505,21 @@ namespace {
                 g_ssaaRenderer.reset();
                 prepared = g_fsrRenderer.prepare(bv::shaders::kFsrShader, key.width, key.height);
             }
-            else if (config.upscaling == UpscaleMethod::FsrLite ||
-                     config.upscaling == UpscaleMethod::SmartInteger) {
+            else if (config.upscaling == UpscaleMethod::FsrLite) {
                 g_renderScaleRenderer.reset();
                 g_fsrRenderer.reset();
+                g_smartIntegerRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_fsrLiteRenderer.prepare(bv::shaders::kFsrLiteShader, key.width, key.height);
+            }
+            else if (config.upscaling == UpscaleMethod::SmartInteger) {
+                g_renderScaleRenderer.reset();
+                g_fsrRenderer.reset();
+                g_fsrLiteRenderer.reset();
+                g_ssaaRenderer.reset();
+                prepared = g_smartIntegerRenderer.prepare(
+                    bv::shaders::kSmartIntegerShader, key.width, key.height
+                );
             }
             else {
                 g_fsrRenderer.reset();
@@ -523,6 +534,7 @@ namespace {
             g_renderScaleRenderer.reset();
             g_fsrRenderer.reset();
             g_fsrLiteRenderer.reset();
+            g_smartIntegerRenderer.reset();
             g_ssaaRenderer.reset();
         }
 
@@ -752,7 +764,6 @@ namespace {
                 auto const linearSampling =
                     needsDownsample || config.upscaling == UpscaleMethod::Bilinear ||
                     config.upscaling == UpscaleMethod::FsrLite ||
-                    config.upscaling == UpscaleMethod::SmartInteger ||
                     config.upscaling == UpscaleMethod::Sgsr;
                 glTexParameteri(
                     GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linearSampling ? GL_LINEAR : GL_NEAREST
@@ -800,9 +811,11 @@ namespace {
                 else if (config.upscaling == UpscaleMethod::Fsr) {
                     g_fsrRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
                 }
-                else if (config.upscaling == UpscaleMethod::FsrLite ||
-                         config.upscaling == UpscaleMethod::SmartInteger) {
+                else if (config.upscaling == UpscaleMethod::FsrLite) {
                     g_fsrLiteRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
+                }
+                else if (config.upscaling == UpscaleMethod::SmartInteger) {
+                    g_smartIntegerRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
                 }
                 else if (config.upscaling == UpscaleMethod::Sgsr) {
                     if (!g_sgsrRenderer.apply(
