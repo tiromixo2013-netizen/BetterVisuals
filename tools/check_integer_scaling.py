@@ -24,6 +24,8 @@ def main() -> None:
     assert 'value == "Integer Smart Reconstruction"' in source
     assert "auto const smartIntegerScaling" in source
     assert "UpscaleMethod::SmartInteger" in source
+    assert "kSmartIntegerShader" in source
+    assert "g_smartIntegerRenderer.apply" in source
     assert 'value == "Integer Scaling"' in source
     assert 'bindStringSetting("integer-scaling-quality-preset", updateIntegerScalingPreset)' in source
     assert 'if (value == "Native (1x)") factor = 1;' in source
