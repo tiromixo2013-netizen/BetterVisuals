@@ -699,12 +699,12 @@ namespace {
                 log::info("[RenderGPU] GL_EXT_disjoint_timer_query unavailable; diagnostics disabled");
                 return;
             }
-            m_gen = reinterpret_cast<Gen>(eglGetProcAddress("glGenQueriesEXT"));
-            m_del = reinterpret_cast<Del>(eglGetProcAddress("glDeleteQueriesEXT"));
-            m_begin = reinterpret_cast<Begin>(eglGetProcAddress("glBeginQueryEXT"));
-            m_end = reinterpret_cast<End>(eglGetProcAddress("glEndQueryEXT"));
-            m_get = reinterpret_cast<Get>(eglGetProcAddress("glGetQueryObjectuivEXT"));
-            m_get64 = reinterpret_cast<Get64>(eglGetProcAddress("glGetQueryObjectui64vEXT"));
+            m_gen = reinterpret_cast<Gen>(eglGetProcAddress("glGenQueries" "EXT"));
+            m_del = reinterpret_cast<Del>(eglGetProcAddress("glDeleteQueries" "EXT"));
+            m_begin = reinterpret_cast<Begin>(eglGetProcAddress("glBeginQuery" "EXT"));
+            m_end = reinterpret_cast<End>(eglGetProcAddress("glEndQuery" "EXT"));
+            m_get = reinterpret_cast<Get>(eglGetProcAddress("glGetQueryObjectuiv" "EXT"));
+            m_get64 = reinterpret_cast<Get64>(eglGetProcAddress("glGetQueryObjectui64v" "EXT"));
             m_supported = m_gen && m_del && m_begin && m_end && m_get && m_get64;
             if (!m_supported) {
                 log::warn("[RenderGPU] Timer-query entry points incomplete; diagnostics disabled");
