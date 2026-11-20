@@ -74,6 +74,13 @@
       "type": "title",
       "name": "Rendering"
     },
+    "render-gpu-diagnostics": {
+      "type": "bool",
+      "name": "Render GPU Diagnostics (Android)",
+      "description": "Opt-in asynchronous GPU timing for scene capture and final upscaling. Requires GL_EXT_disjoint_timer_query; logs 60-frame averages. Adds query overhead while enabled.",
+      "default": false,
+      "platforms": ["android"]
+    },
     "frame-history-capture": {
       "type": "bool",
       "name": "Frame Generation (Experimental, Android)",
