@@ -47,6 +47,21 @@ If the viewport dimensions are not divisible by the selected factor, the unused 
 
 ---
 
+
+## <c-47f0ff>UltraScale2D Quality Presets</c>
+
+UltraScale2D has its own input-resolution presets. Each percentage is applied to both width and height, then the dedicated reconstruction pass scales the result back to the full viewport:
+
+- Native: 100% per dimension.
+- Ultra Quality: 77% per dimension.
+- Quality: 67% per dimension.
+- Balanced: 59% per dimension.
+- Performance: 50% per dimension.
+- Ultra Performance: 33% per dimension.
+- Custom: uses the general Render Scale slider.
+
+For example, Performance renders at half width and half height (25% of the original pixel count) before reconstruction. Lower presets can reduce rendering work, but fine details may be lost and actual GPU savings depend on the device and bottleneck. These are initial presets, not verified quality guarantees.
+
 ## <c-c247ff>Anti-aliasing</c>
 
 Makes the game look better while playing levels.
