@@ -326,13 +326,29 @@
     "integer-scaling-quality-preset": {
       "type": "string",
       "name": "Integer Scaling Quality Preset",
-      "description": "Controls Native 1x, half-resolution 2x, or one-third-resolution 3x capture for Integer Scaling and Smart Reconstruction. Smart Reconstruction uses a dedicated four-sample diagonal edge-directed shader.",
+      "description": "Controls exact Native 1x, half-width/half-height 2x, or one-third-width/height 3x pixel-perfect capture for Integer Scaling only.",
       "default": "Performance (2x)",
       "one-of": [
         "Native (1x)",
         "Performance (2x)",
         "Ultra Performance (3x)"
       ]
+    },
+    "ultrascale2d-quality-preset": {
+      "type": "string",
+      "name": "UltraScale2D Quality Preset",
+      "description": "Sets the internal scene-rendering resolution before UltraScale2D reconstructs it to the full screen resolution. Ratios are per dimension; Custom uses Render Scale.",
+      "default": "Balanced",
+      "one-of": [
+        "Custom",
+        "Native",
+        "Ultra Quality",
+        "Quality",
+        "Balanced",
+        "Performance",
+        "Ultra Performance"
+      ],
+      "enable-if": "upscale-method == UltraScale2D"
     }
   }
 }
