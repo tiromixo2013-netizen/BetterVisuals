@@ -36,10 +36,12 @@ void main() {
     float wCross = max(f.x*(1.0-f.y) + (1.0-f.x)*f.y, 0.0001);
     vec4 mainDiag = (c00*((1.0-f.x)*(1.0-f.y)) + c11*(f.x*f.y)) / wMain;
     vec4 crossDiag = (c10*(f.x*(1.0-f.y)) + c01*((1.0-f.x)*f.y)) / wCross;
-    vec4 directed = dMain <= dCross ? mainDiag : crossDiag;
-    vec4 result = mix(bilinear, directed, confidence * clamp(u_blend, 0.0, 1.0));
+    bool useMain = dMain <= dCross;
+    vec4 directed = useMain ? mainDiag : crossDiag;
+    float support = useMain ? smoothstep(0.02, 0.25, wMain) :
+                              smoothstep(0.02, 0.25, wCross);
+    vec4 result = mix(bilinear, directed, confidence * support * clamp(u_blend, 0.0, 1.0));
     result.a = bilinear.a;
-    result.rgb = min(result.rgb, vec3(result.a));
     gl_FragColor = result;
 }
 )glsl";
