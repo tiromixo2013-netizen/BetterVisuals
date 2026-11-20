@@ -50,7 +50,7 @@ If the viewport dimensions are not divisible by the selected factor, the unused 
 
 ## <c-47f0ff>UltraScale2D Quality Presets</c>
 
-UltraScale2D has its own input-resolution presets. Each percentage is applied to both width and height, then the dedicated reconstruction pass scales the result back to the full viewport:
+UltraScale2D has its own input-resolution presets. Each percentage is applied to both width and height, then the lightweight hardware-linear presentation pass scales the result back to the full viewport:
 
 - Native: 100% per dimension.
 - Ultra Quality: 77% per dimension.
