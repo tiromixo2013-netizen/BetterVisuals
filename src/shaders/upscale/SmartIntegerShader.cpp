@@ -48,7 +48,7 @@ void main() {
 }
 namespace bv::shaders {
 render::PostProcessShader const kSmartIntegerShader{
-    "Smart Integer (4-Sample Diagonal Reconstruction)",
+    "UltraScale2D (4-Sample Diagonal Reconstruction)",
     kFullscreenVertexSource,
     smart_integer::kFragmentSource,
     "u_blend",
