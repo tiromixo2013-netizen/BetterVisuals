@@ -285,6 +285,7 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
             snapshot.viewportWidth = state.viewportWidth;
             snapshot.viewportHeight = state.viewportHeight;
             snapshot.drawCalls = state.drawCalls;
+            state.drawCalls = 0;
             snapshot.attachmentUpdates = state.attachmentUpdates;
             snapshot.lastAttachedTexture = state.lastAttachedTexture;
             const auto framebuffer = state.framebufferAttachments.find(state.boundFramebuffer);
