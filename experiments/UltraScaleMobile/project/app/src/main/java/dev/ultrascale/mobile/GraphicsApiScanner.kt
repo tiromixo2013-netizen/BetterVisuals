@@ -8,7 +8,7 @@ import java.util.zip.ZipFile
 
 enum class RenderApi { VULKAN, OPENGL_ES, UNKNOWN }
 enum class GameKind { TWO_D_LIKELY, THREE_D_LIKELY, HYBRID_OR_UNKNOWN }
-enum class LayerReadiness { ELIGIBLE_OPT_IN, ELIGIBLE_DEBUG, ELIGIBLE_ROOT, APP_OPT_IN_REQUIRED }
+enum class LayerReadiness { ELIGIBLE_OPT_IN, ELIGIBLE_DEBUG, ELIGIBLE_ROOT, NOT_ELIGIBLE }
 
 data class ApiReport(
     val engine: String,
@@ -72,7 +72,7 @@ object GraphicsApiScanner {
             optIn -> LayerReadiness.ELIGIBLE_OPT_IN
             debuggable -> LayerReadiness.ELIGIBLE_DEBUG
             rootAvailable -> LayerReadiness.ELIGIBLE_ROOT
-            else -> LayerReadiness.APP_OPT_IN_REQUIRED
+            else -> LayerReadiness.NOT_ELIGIBLE
         }
         // Android's GLES layer documentation only permits external local layers
         // for debuggable targets unless the device has root. Vulkan opt-in alone
@@ -80,7 +80,7 @@ object GraphicsApiScanner {
         val glesReadiness = when {
             debuggable -> LayerReadiness.ELIGIBLE_DEBUG
             rootAvailable -> LayerReadiness.ELIGIBLE_ROOT
-            else -> LayerReadiness.APP_OPT_IN_REQUIRED
+            else -> LayerReadiness.NOT_ELIGIBLE
         }
         return ApiReport(
             engine, kind, candidates,
