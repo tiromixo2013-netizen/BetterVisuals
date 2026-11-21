@@ -234,6 +234,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
     private var outputWidth = 0
     private var outputHeight = 0
     private var sceneTargetStatus = "not created"
+    private var postTargetStatus = "not created"
     private var sgsr1Capability = "not checked"
     private val shaderDiagnostics = mutableListOf<String>()
     private lateinit var triangleBuffer: FloatBuffer
@@ -278,6 +279,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             append("\nRender target: ").append(sceneWidth).append("x").append(sceneHeight)
             append(" -> ").append(outputWidth).append("x").append(outputHeight)
             append("\nScene FBO: ").append(sceneTargetStatus)
+            append("\nCAS output FBO: ").append(postTargetStatus)
             append("\nCAS: ").append(if (casEnabled) "enabled" else "disabled")
             if (shaderDiagnostics.isNotEmpty()) {
                 append("\nShader diagnostics:")
@@ -324,6 +326,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         sceneWidth = 0
         sceneHeight = 0
         sceneTargetStatus = "recreating after EGL context change"
+        postTargetStatus = "recreating after EGL context change"
         sgsr1Capability = "not checked"
         mwsrParamsDirty = true
     }
@@ -588,7 +591,9 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, postFramebuffer)
         GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0,
             GLES30.GL_TEXTURE_2D, postTexture, 0)
-        val complete = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE
+        val postFramebufferStatus = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER)
+        val complete = postFramebufferStatus == GLES30.GL_FRAMEBUFFER_COMPLETE
+        postTargetStatus = if (complete) "complete" else "incomplete (0x${postFramebufferStatus.toString(16)})"
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         if (!complete) {
             GLES30.glDeleteFramebuffers(1, intArrayOf(postFramebuffer), 0)
