@@ -10,6 +10,7 @@ constexpr char kLayerName[] = "VK_LAYER_ULTRASCALE_api_lab";
 std::mutex gMutex;
 std::unordered_map<VkInstance, PFN_vkGetInstanceProcAddr> gInstances;
 std::unordered_map<VkDevice, PFN_vkGetDeviceProcAddr> gDevices;
+std::unordered_map<VkPhysicalDevice, VkInstance> gPhysicalDevices;
 
 VkLayerInstanceCreateInfo* FindInstanceLink(const VkInstanceCreateInfo* info) {
     auto* item = reinterpret_cast<const VkBaseInStructure*>(info->pNext);
@@ -35,6 +36,7 @@ VkLayerDeviceCreateInfo* FindDeviceLink(const VkDeviceCreateInfo* info) {
 }
 VKAPI_ATTR VkResult VKAPI_CALL LayerCreateInstance(const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*);
 VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(VkPhysicalDevice, const VkDeviceCreateInfo*, const VkAllocationCallbacks*, VkDevice*);
+VKAPI_ATTR VkResult VKAPI_CALL LayerEnumeratePhysicalDevices(VkInstance, uint32_t*, VkPhysicalDevice*);
 VKAPI_ATTR void VKAPI_CALL LayerDestroyInstance(VkInstance, const VkAllocationCallbacks*);
 VKAPI_ATTR void VKAPI_CALL LayerDestroyDevice(VkDevice, const VkAllocationCallbacks*);
 }
@@ -87,8 +89,14 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(VkPhysicalDevice physical, cons
     PFN_vkGetInstanceProcAddr nextGipa = link->pfnNextGetInstanceProcAddr;
     PFN_vkGetDeviceProcAddr nextGdpa = link->pfnNextGetDeviceProcAddr;
     chain->u.pLayerInfo = link->pNext;
-    auto nextCreate = reinterpret_cast<PFN_vkCreateDevice>(
-        nextGipa(reinterpret_cast<VkInstance>(physical), "vkCreateDevice"));
+    VkInstance instance = VK_NULL_HANDLE;
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        auto found = gPhysicalDevices.find(physical);
+        if (found != gPhysicalDevices.end()) instance = found->second;
+    }
+    if (instance == VK_NULL_HANDLE) return VK_ERROR_INITIALIZATION_FAILED;
+    auto nextCreate = reinterpret_cast<PFN_vkCreateDevice>(nextGipa(instance, "vkCreateDevice"));
     if (!nextCreate) return VK_ERROR_INITIALIZATION_FAILED;
     VkResult result = nextCreate(physical, info, allocator, device);
     if (result == VK_SUCCESS && nextGdpa) {
@@ -100,7 +108,10 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(VkPhysicalDevice physical, cons
 }
 VKAPI_ATTR void VKAPI_CALL LayerDestroyInstance(VkInstance instance, const VkAllocationCallbacks* allocator) {
     PFN_vkGetInstanceProcAddr next = nullptr;
-    { std::lock_guard<std::mutex> lock(gMutex); auto it = gInstances.find(instance); if (it != gInstances.end()) { next = it->second; gInstances.erase(it); } }
+    { std::lock_guard<std::mutex> lock(gMutex); auto it = gInstances.find(instance); if (it != gInstances.end()) { next = it->second; gInstances.erase(it); }
+      for (auto p = gPhysicalDevices.begin(); p != gPhysicalDevices.end();) {
+          if (p->second == instance) p = gPhysicalDevices.erase(p); else ++p;
+      } }
     auto destroy = next ? reinterpret_cast<PFN_vkDestroyInstance>(next(instance, "vkDestroyInstance")) : nullptr;
     if (destroy) destroy(instance, allocator);
 }
@@ -121,6 +132,7 @@ extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInst
     if (std::strcmp(name, "vkEnumerateDeviceExtensionProperties") == 0) return reinterpret_cast<PFN_vkVoidFunction>(vkEnumerateDeviceExtensionProperties);
     if (std::strcmp(name, "vkDestroyInstance") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerDestroyInstance);
     if (std::strcmp(name, "vkCreateDevice") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerCreateDevice);
+    if (std::strcmp(name, "vkEnumeratePhysicalDevices") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerEnumeratePhysicalDevices);
     PFN_vkGetInstanceProcAddr next = nullptr;
     { std::lock_guard<std::mutex> lock(gMutex); auto it = gInstances.find(instance); if (it != gInstances.end()) next = it->second; }
     return next ? next(instance, name) : nullptr;
