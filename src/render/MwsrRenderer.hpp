@@ -10,7 +10,7 @@ namespace bv::render {
     public:
         bool apply(
             GLuint inputTexture, GLsizei inputWidth, GLsizei inputHeight,
-            GLsizei outputWidth, GLsizei outputHeight
+            GLsizei outputWidth, GLsizei outputHeight, bool chroma444
         );
         void reset();
 
@@ -22,6 +22,7 @@ namespace bv::render {
         GLint m_dimsAcrossUniform = -1;
         GLint m_kernelUniform = -1;
         GLint m_boundUniform = -1;
+        GLint m_chroma444Uniform = -1;
         bool m_attempted = false;
         // MWSR coefficients depend only on source/destination dimensions.
         // Cache them so the render loop does not execute logarithms per frame.
