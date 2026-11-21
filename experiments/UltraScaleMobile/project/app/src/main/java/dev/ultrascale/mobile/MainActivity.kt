@@ -248,7 +248,7 @@ private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport) {
                     Text("LAYER ELIGIBILITY", color = Violet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     EligibilityLine("Vulkan", vulkanReady, eligibilityText(report.vulkanLayer, true))
                     EligibilityLine("OpenGL ES", glesReady, eligibilityText(report.glesLayer, false))
-                    Text("Target graphics-layer opt-in (Vulkan/GLES): ${if (report.manifestVulkanOptIn) "YES" else "NO"}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    Text("Target graphics-layer opt-in (Vulkan/GLES): ${if (report.manifestLayerOptIn) "YES" else "NO"}", color = Muted, style = MaterialTheme.typography.bodySmall)
                     Text(report.evidence, color = Muted, style = MaterialTheme.typography.bodySmall)
                     Text("A candidate API is not runtime confirmation. Layer switches configure Android debug-layer settings only; they do not inject an upscaler or modify the game's own settings menu.", color = Muted, style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
