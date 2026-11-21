@@ -18,7 +18,8 @@ data class ApiReport(
     val evidence: String,
     val vulkanLayer: LayerReadiness,
     val glesLayer: LayerReadiness,
-    val targetAllowsLayers: Boolean
+    val targetAllowsVulkan: Boolean,
+    val targetAllowsGles: Boolean
 )
 
 object GraphicsApiScanner {
@@ -66,8 +67,17 @@ object GraphicsApiScanner {
         }.getOrDefault(false)
         // A userdebug/eng build alone is not enough: non-debuggable targets need root.
         val rootAvailable = ShizukuBridge.uid() == 0
-        val readiness = when {
+        // Vulkan supports the API-30+ manifest opt-in for non-debuggable targets.
+        val vulkanReadiness = when {
             optIn -> LayerReadiness.ELIGIBLE_OPT_IN
+            debuggable -> LayerReadiness.ELIGIBLE_DEBUG
+            rootAvailable -> LayerReadiness.ELIGIBLE_ROOT
+            else -> LayerReadiness.APP_OPT_IN_REQUIRED
+        }
+        // Android's GLES layer documentation only permits external local layers
+        // for debuggable targets unless the device has root. Vulkan opt-in alone
+        // does not make a production GLES target eligible.
+        val glesReadiness = when {
             debuggable -> LayerReadiness.ELIGIBLE_DEBUG
             rootAvailable -> LayerReadiness.ELIGIBLE_ROOT
             else -> LayerReadiness.APP_OPT_IN_REQUIRED
@@ -76,7 +86,9 @@ object GraphicsApiScanner {
             engine, kind, candidates,
             if (engine == "Unknown") "Low" else "Heuristic",
             "APK native-library signatures only; candidate APIs, not proof of the active runtime API",
-            readiness, readiness, optIn || debuggable || rootAvailable
+            vulkanReadiness, glesReadiness,
+            optIn || debuggable || rootAvailable,
+            debuggable || rootAvailable
         )
     }
 }
