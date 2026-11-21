@@ -9,7 +9,7 @@
 ## 2. Injection modes
 A. **Developer-integrated mode (preferred):** game bundles or explicitly loads UltraScale's SDK/backend. The game hands the render target, dimensions, format, frame lifecycle and synchronization to the adapter. This is the reliable mode for SGSR1, MWSR, FSR Lite, CAS and spatial filters.
 
-B. **Opt-in graphics layer mode:** target application explicitly opts into supported Vulkan/GLES layer loading. Package metadata and loader support must be verified on the target OS/device. Package-level opt-in is not a universal Android 15+ guarantee.
+B. **Opt-in graphics layer mode:** the **target game itself** must opt into supported layer loading. For the Android Vulkan opt-in path, the relevant metadata must be present in the target game's own manifest (and the device loader must support the path). Putting `com.android.graphics.injectLayers.enable` in UltraScale's controller-app manifest only affects UltraScale itself; it does not grant opt-in to another installed game. GLES has separate eligibility rules; Vulkan opt-in must not be treated as GLES opt-in. Package-level opt-in is not a universal Android 15+ guarantee.
 
 C. **Debug / privileged lab mode:** debuggable target, userdebug device, or root-enabled test device, subject to Android version, vendor graphics loader and ABI. This is not the default consumer mode.
 
