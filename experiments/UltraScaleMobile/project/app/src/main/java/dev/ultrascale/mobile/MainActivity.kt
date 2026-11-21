@@ -3,7 +3,6 @@ package dev.ultrascale.mobile
 import android.content.Intent
 import android.os.Bundle
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -93,11 +92,18 @@ class MainActivity : ComponentActivity() {
                                                 .fold({ "GLES: $it" }, { "GLES failed: ${it.message}" })
                                         }) { Text("Enable GLES") }
                                 }
-                                OutlinedButton(enabled = ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
-                                    onClick = {
-                                        feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.VULKAN, false)
-                                            .fold({ "Debug layers cleared: $it" }, { "Clear failed: ${it.message}" })
-                                    }) { Text("Clear debug layers") }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(enabled = ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                                        onClick = {
+                                            feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.VULKAN, false)
+                                                .fold({ "Vulkan: $it" }, { "Disable Vulkan failed: ${it.message}" })
+                                        }) { Text("Disable Vulkan") }
+                                    OutlinedButton(enabled = ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                                        onClick = {
+                                            feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.OPENGL_ES, false)
+                                                .fold({ "GLES: $it" }, { "Disable GLES failed: ${it.message}" })
+                                        }) { Text("Disable GLES") }
+                                }
                                 if (feedback.isNotBlank()) Text(feedback, style = MaterialTheme.typography.bodySmall)
                                 Text("Restart the game after changing layer settings.", style = MaterialTheme.typography.labelSmall)
                             }
