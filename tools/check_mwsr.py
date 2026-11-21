@@ -11,12 +11,16 @@ settings = json.loads(Path("mod.json").read_text(encoding="utf-8"))["settings"]
 
 assert "UpscaleMethod::Mwsr" in main
 assert "g_mwsrRenderer.apply(" in main
+assert "g_mwsrChroma444.load(std::memory_order_relaxed)" in main
 assert "sourceTexture, internalWidth, internalHeight, width, height" in main
 assert 'bindStringSetting("mwsr-quality-preset", updateMwsrQualityPreset)' in main
 assert "g_aqr4Renderer" not in main and "UpscaleMethod::Aqr4" not in main
 assert "textureLod(uTex, uv, 0.0).a" in renderer
 assert "glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA" in renderer
-assert "CHROMA444 = true" in renderer
+assert "uniform bool uChroma444" in renderer
+assert "if (uChroma444)" in renderer
+assert "mwsr-chroma444" in main
+assert settings["mwsr-chroma444"]["default"] is False
 assert "mwsrLaw(" in renderer
 assert "m_cachedInputWidth != inputWidth" in renderer
 assert "m_cachedOutputHeight != outputHeight" in renderer
