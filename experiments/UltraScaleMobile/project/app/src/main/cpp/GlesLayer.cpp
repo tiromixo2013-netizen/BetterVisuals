@@ -1,25 +1,45 @@
 #include <EGL/egl.h>
 #include <android/log.h>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 
 using GetNextProc = void* (*)(void*, const char*);
+using EglSwapBuffers = EGLBoolean (*)(EGLDisplay, EGLSurface);
+using EglQuerySurface = EGLBoolean (*)(EGLDisplay, EGLSurface, EGLint, EGLint*);
+
 static void* g_layerId = nullptr;
 static GetNextProc g_getNext = nullptr;
-static std::atomic<uint64_t> g_frames{0};
-using EglSwapBuffers = EGLBoolean (*)(EGLDisplay, EGLSurface);
 static EglSwapBuffers g_nextSwapBuffers = nullptr;
+static EglQuerySurface g_nextQuerySurface = nullptr;
+static std::atomic<uint64_t> g_frames{0};
 
 static EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
     const uint64_t frame = ++g_frames;
-    if ((frame % 600) == 1) {
-        __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
-            "Pass-through GLES layer alive; observed frame=%llu",
-            static_cast<unsigned long long>(frame));
-    }
     if (!g_nextSwapBuffers) return EGL_FALSE;
-    return g_nextSwapBuffers(display, surface);
+
+    const bool sampleFrame = (frame % 600) == 1;
+    EGLint width = 0;
+    EGLint height = 0;
+    if (sampleFrame && g_nextQuerySurface) {
+        g_nextQuerySurface(display, surface, EGL_WIDTH, &width);
+        g_nextQuerySurface(display, surface, EGL_HEIGHT, &height);
+    }
+
+    const auto start = std::chrono::steady_clock::now();
+    const EGLBoolean result = g_nextSwapBuffers(display, surface);
+    if (sampleFrame) {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - start).count();
+        const EGLContext context = eglGetCurrentContext();
+        __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
+            "Pass-through sample frame=%llu surface=%dx%d context=%p swap_call=%lldus result=%d",
+            static_cast<unsigned long long>(frame), width, height,
+            reinterpret_cast<void*>(context), static_cast<long long>(elapsed),
+            static_cast<int>(result));
+    }
+    return result;
 }
 
 extern "C" __attribute__((visibility("default")))
@@ -29,9 +49,11 @@ void AndroidGLESLayer_Initialize(void* layer_id, GetNextProc get_next_layer_proc
     if (g_getNext) {
         g_nextSwapBuffers = reinterpret_cast<EglSwapBuffers>(
             g_getNext(g_layerId, "eglSwapBuffers"));
+        g_nextQuerySurface = reinterpret_cast<EglQuerySurface>(
+            g_getNext(g_layerId, "eglQuerySurface"));
     }
     __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
-        "UltraScale GLES pass-through layer initialized");
+        "UltraScale GLES diagnostic layer initialized");
 }
 
 extern "C" __attribute__((visibility("default")))
@@ -39,6 +61,9 @@ void* AndroidGLESLayer_GetProcAddress(const char* funcName, __eglMustCastToPrope
     if (funcName && std::strcmp(funcName, "eglSwapBuffers") == 0) {
         if (next) g_nextSwapBuffers = reinterpret_cast<EglSwapBuffers>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerSwapBuffers));
+    }
+    if (funcName && std::strcmp(funcName, "eglQuerySurface") == 0 && next) {
+        g_nextQuerySurface = reinterpret_cast<EglQuerySurface>(next);
     }
     return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(next));
 }
