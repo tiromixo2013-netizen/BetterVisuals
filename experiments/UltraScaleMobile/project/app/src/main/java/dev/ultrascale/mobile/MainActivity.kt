@@ -2,6 +2,7 @@ package dev.ultrascale.mobile
 
 import android.content.Intent
 import android.os.Bundle
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,29 +20,53 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 var refresh by remember { mutableIntStateOf(0) }
-                val games = remember(refresh) { discoverLaunchables() }
+                val games = remember(refresh) { discoverGames() }
                 LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item {
                         Text("UltraScale Mobile — API Lab", style = MaterialTheme.typography.headlineSmall)
-                        Text("Android 15+ • Vulkan / OpenGL ES • ANGLE not required")
+                        Text("Android 15+ • Vulkan / OpenGL ES • no ANGLE dependency")
                         Text("Shizuku: ${ShizukuBridge.status()}")
-                        val nativeReport = remember { NativeGraphicsProbe.report() }
-                        Text("Device Vulkan: ${nativeReport.first}", style = MaterialTheme.typography.bodySmall)
-                        Text("Device EGL/GLES loader: ${nativeReport.second}", style = MaterialTheme.typography.bodySmall)
                         Button(onClick = { ShizukuBridge.requestPermission(); refresh++ }) { Text("Request Shizuku permission") }
+                        Text("Installed games: ${games.size}")
+                        Text("Layer injection is available only when the target opts in, is debuggable, or runs on a supported userdebug device.")
                     }
-                    item { Text("Installed launchable apps (Play Store games are included when installed)", style = MaterialTheme.typography.titleMedium) }
                     items(games, key = { it.first.packageName }) { (app, label) ->
                         val report = GraphicsApiScanner.inspect(this@MainActivity, app)
+                        var feedback by remember(app.packageName) { mutableStateOf("") }
                         Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text(label, style = MaterialTheme.typography.titleMedium)
                                 Text(app.packageName, style = MaterialTheme.typography.labelSmall)
                                 Text("Engine: ${report.engine} • Type: ${report.gameKind}")
-                                Text("Candidate APIs: ${report.candidateApis.joinToString()}")
+                                Text("Possible APIs: ${report.candidateApis.joinToString()}")
                                 Text("Evidence: ${report.confidence} — ${report.evidence}")
-                                Text("Vulkan layer: ${report.vulkanLayer}")
-                                Text("GLES layer: ${report.glesLayer}")
+                                Text("Layer eligibility: ${if (report.targetAllowsLayers) "Eligible" else "Target must opt in / be debuggable"}")
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(enabled = report.targetAllowsLayers && ShizukuBridge.granted(),
+                                        onClick = {
+                                            feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.VULKAN, true)
+                                                .fold({ "Vulkan: $it" }, { "Vulkan failed: ${it.message}" })
+                                        }) { Text("Enable Vulkan") }
+                                    Button(enabled = report.targetAllowsLayers && ShizukuBridge.granted(),
+                                        onClick = {
+                                            feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.OPENGL_ES, true)
+                                                .fold({ "GLES: $it" }, { "GLES failed: ${it.message}" })
+                                        }) { Text("Enable GLES") }
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(enabled = ShizukuBridge.granted(),
+                                        onClick = {
+                                            feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.VULKAN, false)
+                                                .fold({ "Vulkan disabled: $it" }, { "Disable failed: ${it.message}" })
+                                        }) { Text("Disable Vulkan") }
+                                    OutlinedButton(enabled = ShizukuBridge.granted(),
+                                        onClick = {
+                                            feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.OPENGL_ES, false)
+                                                .fold({ "GLES disabled: $it" }, { "Disable failed: ${it.message}" })
+                                        }) { Text("Disable GLES") }
+                                }
+                                if (feedback.isNotBlank()) Text(feedback, style = MaterialTheme.typography.bodySmall)
+                                Text("Restart the game after changing layer settings.", style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
@@ -51,12 +76,16 @@ class MainActivity : ComponentActivity() {
     }
 
     @Suppress("DEPRECATION")
-    private fun discoverLaunchables(): List<Pair<android.content.pm.ApplicationInfo, String>> {
+    private fun discoverGames(): List<Pair<ApplicationInfo, String>> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         return packageManager.queryIntentActivities(intent, 0)
             .mapNotNull { it.activityInfo?.applicationInfo }
             .filter { it.packageName != packageName }
             .distinctBy { it.packageName }
+            .filter { app ->
+                app.category == ApplicationInfo.CATEGORY_GAME ||
+                    (app.flags and ApplicationInfo.FLAG_IS_GAME) != 0
+            }
             .map { it to packageManager.getApplicationLabel(it).toString() }
             .sortedBy { it.second.lowercase() }
     }
