@@ -11,8 +11,8 @@ android {
         applicationId = "dev.ultrascale.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.6.0-layer-lab"
+        versionCode = 7
+        versionName = "0.6.1-layer-lab"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         externalNativeBuild {
             cmake { cppFlags += listOf("-std=c++17", "-fvisibility=hidden") }
