@@ -21,7 +21,7 @@ android {
     externalNativeBuild {
         cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" }
     }
-    buildFeatures { compose = true; aidl = true }
+    buildFeatures { compose = true; aidl = true; buildConfig = true }
 }
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
