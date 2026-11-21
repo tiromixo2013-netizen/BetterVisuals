@@ -31,6 +31,5 @@ void main() {
     extern render::PostProcessShader const kRenderScaleShader;
     extern render::PostProcessShader const kFsrShader;
     extern render::PostProcessShader const kFsrLiteShader;
-    extern render::PostProcessShader const kSmartIntegerShader;
 
 } // namespace bv::shaders

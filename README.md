@@ -25,42 +25,30 @@ Available methods:
 - Nearest neighbour (Native)
 - Bilinear interpolation (Native, Default)
 - AMD FidelityFX FSR 1 (EASU)
+- Qualcomm SGSR 1 (single-frame spatial upscaler)
+- MWSR (single-frame spatial upscaler, experimental)
 
 Nearest and Bilinear are the same speed (fastest), but Bilinear looks smoother.
 FSR 1 produces sharper edges while upscaling with a small performance cost.
+SGSR 1 and MWSR are separate spatial reconstruction methods. MWSR uses an edge-aware cubic reconstruction pass; compare both with the same Render Scale on your device. The winner depends on GPU, output scale, and game content.
 
 *FSR 1 can have more downsides on older hardware.*
 
 ---
 
-## <c-47f0ff>Integer Scaling</c>
+## <c-47f0ff>Shared Upscaling Quality Presets</c>
 
-Pixel-perfect nearest-neighbour upscaling with exact integer output ratios:
-
-- Native (1x): original resolution.
-- Performance (2x): render at half width and height, then scale each source pixel to exactly 2x2 output pixels.
-- Ultra Performance (3x): render at one-third width and height, then scale each source pixel to exactly 3x3 output pixels.
-
-If the viewport dimensions are not divisible by the selected factor, the unused remainder is centered as a thin black border rather than stretched. The Integer Scaling preset overrides the general Render Scale slider.
-
-**UltraScale2D (experimental):** uses the same reduced 1x/2x/3x capture sizes, then applies a dedicated four-sample diagonal edge-directed reconstruction shader in one presentation pass. It is independent of FSR Lite. It aims to reduce blockiness and preserve diagonal edges at low processing cost. Actual image quality and GPU savings must be measured on each device; it cannot recover details that were never rendered.
-
----
-
-
-## <c-47f0ff>UltraScale2D Quality Presets</c>
-
-UltraScale2D has its own input-resolution presets. Each percentage is applied to both width and height, then the lightweight hardware-linear presentation pass scales the result back to the full viewport:
+Every upscaling method uses the same input-resolution ratio. Selecting a preset changes the scene capture dimensions before the selected reconstruction method runs:
 
 - Native: 100% per dimension.
-- Ultra Quality: 77% per dimension.
-- Quality: 67% per dimension.
-- Balanced: 59% per dimension.
-- Performance: 50% per dimension.
-- Ultra Performance: 33% per dimension.
+- Ultra Quality: 90% per dimension.
+- Quality: 82% per dimension.
+- Balanced: 75% per dimension.
+- Performance: 67% per dimension.
+- Ultra Performance: 59% per dimension.
 - Custom: uses the general Render Scale slider.
 
-For example, Performance renders at half width and half height (25% of the original pixel count) before reconstruction. Lower presets can reduce rendering work, but fine details may be lost and actual GPU savings depend on the device and bottleneck. These are initial presets, not verified quality guarantees.
+The named presets are exact ratios and are not multiplied by Render Scale. This keeps comparisons fair: the same preset gives FSR 1, FSR Lite, SGSR 1 and MWSR the same source dimensions. Nearest and Bilinear use the same reduced capture size without an advanced reconstruction shader.
 
 ## <c-c247ff>Anti-aliasing</c>
 
@@ -122,3 +110,4 @@ Other credits, citations, and licenses can be found in the mod's source code
 
 
 <!-- Build validation trigger: Android repair branch -->
+
