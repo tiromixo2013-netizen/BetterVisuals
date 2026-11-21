@@ -13,7 +13,7 @@ Standalone Android app experiment in an isolated feature branch. It does not cha
 - Android SDK 35, JDK 17, NDK 27.2, arm64-v8a and armeabi-v7a CI build.
 
 ## Important: eligibility and limits
-A third-party app cannot silently load code into arbitrary production games. Android requires the target app to opt in using `com.android.graphics.injectLayers.enable=true`, be debuggable, or run on a supported userdebug/rooted environment. The Shizuku control only writes the documented debug-layer settings; it does not bypass these rules. ADB shell UID 2000 is not root.
+A third-party app cannot silently load code into arbitrary production games. For Vulkan, Android permits a target that is debuggable, has the API-30+ `com.android.graphics.injectLayers.enable=true` manifest opt-in, or is on a supported rooted userdebug environment. GLES is stricter for external local layers: the target must be debuggable or the device must provide actual root access; Vulkan's manifest opt-in alone does not authorize a production GLES target. The Shizuku control only writes documented debug-layer settings; it does not bypass these rules. ADB shell UID 2000 is not root.
 
 The app currently provides **pass-through diagnostics**, not upscaling yet:
 - GLES layer observes `eglSwapBuffers` and forwards it.
@@ -35,7 +35,7 @@ The app currently provides **pass-through diagnostics**, not upscaling yet:
 ## Test with another owned game
 1. Build and install the UltraScale Mobile app.
 2. Create an owned/debuggable Android game or test harness that uses Vulkan or GLES.
-3. For API 30+, add the documented manifest opt-in metadata to that test app.
+3. For Vulkan on API 30+, add the documented manifest opt-in metadata; for GLES, make the test target debuggable (or use a rooted test device).
 4. Start Shizuku through Wireless Debugging and grant UltraScale permission.
 5. In UltraScale, select the test app and enable the matching layer.
 6. Fully stop and relaunch the test app.
