@@ -42,6 +42,7 @@ object GraphicsApiScanner {
             }
         }
         val engine = when {
+            libs.any { it.contains("sample_vulkan_probe") } -> "UltraScale Test Harness"
             libs.any { it.contains("libunity") } -> "Unity"
             libs.any { it.contains("libue4") || it.contains("unreal") } -> "Unreal"
             libs.any { it.contains("godot") } -> "Godot"
@@ -52,7 +53,7 @@ object GraphicsApiScanner {
         val candidates = linkedSetOf<RenderApi>()
         if (libs.any { it.contains("vulkan") } || engine in setOf("Unity", "Unreal", "Godot")) candidates += RenderApi.VULKAN
         if (libs.any { it.contains("gles") || it.contains("egl") || it.contains("opengl") } ||
-            engine in setOf("Unity", "Unreal", "Godot", "Cocos", "libGDX")) candidates += RenderApi.OPENGL_ES
+            engine in setOf("Unity", "Unreal", "Godot", "Cocos", "libGDX", "UltraScale Test Harness")) candidates += RenderApi.OPENGL_ES
         val kind = when (engine) {
             "Cocos" -> GameKind.TWO_D_LIKELY
             "Unreal" -> GameKind.THREE_D_LIKELY
