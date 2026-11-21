@@ -78,3 +78,11 @@ AMD FidelityFX Super Resolution 1 (EASU)
 - Copyright (c) 2021 Advanced Micro Devices, Inc.
 - License: MIT. The complete copyright and permission notice is included at the top of each extracted shader asset.
 - The sample-game copy adapts the shader interface from GLSL ES 1.00-style syntax to GLSL ES 3.00 (varying/input, texture sampling and fragment output names); the EASU reconstruction math is retained.
+
+
+Snapdragon Game Super Resolution 2 (SGSR2)
+- Source: https://github.com/SnapdragonGameStudios/snapdragon-gsr/tree/main/sgsr/v2
+- Bundled Android app assets: `sgsr2_2pass_convert.frag`, `sgsr2_2pass_upscale.frag`, and `sgsr2_2pass_vertex.vert` (the upstream Vulkan GLSL ES 3.20 two-pass fragment variant).
+- Copyright (c) 2024, Qualcomm Innovation Center, Inc.
+- License: BSD-3-Clause. The upstream shader files retain their SPDX identifier; the full BSD-3-Clause text is reproduced in the SGSR1 notice above and also available in the upstream repository LICENSE.
+- These are reference shader assets only until a Vulkan pipeline supplies the required depth, motion-vector, camera/jitter and temporal-history resources.
