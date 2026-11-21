@@ -10,8 +10,15 @@ android {
         applicationId = "dev.ultrascale.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4.0-api-lab"
+        versionCode = 5
+        versionName = "0.5.0-api-lab"
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        externalNativeBuild {
+            cmake { cppFlags += listOf("-std=c++17") }
+        }
+    }
+    externalNativeBuild {
+        cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" }
     }
     buildFeatures { compose = true }
 }
