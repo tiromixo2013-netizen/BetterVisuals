@@ -196,7 +196,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun GameCard(app: ApplicationInfo, label: String, report: GraphicsApiReport) {
+private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport) {
     var expanded by remember(app.packageName) { mutableStateOf(app.packageName == "com.gameloft.android.ANMP.GloftA8HM") }
     var feedback by remember(app.packageName) { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
