@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
                             Switch(checked = showAllApps, onCheckedChange = { showAllApps = it })
                         }
                         Text("Installed ${if (showAllApps) "apps" else "games"}: ${games.size}")
-                        Text("External layers require target opt-in or a debuggable target. Non-debuggable targets require actual root access; userdebug build type alone is not sufficient.")
+                        Text("Vulkan: target manifest opt-in (API 30+) or debuggable; otherwise root. GLES: debuggable target or root. Shizuku ADB UID 2000 is not root.")
                     }
                     items(games, key = { it.first.packageName }) { (app, label) ->
                         val report = GraphicsApiScanner.inspect(this@MainActivity, app)
@@ -73,20 +73,26 @@ class MainActivity : ComponentActivity() {
                                 Text("Engine: ${report.engine} • Type: ${report.gameKind}")
                                 Text("Possible APIs: ${report.candidateApis.joinToString()}")
                                 Text("Evidence: ${report.confidence} — ${report.evidence}")
-                                val eligibility = when {
-                                    report.vulkanLayer == LayerReadiness.ELIGIBLE_OPT_IN -> "Eligible — manifest opt-in"
-                                    report.vulkanLayer == LayerReadiness.ELIGIBLE_DEBUG -> "Eligible — debuggable target"
-                                    report.vulkanLayer == LayerReadiness.ELIGIBLE_ROOT -> "Eligible — Shizuku root"
-                                    else -> "Not eligible — target opt-in/debuggable or root required"
+                                val vulkanEligibility = when (report.vulkanLayer) {
+                                    LayerReadiness.ELIGIBLE_OPT_IN -> "manifest opt-in"
+                                    LayerReadiness.ELIGIBLE_DEBUG -> "debuggable target"
+                                    LayerReadiness.ELIGIBLE_ROOT -> "root"
+                                    else -> "not eligible — needs opt-in, debuggable target, or root"
                                 }
-                                Text("Layer eligibility: $eligibility")
+                                val glesEligibility = when (report.glesLayer) {
+                                    LayerReadiness.ELIGIBLE_DEBUG -> "debuggable target"
+                                    LayerReadiness.ELIGIBLE_ROOT -> "root"
+                                    else -> "not eligible — GLES needs debuggable target or root"
+                                }
+                                Text("Vulkan layer: $vulkanEligibility")
+                                Text("GLES layer: $glesEligibility")
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(enabled = report.targetAllowsLayers && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                                    Button(enabled = report.targetAllowsVulkan && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
                                         onClick = {
                                             feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.VULKAN, true)
                                                 .fold({ "Vulkan: $it" }, { "Vulkan failed: ${it.message}" })
                                         }) { Text("Enable Vulkan") }
-                                    Button(enabled = report.targetAllowsLayers && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                                    Button(enabled = report.targetAllowsGles && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
                                         onClick = {
                                             feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.OPENGL_ES, true)
                                                 .fold({ "GLES: $it" }, { "GLES failed: ${it.message}" })
