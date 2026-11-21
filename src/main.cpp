@@ -68,8 +68,6 @@ namespace {
         Fsr,
         FsrLite,
         Sgsr,
-        Integer,
-        SmartInteger,
         Mwsr,
     };
 
@@ -126,9 +124,7 @@ namespace {
     // Zero selects Custom (1.0); positive values are source-resolution ratios.
     std::atomic<float> g_fsrPresetScale = 0.f;
     std::atomic<float> g_sgsrPresetScale = 0.f;
-    std::atomic<float> g_ultraScale2DPresetScale = 0.f;
     std::atomic<float> g_mwsrPresetScale = 0.f;
-    std::atomic<int> g_integerScaleFactor = 2;
     std::atomic<int> g_sgsrOperationMode = 1;
     std::atomic<float> g_renderScale = 1.f;
     std::atomic<bool> g_casEnabled = false;
@@ -158,7 +154,6 @@ namespace {
     bv::render::PostProcessRenderer g_renderScaleRenderer;
     bv::render::PostProcessRenderer g_fsrRenderer;
     bv::render::PostProcessRenderer g_fsrLiteRenderer;
-    bv::render::PostProcessRenderer g_smartIntegerRenderer;
     bv::render::MwsrRenderer g_mwsrRenderer;
     std::atomic<bool> g_mwsrChroma444 = false;
     bv::render::SgsrRenderer g_sgsrRenderer;
@@ -205,7 +200,6 @@ namespace {
         g_renderScaleRenderer.reset();
         g_fsrRenderer.reset();
         g_fsrLiteRenderer.reset();
-        g_smartIntegerRenderer.reset();
         g_mwsrRenderer.reset();
         g_sgsrRenderer.reset();
         g_casRenderer.reset();
@@ -290,16 +284,8 @@ namespace {
             g_upscaleMethod.store(UpscaleMethod::Sgsr, std::memory_order_relaxed);
             return;
         }
-        if (value == "Integer Scaling") {
-            g_upscaleMethod.store(UpscaleMethod::Integer, std::memory_order_relaxed);
-            return;
-        }
         if (value == "MWSR") {
             g_upscaleMethod.store(UpscaleMethod::Mwsr, std::memory_order_relaxed);
-            return;
-        }
-        if (value == "UltraScale2D") {
-            g_upscaleMethod.store(UpscaleMethod::SmartInteger, std::memory_order_relaxed);
             return;
         }
 
@@ -333,45 +319,6 @@ namespace {
             log::warn("Unknown SGSR 1 quality preset '{}', using Custom", value);
         }
         g_sgsrPresetScale.store(scale, std::memory_order_relaxed);
-    }
-
-    void updateUltraScale2DQualityPreset(std::string_view value) {
-        float scale = 0.f;
-        if (value == "Native") scale = 1.f;
-        else if (value == "Ultra Quality") scale = 0.77f;
-        else if (value == "Quality") scale = 0.67f;
-        else if (value == "Balanced") scale = 0.59f;
-        else if (value == "Performance") scale = 0.50f;
-        else if (value == "Ultra Performance") scale = 0.33f;
-        else if (value != "Custom") {
-            log::warn("Unknown UltraScale2D quality preset '{}', using Custom", value);
-        }
-        g_ultraScale2DPresetScale.store(scale, std::memory_order_relaxed);
-    }
-
-    void updateMwsrQualityPreset(std::string_view value) {
-        float scale = 0.f;
-        if (value == "Native") scale = 1.f;
-        else if (value == "Ultra Quality") scale = 0.90f;
-        else if (value == "Quality") scale = 0.82f;
-        else if (value == "Balanced") scale = 0.75f;
-        else if (value == "Performance") scale = 0.67f;
-        else if (value == "Ultra Performance") scale = 0.59f;
-        else if (value != "Custom") {
-            log::warn("Unknown MWSR quality preset '{}', using Custom", value);
-        }
-        g_mwsrPresetScale.store(scale, std::memory_order_relaxed);
-    }
-
-    void updateIntegerScalingPreset(std::string_view value) {
-        int factor = 2;
-        if (value == "Native (1x)") factor = 1;
-        else if (value == "Performance (2x)") factor = 2;
-        else if (value == "Ultra Performance (3x)") factor = 3;
-        else {
-            log::warn("Unknown Integer Scaling preset '{}', using Performance (2x)", value);
-        }
-        g_integerScaleFactor.store(factor, std::memory_order_relaxed);
     }
 
     void updateSgsrOperationMode(std::string_view value) {
@@ -531,8 +478,7 @@ namespace {
             if (key.needsDownsample) {
                 g_fsrRenderer.reset();
                 g_fsrLiteRenderer.reset();
-                g_smartIntegerRenderer.reset();
-                g_mwsrRenderer.reset();
+                        g_mwsrRenderer.reset();
                 g_renderScaleRenderer.reset();
                 g_ssaaRenderer.reset();
                 auto const& ssaaShader = config.aa == AntiAliasingMethod::Ssaa300 ?
@@ -543,34 +489,21 @@ namespace {
             else if (config.upscaling == UpscaleMethod::Fsr) {
                 g_renderScaleRenderer.reset();
                 g_fsrLiteRenderer.reset();
-                g_smartIntegerRenderer.reset();
-                g_mwsrRenderer.reset();
+                        g_mwsrRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_fsrRenderer.prepare(bv::shaders::kFsrShader, key.width, key.height);
             }
             else if (config.upscaling == UpscaleMethod::FsrLite) {
                 g_renderScaleRenderer.reset();
                 g_fsrRenderer.reset();
-                g_smartIntegerRenderer.reset();
-                g_mwsrRenderer.reset();
+                        g_mwsrRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_fsrLiteRenderer.prepare(bv::shaders::kFsrLiteShader, key.width, key.height);
-            }
-            else if (config.upscaling == UpscaleMethod::SmartInteger) {
-                g_renderScaleRenderer.reset();
-                g_fsrRenderer.reset();
-                g_fsrLiteRenderer.reset();
-                g_mwsrRenderer.reset();
-                g_ssaaRenderer.reset();
-                prepared = g_smartIntegerRenderer.prepare(
-                    bv::shaders::kSmartIntegerShader, key.width, key.height
-                );
             }
             else if (config.upscaling == UpscaleMethod::Mwsr) {
                 g_fsrRenderer.reset();
                 g_fsrLiteRenderer.reset();
-                g_smartIntegerRenderer.reset();
-                g_ssaaRenderer.reset();
+                        g_ssaaRenderer.reset();
                 // Prepare a cheap linear fallback in case GLES 3.0 or shader
                 // compilation is unavailable in the active game context.
                 prepared = g_renderScaleRenderer.prepare(
@@ -591,8 +524,7 @@ namespace {
             g_renderScaleRenderer.reset();
             g_fsrRenderer.reset();
             g_fsrLiteRenderer.reset();
-            g_smartIntegerRenderer.reset();
-            g_mwsrRenderer.reset();
+                g_mwsrRenderer.reset();
             g_ssaaRenderer.reset();
         }
 
@@ -817,7 +749,6 @@ namespace {
 
         auto const effectCount = config.effectCount();
         auto const configuredScale = g_renderScale.load(std::memory_order_relaxed);
-        auto const smartIntegerScaling = config.upscaling == UpscaleMethod::SmartInteger;
         auto const mwsrUpscaling = config.upscaling == UpscaleMethod::Mwsr;
         auto const presetScale = (config.upscaling == UpscaleMethod::Fsr ||
             config.upscaling == UpscaleMethod::FsrLite) ?
@@ -825,27 +756,17 @@ namespace {
             (config.upscaling == UpscaleMethod::Sgsr ?
                 g_sgsrPresetScale.load(std::memory_order_relaxed) :
                 (mwsrUpscaling ?
-                    g_mwsrPresetScale.load(std::memory_order_relaxed) :
-                    (smartIntegerScaling ?
-                        g_ultraScale2DPresetScale.load(std::memory_order_relaxed) : 0.f)));
-        auto const integerScaling = config.upscaling == UpscaleMethod::Integer;
-        auto const integerFactor = integerScaling ?
-            std::clamp(g_integerScaleFactor.load(std::memory_order_relaxed), 1, 3) : 1;
-        // Named UltraScale2D presets are exact input-resolution choices. Custom
-        // alone follows the general Render Scale slider.
-        auto const requestedScale = smartIntegerScaling && presetScale > 0.f ?
-            presetScale : (presetScale > 0.f ? presetScale * configuredScale : configuredScale);
+                    g_mwsrPresetScale.load(std::memory_order_relaxed) : 0.f));
+        auto const requestedScale = presetScale > 0.f ?
+            presetScale * configuredScale : configuredScale;
         auto const usesSpatialUpscaler =
             config.upscaling == UpscaleMethod::Fsr || config.upscaling == UpscaleMethod::FsrLite ||
-            config.upscaling == UpscaleMethod::Sgsr || mwsrUpscaling || smartIntegerScaling;
-        // Integer Scaling owns its exact 1x/2x/3x ratio. UltraScale2D instead
-        // uses its own spatial quality presets and reconstructs to the full viewport.
-        auto const renderScale = integerScaling ?
-            (1.f / static_cast<float>(integerFactor)) :
+            config.upscaling == UpscaleMethod::Sgsr || mwsrUpscaling;
+        auto const renderScale =
             std::clamp(requestedScale, 0.25f, usesSpatialUpscaler ? 1.f : 1.2f);
         // A selected spatial-upscaler quality preset owns the base resolution.
         // SSAA must not override its input size or route it through downsampling.
-        auto const aaScale = (presetScale > 0.f || integerScaling) ? 1.f : ssaaFactor(config.aa);
+        auto const aaScale = presetScale > 0.f ? 1.f : ssaaFactor(config.aa);
         auto const effectiveScale = renderScale * aaScale;
         GLint maxTextureSize = 0;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
@@ -861,19 +782,8 @@ namespace {
             static_cast<float>(maxTextureSize) / static_cast<float>(height)
         );
         auto const boundedScale = std::min(effectiveScale, maxDimensionScale);
-        if (integerScaling && (integerFactor > width || integerFactor > height)) {
-            visitNext();
-            return;
-        }
-        auto const internalWidth = integerScaling ?
-            std::max<GLsizei>(1, width / integerFactor) : scaledDimension(width, boundedScale);
-        auto const internalHeight = integerScaling ?
-            std::max<GLsizei>(1, height / integerFactor) : scaledDimension(height, boundedScale);
-        if (integerScaling && (internalWidth > maxTextureSize || internalHeight > maxTextureSize)) {
-            log::warn("[IntegerScaling] Requested input exceeds GL_MAX_TEXTURE_SIZE; using native rendering");
-            visitNext();
-            return;
-        }
+        auto const internalWidth = scaledDimension(width, boundedScale);
+        auto const internalHeight = scaledDimension(height, boundedScale);
         auto const needsPresentation = internalWidth != width || internalHeight != height;
         auto const needsDownsample = internalWidth > width || internalHeight > height;
         if (effectCount == 0 && !needsPresentation) {
@@ -966,7 +876,6 @@ namespace {
                     needsDownsample || config.upscaling == UpscaleMethod::Bilinear ||
                     config.upscaling == UpscaleMethod::FsrLite ||
                     config.upscaling == UpscaleMethod::Sgsr ||
-                    config.upscaling == UpscaleMethod::SmartInteger ||
                     config.upscaling == UpscaleMethod::Mwsr;
                 glTexParameteri(
                     GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linearSampling ? GL_LINEAR : GL_NEAREST
@@ -975,39 +884,7 @@ namespace {
                     GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, linearSampling ? GL_LINEAR : GL_NEAREST
                 );
                 glBindFramebuffer(GL_FRAMEBUFFER, callerTarget.framebuffer);
-                if (integerScaling) {
-                    // Pixel-perfect integer scaling: every source texel occupies
-                    // exactly N x N output pixels. Any non-divisible remainder is
-                    // centered as a thin black border instead of being stretched.
-                    auto const integerOutputWidth = internalWidth * integerFactor;
-                    auto const integerOutputHeight = internalHeight * integerFactor;
-                    auto const integerOutputX =
-                        callerTarget.x + (callerTarget.width - integerOutputWidth) / 2;
-                    auto const integerOutputY =
-                        callerTarget.y + (callerTarget.height - integerOutputHeight) / 2;
-                    if (integerOutputWidth != callerTarget.width ||
-                        integerOutputHeight != callerTarget.height) {
-                        glViewport(
-                            callerTarget.x, callerTarget.y,
-                            callerTarget.width, callerTarget.height
-                        );
-                        glEnable(GL_SCISSOR_TEST);
-                        glScissor(
-                            callerTarget.x, callerTarget.y,
-                            callerTarget.width, callerTarget.height
-                        );
-                        glClearColor(0.f, 0.f, 0.f, 1.f);
-                        glClear(GL_COLOR_BUFFER_BIT);
-                        glDisable(GL_SCISSOR_TEST);
-                    }
-                    glViewport(
-                        integerOutputX, integerOutputY,
-                        integerOutputWidth, integerOutputHeight
-                    );
-                }
-                else {
-                    glViewport(callerTarget.x, callerTarget.y, callerTarget.width, callerTarget.height);
-                }
+                glViewport(callerTarget.x, callerTarget.y, callerTarget.width, callerTarget.height);
 #ifdef GEODE_IS_ANDROID
                 g_renderGpuProfiler.beginUpscale();
 #endif
@@ -1019,9 +896,6 @@ namespace {
                 }
                 else if (config.upscaling == UpscaleMethod::FsrLite) {
                     g_fsrLiteRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
-                }
-                else if (config.upscaling == UpscaleMethod::SmartInteger) {
-                    g_smartIntegerRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
                 }
                 else if (config.upscaling == UpscaleMethod::Mwsr) {
                     if (!g_mwsrRenderer.apply(
@@ -1842,8 +1716,6 @@ $on_mod(Loaded) {
     bindStringSetting("upscale-method", updateUpscaleMethod);
     bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
     bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset);
-    bindStringSetting("integer-scaling-quality-preset", updateIntegerScalingPreset);
-    bindStringSetting("ultrascale2d-quality-preset", updateUltraScale2DQualityPreset);
     bindStringSetting("mwsr-quality-preset", updateMwsrQualityPreset);
     bindBoolSetting("mwsr-chroma444", g_mwsrChroma444);
     bindStringSetting("sgsr-operation-mode", updateSgsrOperationMode);
