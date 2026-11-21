@@ -95,7 +95,7 @@
         "render-scale": {
             "type": "float",
             "name": "Render Scale",
-            "description": "Multiplier applied after FSR 1, SGSR 1, or MWSR quality presets. Custom uses the slider as the base resolution.",
+            "description": "Custom uses this slider as the input-resolution scale. Named shared quality presets override the slider and apply the same exact resolution ratio to every upscaling method.",
             "default": 1,
             "min": 0.25,
             "max": 1.2,
