@@ -207,6 +207,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
     private var outputWidth = 0
     private var outputHeight = 0
     private var sceneTargetStatus = "not created"
+    private var sgsr1Capability = "not checked"
     private val shaderDiagnostics = mutableListOf<String>()
     private lateinit var triangleBuffer: FloatBuffer
     private lateinit var quadBuffer: FloatBuffer
@@ -238,8 +239,13 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         val renderer = GLES30.glGetString(GLES30.GL_RENDERER) ?: "unknown"
         val version = GLES30.glGetString(GLES30.GL_VERSION) ?: "unknown"
         val method = listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR")[upscaleMethod]
+        val majorMinor = IntArray(2)
+        GLES30.glGetIntegerv(0x821B, majorMinor, 0) // GL_MAJOR_VERSION
+        GLES30.glGetIntegerv(0x821C, majorMinor, 1) // GL_MINOR_VERSION
         return buildString {
             append("GLES runtime: ").append(version)
+            append(" (").append(majorMinor[0]).append(".").append(majorMinor[1]).append(")")
+            append("\\nSGSR1 textureGather: ").append(sgsr1Capability)
             append("\nGPU: ").append(vendor).append(" / ").append(renderer)
             append("\nActive method: ").append(method)
             append("\nRender target: ").append(sceneWidth).append("x").append(sceneHeight)
@@ -252,6 +258,21 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             } else {
                 append("\nShader diagnostics: all loaded shaders compiled and linked")
             }
+        }
+    }
+
+    private fun detectTextureGatherSupport(): String {
+        val version = IntArray(2)
+        GLES30.glGetIntegerv(0x821B, version, 0) // GL_MAJOR_VERSION
+        GLES30.glGetIntegerv(0x821C, version, 1) // GL_MINOR_VERSION
+        if (version[0] > 3 || (version[0] == 3 && version[1] >= 1)) {
+            return "supported (GLES ${version[0]}.${version[1]} core)"
+        }
+        val extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS).orEmpty().split(Regex("\\\\s+"))
+        return if ("GL_EXT_texture_gather" in extensions) {
+            "supported (GL_EXT_texture_gather)"
+        } else {
+            "unsupported (requires GLES 3.1+ or GL_EXT_texture_gather; found GLES ${version[0]}.${version[1]})"
         }
     }
 
@@ -330,7 +351,13 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
                 in_TEXCOORD0 = vec4(aUv, 0.0, 1.0);
             }
         """.trimIndent()
-        sgsr1Program = loadShaderProgram("SGSR1", sgsrVertex, "shaders/sgsr1_mobile.frag")
+        sgsr1Capability = detectTextureGatherSupport()
+        sgsr1Program = if (sgsr1Capability.startsWith("supported")) {
+            loadShaderProgram("SGSR1", sgsrVertex, "shaders/sgsr1_mobile.frag")
+        } else {
+            shaderDiagnostics += "SGSR1 skipped: textureGather is unavailable in this GLES context"
+            0
+        }
         fsrLiteProgram = loadShaderProgram("FSR Lite", vertex, "shaders/fsr_lite_6tap.frag")
         mwsrProgram = loadShaderProgram("MWSR", vertex, "shaders/mwsr_up.frag")
         casProgram = loadShaderProgram("CAS", vertex, "shaders/amd_cas_sharpen.frag")
@@ -572,26 +599,49 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
 
     private fun linkProgram(vertexSource: String, fragmentSource: String): Int {
         val vertex = compileShader(GLES30.GL_VERTEX_SHADER, vertexSource)
-        val fragment = compileShader(GLES30.GL_FRAGMENT_SHADER, fragmentSource)
+        val fragment = try {
+            compileShader(GLES30.GL_FRAGMENT_SHADER, fragmentSource)
+        } catch (failure: Throwable) {
+            GLES30.glDeleteShader(vertex)
+            throw failure
+        }
         val program = GLES30.glCreateProgram()
-        GLES30.glAttachShader(program, vertex)
-        GLES30.glAttachShader(program, fragment)
-        GLES30.glLinkProgram(program)
-        val status = IntArray(1)
-        GLES30.glGetProgramiv(program, GLES30.GL_LINK_STATUS, status, 0)
-        GLES30.glDeleteShader(vertex)
-        GLES30.glDeleteShader(fragment)
-        check(status[0] == GLES30.GL_TRUE) { "GLES program link failed: " + GLES30.glGetProgramInfoLog(program) }
-        return program
+        if (program == 0) {
+            GLES30.glDeleteShader(vertex)
+            GLES30.glDeleteShader(fragment)
+            error("GLES could not allocate a program object")
+        }
+        try {
+            GLES30.glAttachShader(program, vertex)
+            GLES30.glAttachShader(program, fragment)
+            GLES30.glLinkProgram(program)
+            val status = IntArray(1)
+            GLES30.glGetProgramiv(program, GLES30.GL_LINK_STATUS, status, 0)
+            check(status[0] == GLES30.GL_TRUE) {
+                "GLES program link failed: " + GLES30.glGetProgramInfoLog(program)
+            }
+            return program
+        } catch (failure: Throwable) {
+            GLES30.glDeleteProgram(program)
+            throw failure
+        } finally {
+            GLES30.glDeleteShader(vertex)
+            GLES30.glDeleteShader(fragment)
+        }
     }
 
     private fun compileShader(type: Int, source: String): Int {
         val shader = GLES30.glCreateShader(type)
+        if (shader == 0) error("GLES could not allocate a shader object")
         GLES30.glShaderSource(shader, source)
         GLES30.glCompileShader(shader)
         val status = IntArray(1)
         GLES30.glGetShaderiv(shader, GLES30.GL_COMPILE_STATUS, status, 0)
-        check(status[0] == GLES30.GL_TRUE) { "GLES shader compile failed: " + GLES30.glGetShaderInfoLog(shader) }
+        if (status[0] != GLES30.GL_TRUE) {
+            val log = GLES30.glGetShaderInfoLog(shader)
+            GLES30.glDeleteShader(shader)
+            error("GLES shader compile failed: $log")
+        }
         return shader
     }
 }
