@@ -77,11 +77,11 @@ class MainActivity : Activity() {
         val presetLabel = TextView(this).apply { text = "Quality preset" }
         val preset = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                listOf("Ultra Quality — 90%", "Quality — 82%", "Balanced — 75%", "Performance — 67%", "Custom"))
+                listOf("Ultra Quality — 90%", "Quality — 82%", "Balanced — 75%", "Performance — 67%", "Ultra Performance — 59%", "Custom"))
             val currentPercent = (renderer.renderScale * 100).toInt()
-            val presetValues = listOf(90, 82, 75, 67)
+            val presetValues = listOf(90, 82, 75, 67, 59)
             val matching = presetValues.indexOfFirst { kotlin.math.abs(it - currentPercent) <= 1 }
-            setSelection(if (matching >= 0) matching else 4)
+            setSelection(if (matching >= 0) matching else 5)
         }
         val methodLabel = TextView(this).apply { text = "Upscale method" }
         val method = Spinner(this).apply {
@@ -98,7 +98,7 @@ class MainActivity : Activity() {
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     scaleLabel.text = "Internal render scale: ${50 + progress}%"
-                    if (fromUser && preset.selectedItemPosition != 4) preset.setSelection(4)
+                    if (fromUser && preset.selectedItemPosition != 5) preset.setSelection(5)
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
                 override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
@@ -107,7 +107,7 @@ class MainActivity : Activity() {
         preset.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                val percent = listOf(90, 82, 75, 67).getOrNull(position)
+                val percent = listOf(90, 82, 75, 67, 59).getOrNull(position)
                 if (percent != null) scale.progress = percent - 50
             }
         }
