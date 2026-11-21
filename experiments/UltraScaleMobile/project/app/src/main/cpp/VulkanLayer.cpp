@@ -38,6 +38,9 @@ VkLayerDeviceCreateInfo* FindDeviceLink(const VkDeviceCreateInfo* info) {
     }
     return nullptr;
 }
+
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL LayerCreateInstance(const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*);
 VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(VkPhysicalDevice, const VkDeviceCreateInfo*, const VkAllocationCallbacks*, VkDevice*);
 VKAPI_ATTR VkResult VKAPI_CALL LayerEnumeratePhysicalDevices(VkInstance, uint32_t*, VkPhysicalDevice*);
@@ -47,7 +50,6 @@ VKAPI_ATTR void VKAPI_CALL LayerDestroyDevice(VkDevice, const VkAllocationCallba
 VKAPI_ATTR void VKAPI_CALL LayerGetDeviceQueue(VkDevice, uint32_t, uint32_t, VkQueue*);
 VKAPI_ATTR void VKAPI_CALL LayerGetDeviceQueue2(VkDevice, const VkDeviceQueueInfo2*, VkQueue*);
 VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresent(VkQueue, const VkPresentInfoKHR*);
-}
 
 extern "C" __attribute__((visibility("default"))) VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(uint32_t* count, VkLayerProperties* props) {
     if (!count) return VK_ERROR_INITIALIZATION_FAILED;
