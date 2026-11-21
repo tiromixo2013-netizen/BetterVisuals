@@ -94,7 +94,9 @@ object GraphicsApiScanner {
             rootAvailable -> LayerReadiness.ELIGIBLE_ROOT
             else -> LayerReadiness.NOT_ELIGIBLE
         }
+        // Android's graphics-layer opt-in metadata applies to both Vulkan and GLES.
         val glesReadiness = when {
+            optIn -> LayerReadiness.ELIGIBLE_OPT_IN
             debuggable -> LayerReadiness.ELIGIBLE_DEBUG
             rootAvailable -> LayerReadiness.ELIGIBLE_ROOT
             else -> LayerReadiness.NOT_ELIGIBLE
@@ -111,7 +113,7 @@ object GraphicsApiScanner {
             vulkanLayer = vulkanReadiness,
             glesLayer = glesReadiness,
             targetAllowsVulkan = optIn || debuggable || rootAvailable,
-            targetAllowsGles = debuggable || rootAvailable,
+            targetAllowsGles = optIn || debuggable || rootAvailable,
             versionName = packageInfo?.versionName ?: "Unknown",
             versionCode = versionCode,
             targetSdk = app.targetSdkVersion,
