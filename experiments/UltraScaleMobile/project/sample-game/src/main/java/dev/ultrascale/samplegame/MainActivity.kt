@@ -217,8 +217,11 @@ private class UpscaleTestRenderer : GLSurfaceView.Renderer {
     }
 
     override fun onDrawFrame(gl: GL10?) {
-        if (upscalingEnabled) {
-            ensureSceneTarget()
+        if (upscalingEnabled && ensureSceneTarget()) {
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, sceneTexture)
+            val filter = if (nearestMode) GLES30.GL_NEAREST else GLES30.GL_LINEAR
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, filter)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, filter)
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, framebuffer)
             GLES30.glViewport(0, 0, sceneWidth, sceneHeight)
             drawScene()
@@ -243,10 +246,10 @@ private class UpscaleTestRenderer : GLSurfaceView.Renderer {
         }
     }
 
-    private fun ensureSceneTarget() {
+    private fun ensureSceneTarget(): Boolean {
         val wantedWidth = (outputWidth * renderScale).toInt().coerceAtLeast(1)
         val wantedHeight = (outputHeight * renderScale).toInt().coerceAtLeast(1)
-        if (wantedWidth == sceneWidth && wantedHeight == sceneHeight && framebuffer != 0) return
+        if (wantedWidth == sceneWidth && wantedHeight == sceneHeight && framebuffer != 0) return true
         if (framebuffer != 0) GLES30.glDeleteFramebuffers(1, intArrayOf(framebuffer), 0)
         if (sceneTexture != 0) GLES30.glDeleteTextures(1, intArrayOf(sceneTexture), 0)
         val textures = IntArray(1)
@@ -274,12 +277,13 @@ private class UpscaleTestRenderer : GLSurfaceView.Renderer {
             GLES30.glDeleteTextures(1, intArrayOf(sceneTexture), 0)
             framebuffer = 0
             sceneTexture = 0
-            sceneWidth = outputWidth
-            sceneHeight = outputHeight
-            return
+            sceneWidth = 0
+            sceneHeight = 0
+            return false
         }
         sceneWidth = wantedWidth
         sceneHeight = wantedHeight
+        return true
     }
 
     private fun drawScene() {
