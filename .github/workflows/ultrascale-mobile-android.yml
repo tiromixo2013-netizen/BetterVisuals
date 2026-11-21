@@ -41,6 +41,23 @@ jobs:
       - name: Build, lint and test
         working-directory: experiments/UltraScaleMobile/project
         run: gradle --no-daemon --stacktrace lintDebug testDebugUnitTest assembleDebug
+      - name: Verify native graphics layers in APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="experiments/UltraScaleMobile/project/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$apk"
+          entries="$(unzip -Z1 "$apk")"
+          for abi in arm64-v8a armeabi-v7a; do
+            for library in libVkLayer_ultrascale_api_lab.so libGLES_ultrascale.so; do
+              expected="lib/$abi/$library"
+              if ! grep -Fxq "$expected" <<< "$entries"; then
+                echo "::error::Missing packaged native layer: $expected"
+                exit 1
+              fi
+              echo "Verified $expected"
+            done
+          done
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
