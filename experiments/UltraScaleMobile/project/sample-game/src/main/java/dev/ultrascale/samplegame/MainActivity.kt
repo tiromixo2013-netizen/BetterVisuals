@@ -362,6 +362,8 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
                 }
             }
             GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+            GLES30.glDisableVertexAttribArray(0)
+            GLES30.glDisableVertexAttribArray(1)
             if (useCas) {
                 GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
                 GLES30.glViewport(0, 0, outputWidth, outputHeight)
@@ -374,6 +376,8 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
                     outputWidth.toFloat(), outputHeight.toFloat())
                 GLES30.glUniform1f(GLES30.glGetUniformLocation(casProgram, "uSharpness"), casSharpness)
                 GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+                GLES30.glDisableVertexAttribArray(0)
+                GLES30.glDisableVertexAttribArray(1)
             }
         } else {
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
@@ -494,6 +498,9 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
         GLES30.glUseProgram(sceneProgram)
         bindQuad(sceneProgram, triangleBuffer, GLES30.GL_TRIANGLES)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
+        GLES30.glDisableVertexAttribArray(0)
+        GLES30.glDisableVertexAttribArray(1)
     }
 
     private fun bindQuad(program: Int, buffer: FloatBuffer, mode: Int = GLES30.GL_TRIANGLE_STRIP) {
@@ -503,9 +510,6 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         buffer.position(2)
         GLES30.glEnableVertexAttribArray(1)
         GLES30.glVertexAttribPointer(1, 2, GLES30.GL_FLOAT, false, 16, buffer)
-        GLES30.glDrawArrays(mode, 0, if (mode == GLES30.GL_TRIANGLES) 3 else 4)
-        GLES30.glDisableVertexAttribArray(0)
-        GLES30.glDisableVertexAttribArray(1)
     }
 
     private fun floatBuffer(values: FloatArray): FloatBuffer =
