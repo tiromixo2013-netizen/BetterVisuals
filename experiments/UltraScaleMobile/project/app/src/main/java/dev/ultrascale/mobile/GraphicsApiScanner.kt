@@ -19,29 +19,50 @@ data class ApiReport(
     val vulkanLayer: LayerReadiness,
     val glesLayer: LayerReadiness,
     val targetAllowsVulkan: Boolean,
-    val targetAllowsGles: Boolean
+    val targetAllowsGles: Boolean,
+    val versionName: String,
+    val versionCode: Long,
+    val targetSdk: Int,
+    val nativeAbis: Set<String>,
+    val nativeLibraryCount: Int,
+    val manifestVulkanOptIn: Boolean
 )
 
 object GraphicsApiScanner {
     @Suppress("DEPRECATION")
     fun inspect(context: Context, suppliedApp: ApplicationInfo): ApiReport {
+        val pm = context.packageManager
         val app = runCatching {
-            context.packageManager.getApplicationInfo(suppliedApp.packageName, PackageManager.GET_META_DATA)
+            pm.getApplicationInfo(suppliedApp.packageName, PackageManager.GET_META_DATA)
         }.getOrDefault(suppliedApp)
+        val packageInfo = runCatching {
+            if (Build.VERSION.SDK_INT >= 33) pm.getPackageInfo(
+                app.packageName, PackageManager.PackageInfoFlags.of(PackageManager.GET_META_DATA.toLong())
+            ) else pm.getPackageInfo(app.packageName, PackageManager.GET_META_DATA)
+        }.getOrNull()
+
         val libs = linkedSetOf<String>()
-        val paths = listOf(app.sourceDir) + (app.splitSourceDirs?.toList() ?: emptyList())
+        val abis = linkedSetOf<String>()
+        val paths = listOfNotNull(app.sourceDir) + (app.splitSourceDirs?.toList() ?: emptyList())
         paths.forEach { path ->
             runCatching {
                 ZipFile(path).use { zip ->
                     val entries = zip.entries()
                     var count = 0
-                    while (entries.hasMoreElements() && count++ < 6000) {
-                        val name = entries.nextElement().name.lowercase()
-                        if (name.endsWith(".so")) libs += name.substringAfterLast('/')
+                    while (entries.hasMoreElements() && count++ < 12000) {
+                        val name = entries.nextElement().name
+                        if (name.startsWith("lib/") && name.endsWith(".so")) {
+                            val parts = name.split('/')
+                            if (parts.size >= 3) {
+                                abis += parts[1]
+                                libs += parts.last().lowercase()
+                            }
+                        }
                     }
                 }
             }
         }
+
         val engine = when {
             libs.any { it.contains("sample_vulkan_probe") } -> "UltraScale Test Harness"
             libs.any { it.contains("libunity") } -> "Unity"
@@ -55,40 +76,48 @@ object GraphicsApiScanner {
         if (libs.any { it.contains("vulkan") } || engine in setOf("Unity", "Unreal", "Godot")) candidates += RenderApi.VULKAN
         if (libs.any { it.contains("gles") || it.contains("egl") || it.contains("opengl") } ||
             engine in setOf("Unity", "Unreal", "Godot", "Cocos", "libGDX", "UltraScale Test Harness")) candidates += RenderApi.OPENGL_ES
+
         val kind = when (engine) {
             "Cocos" -> GameKind.TWO_D_LIKELY
             "Unreal" -> GameKind.THREE_D_LIKELY
             else -> GameKind.HYBRID_OR_UNKNOWN
         }
         val debuggable = app.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-        // Android's manifest opt-in is honored for apps targeting API 30+.
         val optIn = app.targetSdkVersion >= Build.VERSION_CODES.R && runCatching {
             app.metaData?.getBoolean("com.android.graphics.injectLayers.enable", false) == true
         }.getOrDefault(false)
-        // A userdebug/eng build alone is not enough: non-debuggable targets need root.
         val rootAvailable = ShizukuBridge.uid() == 0
-        // Vulkan supports the API-30+ manifest opt-in for non-debuggable targets.
+
         val vulkanReadiness = when {
             optIn -> LayerReadiness.ELIGIBLE_OPT_IN
             debuggable -> LayerReadiness.ELIGIBLE_DEBUG
             rootAvailable -> LayerReadiness.ELIGIBLE_ROOT
             else -> LayerReadiness.NOT_ELIGIBLE
         }
-        // Android's GLES layer documentation only permits external local layers
-        // for debuggable targets unless the device has root. Vulkan opt-in alone
-        // does not make a production GLES target eligible.
         val glesReadiness = when {
             debuggable -> LayerReadiness.ELIGIBLE_DEBUG
             rootAvailable -> LayerReadiness.ELIGIBLE_ROOT
             else -> LayerReadiness.NOT_ELIGIBLE
         }
+        val versionCode = if (Build.VERSION.SDK_INT >= 28) packageInfo?.longVersionCode ?: 0L
+            else packageInfo?.versionCode?.toLong() ?: 0L
+
         return ApiReport(
-            engine, kind, candidates,
-            if (engine == "Unknown") "Low" else "Heuristic",
-            "APK native-library signatures only; candidate APIs, not proof of the active runtime API",
-            vulkanReadiness, glesReadiness,
-            optIn || debuggable || rootAvailable,
-            debuggable || rootAvailable
+            engine = engine,
+            gameKind = kind,
+            candidateApis = candidates,
+            confidence = if (engine == "Unknown") "Low" else "Heuristic",
+            evidence = "Static APK scan: ${libs.size} native libraries across ${abis.size} ABI(s). Candidate APIs are not proof of the active runtime API.",
+            vulkanLayer = vulkanReadiness,
+            glesLayer = glesReadiness,
+            targetAllowsVulkan = optIn || debuggable || rootAvailable,
+            targetAllowsGles = debuggable || rootAvailable,
+            versionName = packageInfo?.versionName ?: "Unknown",
+            versionCode = versionCode,
+            targetSdk = app.targetSdkVersion,
+            nativeAbis = abis,
+            nativeLibraryCount = libs.size,
+            manifestVulkanOptIn = optIn
         )
     }
 }
