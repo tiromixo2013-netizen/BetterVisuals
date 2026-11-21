@@ -274,20 +274,6 @@
             "description": "Apply a CRT-style filter.",
             "default": false
         },
-        "fsr-quality-preset": {
-            "type": "string",
-            "name": "FSR 1 Quality Preset",
-            "description": "Selects the base FSR 1 input resolution. Render Scale is an additional multiplier. Custom uses the Render Scale slider without a preset ratio.",
-            "default": "Custom",
-            "one-of": [
-                "Custom",
-                "Ultra Quality",
-                "Quality",
-                "Balanced",
-                "Performance",
-                "Ultra Performance"
-            ]
-        },
         "frame-pacing-enabled": {
             "type": "bool",
             "name": "Frame Pacing (Android)",
@@ -317,29 +303,21 @@
                 "LERP"
             ]
         },
-        "sgsr-quality-preset": {
-            "type": "string",
-            "name": "SGSR 1 Quality Preset",
-            "description": "Controls SGSR1 input resolution independently from Operation Mode. Custom uses Render Scale without a preset ratio; lower presets reduce capture resolution.",
-            "default": "Custom",
-            "one-of": [
-                "Custom",
-                "Ultra Quality",
-                "Quality",
-                "Balanced",
-                "Performance",
-                "Ultra Performance"
-            ]
-        },
         "mwsr-title": {
             "type": "title",
             "name": "MWSR Upscaler"
         },
-        "mwsr-quality-preset": {
+        "mwsr-chroma444": {
+            "type": "bool",
+            "name": "MWSR 4:4:4 Edge Detection",
+            "description": "Uses the steepest RGB channel instead of luma to detect coloured edges. Off matches the upstream MWSR default; enable to compare RGB edge detection in Geometry Dash.",
+            "default": false
+        },
+        "upscale-quality-preset": {
             "type": "string",
-            "name": "MWSR Quality Preset",
-            "description": "Controls the MWSR input resolution. Native bypasses scaling; Custom uses Render Scale. Lower presets reduce scene rendering resolution before the single-frame MWSR reconstruction pass.",
-            "default": "Balanced",
+            "name": "Upscaling Quality Preset",
+            "description": "One shared input-resolution preset for every upscaling method. The selected ratio is applied identically to Nearest, Bilinear, FSR 1, FSR Lite, SGSR 1 and MWSR. Custom uses the Render Scale slider.",
+            "default": "Custom",
             "one-of": [
                 "Custom",
                 "Native",
@@ -349,12 +327,6 @@
                 "Performance",
                 "Ultra Performance"
             ]
-        },
-        "mwsr-chroma444": {
-            "type": "bool",
-            "name": "MWSR 4:4:4 Edge Detection",
-            "description": "Uses the steepest RGB channel instead of luma to detect coloured edges. Off matches the upstream MWSR default; enable to compare RGB edge detection in Geometry Dash.",
-            "default": false
         }
     }
 }
