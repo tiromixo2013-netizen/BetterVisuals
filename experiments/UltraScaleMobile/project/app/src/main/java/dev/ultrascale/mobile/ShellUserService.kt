@@ -38,19 +38,16 @@ class ShellUserService : ICommandService.Stub() {
         if (existingLayers.isEmpty()) runSettings("delete", layerKey, null)
         else runSettings("put", layerKey, existingLayers.joinToString(":"))
 
-        // Remove our layer APK only when neither UltraScale layer remains configured.
-        val vulkanStillEnabled = readSetting("gpu_debug_layers").split(':').any { it == "VK_LAYER_ULTRASCALE_api_lab" }
-        val glesStillEnabled = readSetting("gpu_debug_layers_gles").split(':').any { it == "libGLES_ultrascale.so" }
-        if (!vulkanStillEnabled && !glesStillEnabled) {
-            layerPackagesNow.remove(layerPackage)
-            if (layerPackagesNow.isEmpty()) runSettings("delete", "gpu_debug_layer_app", null)
-            else runSettings("put", "gpu_debug_layer_app", layerPackagesNow.joinToString(":"))
-            if (layerPackagesNow.isEmpty()) {
-                runSettings("delete", "enable_gpu_debug_layers", null)
-                runSettings("delete", "gpu_debug_app", null)
-            }
+        // Keep the layer-package search list intact: it may also host unrelated layers.
+        // Disable the global switch only when both Vulkan and GLES layer lists are empty.
+        val anyVulkanLayers = readSetting("gpu_debug_layers").isNotBlank()
+        val anyGlesLayers = readSetting("gpu_debug_layers_gles").isNotBlank()
+        if (!anyVulkanLayers && !anyGlesLayers) {
+            runSettings("delete", "enable_gpu_debug_layers", null)
+            runSettings("delete", "gpu_debug_app", null)
         }
-        return "Disabled UltraScale $api layer for $targetPackage without clearing unrelated layer entries. Restart the game."
+        return "Disabled UltraScale $api layer for $targetPackage; unrelated layer names and package search entries were preserved. Restart the game."
+
     }
 
     private fun readSetting(key: String): String {
