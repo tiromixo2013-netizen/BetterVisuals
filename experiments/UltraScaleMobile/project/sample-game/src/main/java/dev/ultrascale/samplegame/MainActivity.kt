@@ -75,6 +75,22 @@ class MainActivity : Activity() {
             text = "Extra sharpening (Bilinear / Nearest only)"
             isChecked = renderer.sharpeningEnabled
         }
+        val cas = Switch(this).apply {
+            text = "AMD FidelityFX CAS post-sharpen"
+            isChecked = renderer.casEnabled
+        }
+        val casStrengthLabel = TextView(this).apply { text = "CAS sharpness: 50%" }
+        val casStrength = SeekBar(this).apply {
+            max = 100
+            progress = (renderer.casSharpness * 100).toInt()
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    casStrengthLabel.text = "CAS sharpness: $progress%"
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
         val presetLabel = TextView(this).apply { text = "Quality preset" }
         val preset = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
@@ -87,7 +103,7 @@ class MainActivity : Activity() {
         val methodLabel = TextView(this).apply { text = "Upscale method" }
         val method = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)"))
+                listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR (upstream lightweight)"))
             setSelection(renderer.upscaleMethod)
         }
         val scaleLabel = TextView(this).apply {
@@ -120,6 +136,9 @@ class MainActivity : Activity() {
         panel.addView(scaleLabel)
         panel.addView(scale)
         panel.addView(sharpen)
+        panel.addView(cas)
+        panel.addView(casStrengthLabel)
+        panel.addView(casStrength)
         AlertDialog.Builder(this)
             .setTitle("Advanced Graphics")
             .setView(panel)
@@ -127,10 +146,12 @@ class MainActivity : Activity() {
             .setPositiveButton("Apply") { _, _ ->
                 val newEnabled = enabled.isChecked
                 val newSharpen = sharpen.isChecked
+                val newCas = cas.isChecked
+                val newCasStrength = casStrength.progress / 100f
                 val newMethod = method.selectedItemPosition
                 val newScale = (50 + scale.progress) / 100f
                 glView.queueEvent {
-                    renderer.configure(newEnabled, newMethod, newSharpen, newScale)
+                    renderer.configure(newEnabled, newMethod, newSharpen, newScale, newCas, newCasStrength)
                     runOnUiThread { status.text = renderer.statusMessage }
                 }
             }
