@@ -4,4 +4,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "UltraScaleMobile"
-include(":app")
+include(":app", ":sample-game")
