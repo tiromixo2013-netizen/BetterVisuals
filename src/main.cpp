@@ -5,6 +5,7 @@
 #include "render/PostProcessRenderer.hpp"
 #include "render/SmaaRenderer.hpp"
 #include "render/SgsrRenderer.hpp"
+#include "render/MwsrRenderer.hpp"
 #include "shaders/PostProcessShaders.hpp"
 #include "shaders/aa/SmaaShader.hpp"
 
@@ -69,7 +70,7 @@ namespace {
         Sgsr,
         Integer,
         SmartInteger,
-        Aqr4,
+        Mwsr,
     };
 
     struct PostProcessConfig {
@@ -126,8 +127,7 @@ namespace {
     std::atomic<float> g_fsrPresetScale = 0.f;
     std::atomic<float> g_sgsrPresetScale = 0.f;
     std::atomic<float> g_ultraScale2DPresetScale = 0.f;
-    std::atomic<float> g_aqr4PresetScale = 1.f;
-    std::atomic<float> g_aqr4EdgeStrength = 0.75f;
+    std::atomic<float> g_mwsrPresetScale = 0.f;
     std::atomic<int> g_integerScaleFactor = 2;
     std::atomic<int> g_sgsrOperationMode = 1;
     std::atomic<float> g_renderScale = 1.f;
@@ -159,7 +159,7 @@ namespace {
     bv::render::PostProcessRenderer g_fsrRenderer;
     bv::render::PostProcessRenderer g_fsrLiteRenderer;
     bv::render::PostProcessRenderer g_smartIntegerRenderer;
-    bv::render::PostProcessRenderer g_aqr4Renderer;
+    bv::render::MwsrRenderer g_mwsrRenderer;
     bv::render::SgsrRenderer g_sgsrRenderer;
     bv::render::PostProcessRenderer g_casRenderer;
     bv::render::BloomRenderer g_bloomRenderer;
@@ -205,7 +205,7 @@ namespace {
         g_fsrRenderer.reset();
         g_fsrLiteRenderer.reset();
         g_smartIntegerRenderer.reset();
-        g_aqr4Renderer.reset();
+        g_mwsrRenderer.reset();
         g_sgsrRenderer.reset();
         g_casRenderer.reset();
         g_bloomRenderer.reset();
@@ -293,8 +293,8 @@ namespace {
             g_upscaleMethod.store(UpscaleMethod::Integer, std::memory_order_relaxed);
             return;
         }
-        if (value == "AQR-4") {
-            g_upscaleMethod.store(UpscaleMethod::Aqr4, std::memory_order_relaxed);
+        if (value == "MWSR") {
+            g_upscaleMethod.store(UpscaleMethod::Mwsr, std::memory_order_relaxed);
             return;
         }
         if (value == "UltraScale2D") {
@@ -348,17 +348,18 @@ namespace {
         g_ultraScale2DPresetScale.store(scale, std::memory_order_relaxed);
     }
 
-    void updateAqr4QualityPreset(std::string_view value) {
-        float scale = 1.f;
-        if (value == "Ultra Quality") scale = 0.90f;
+    void updateMwsrQualityPreset(std::string_view value) {
+        float scale = 0.f;
+        if (value == "Native") scale = 1.f;
+        else if (value == "Ultra Quality") scale = 0.90f;
         else if (value == "Quality") scale = 0.82f;
         else if (value == "Balanced") scale = 0.75f;
         else if (value == "Performance") scale = 0.67f;
         else if (value == "Ultra Performance") scale = 0.59f;
-        else if (value != "Native") {
-            log::warn("Unknown AQR-4 quality preset '{}', using Native", value);
+        else if (value != "Custom") {
+            log::warn("Unknown MWSR quality preset '{}', using Custom", value);
         }
-        g_aqr4PresetScale.store(scale, std::memory_order_relaxed);
+        g_mwsrPresetScale.store(scale, std::memory_order_relaxed);
     }
 
     void updateIntegerScalingPreset(std::string_view value) {
@@ -530,7 +531,7 @@ namespace {
                 g_fsrRenderer.reset();
                 g_fsrLiteRenderer.reset();
                 g_smartIntegerRenderer.reset();
-                g_aqr4Renderer.reset();
+                g_mwsrRenderer.reset();
                 g_renderScaleRenderer.reset();
                 g_ssaaRenderer.reset();
                 auto const& ssaaShader = config.aa == AntiAliasingMethod::Ssaa300 ?
@@ -542,7 +543,7 @@ namespace {
                 g_renderScaleRenderer.reset();
                 g_fsrLiteRenderer.reset();
                 g_smartIntegerRenderer.reset();
-                g_aqr4Renderer.reset();
+                g_mwsrRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_fsrRenderer.prepare(bv::shaders::kFsrShader, key.width, key.height);
             }
@@ -550,7 +551,7 @@ namespace {
                 g_renderScaleRenderer.reset();
                 g_fsrRenderer.reset();
                 g_smartIntegerRenderer.reset();
-                g_aqr4Renderer.reset();
+                g_mwsrRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_fsrLiteRenderer.prepare(bv::shaders::kFsrLiteShader, key.width, key.height);
             }
@@ -558,24 +559,27 @@ namespace {
                 g_renderScaleRenderer.reset();
                 g_fsrRenderer.reset();
                 g_fsrLiteRenderer.reset();
-                g_aqr4Renderer.reset();
+                g_mwsrRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_smartIntegerRenderer.prepare(
                     bv::shaders::kSmartIntegerShader, key.width, key.height
                 );
             }
-            else if (config.upscaling == UpscaleMethod::Aqr4) {
-                g_renderScaleRenderer.reset();
+            else if (config.upscaling == UpscaleMethod::Mwsr) {
                 g_fsrRenderer.reset();
                 g_fsrLiteRenderer.reset();
                 g_smartIntegerRenderer.reset();
                 g_ssaaRenderer.reset();
-                prepared = g_aqr4Renderer.prepare(bv::shaders::kAqr4Shader, key.width, key.height);
+                // Prepare a cheap linear fallback in case GLES 3.0 or shader
+                // compilation is unavailable in the active game context.
+                prepared = g_renderScaleRenderer.prepare(
+                    bv::shaders::kRenderScaleShader, key.width, key.height
+                );
             }
             else {
                 g_fsrRenderer.reset();
                 g_fsrLiteRenderer.reset();
-                g_aqr4Renderer.reset();
+                g_mwsrRenderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_renderScaleRenderer.prepare(
                     bv::shaders::kRenderScaleShader, key.width, key.height
@@ -587,7 +591,7 @@ namespace {
             g_fsrRenderer.reset();
             g_fsrLiteRenderer.reset();
             g_smartIntegerRenderer.reset();
-            g_aqr4Renderer.reset();
+            g_mwsrRenderer.reset();
             g_ssaaRenderer.reset();
         }
 
@@ -813,25 +817,26 @@ namespace {
         auto const effectCount = config.effectCount();
         auto const configuredScale = g_renderScale.load(std::memory_order_relaxed);
         auto const smartIntegerScaling = config.upscaling == UpscaleMethod::SmartInteger;
-        auto const aqr4Upscaling = config.upscaling == UpscaleMethod::Aqr4;
+        auto const mwsrUpscaling = config.upscaling == UpscaleMethod::Mwsr;
         auto const presetScale = (config.upscaling == UpscaleMethod::Fsr ||
             config.upscaling == UpscaleMethod::FsrLite) ?
             g_fsrPresetScale.load(std::memory_order_relaxed) :
             (config.upscaling == UpscaleMethod::Sgsr ?
                 g_sgsrPresetScale.load(std::memory_order_relaxed) :
-                (smartIntegerScaling ?
-                    g_ultraScale2DPresetScale.load(std::memory_order_relaxed) :
-                    (aqr4Upscaling ? g_aqr4PresetScale.load(std::memory_order_relaxed) : 0.f)));
+                (mwsrUpscaling ?
+                    g_mwsrPresetScale.load(std::memory_order_relaxed) :
+                    (smartIntegerScaling ?
+                        g_ultraScale2DPresetScale.load(std::memory_order_relaxed) : 0.f)));
         auto const integerScaling = config.upscaling == UpscaleMethod::Integer;
         auto const integerFactor = integerScaling ?
             std::clamp(g_integerScaleFactor.load(std::memory_order_relaxed), 1, 3) : 1;
         // Named UltraScale2D presets are exact input-resolution choices. Custom
         // alone follows the general Render Scale slider.
-        auto const requestedScale = (smartIntegerScaling || aqr4Upscaling) && presetScale > 0.f ?
+        auto const requestedScale = smartIntegerScaling && presetScale > 0.f ?
             presetScale : (presetScale > 0.f ? presetScale * configuredScale : configuredScale);
         auto const usesSpatialUpscaler =
             config.upscaling == UpscaleMethod::Fsr || config.upscaling == UpscaleMethod::FsrLite ||
-            config.upscaling == UpscaleMethod::Sgsr || smartIntegerScaling || aqr4Upscaling;
+            config.upscaling == UpscaleMethod::Sgsr || mwsrUpscaling || smartIntegerScaling;
         // Integer Scaling owns its exact 1x/2x/3x ratio. UltraScale2D instead
         // uses its own spatial quality presets and reconstructs to the full viewport.
         auto const renderScale = integerScaling ?
@@ -961,7 +966,7 @@ namespace {
                     config.upscaling == UpscaleMethod::FsrLite ||
                     config.upscaling == UpscaleMethod::Sgsr ||
                     config.upscaling == UpscaleMethod::SmartInteger ||
-                    config.upscaling == UpscaleMethod::Aqr4;
+                    config.upscaling == UpscaleMethod::Mwsr;
                 glTexParameteri(
                     GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linearSampling ? GL_LINEAR : GL_NEAREST
                 );
@@ -1017,8 +1022,12 @@ namespace {
                 else if (config.upscaling == UpscaleMethod::SmartInteger) {
                     g_smartIntegerRenderer.apply(sourceTexture, g_fsrReconstructionBlend.load(std::memory_order_relaxed));
                 }
-                else if (config.upscaling == UpscaleMethod::Aqr4) {
-                    g_aqr4Renderer.apply(sourceTexture, g_aqr4EdgeStrength.load(std::memory_order_relaxed));
+                else if (config.upscaling == UpscaleMethod::Mwsr) {
+                    if (!g_mwsrRenderer.apply(
+                        sourceTexture, internalWidth, internalHeight, width, height
+                    )) {
+                        g_renderScaleRenderer.apply(sourceTexture);
+                    }
                 }
                 else if (config.upscaling == UpscaleMethod::Sgsr) {
                     if (!g_sgsrRenderer.apply(
@@ -1833,8 +1842,7 @@ $on_mod(Loaded) {
     bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset);
     bindStringSetting("integer-scaling-quality-preset", updateIntegerScalingPreset);
     bindStringSetting("ultrascale2d-quality-preset", updateUltraScale2DQualityPreset);
-    bindStringSetting("aqr4-quality-preset", updateAqr4QualityPreset);
-    bindDoubleSetting("aqr4-edge-strength", g_aqr4EdgeStrength, 0.f, 1.f, 0.75f);
+    bindStringSetting("mwsr-quality-preset", updateMwsrQualityPreset);
     bindStringSetting("sgsr-operation-mode", updateSgsrOperationMode);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {

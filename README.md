@@ -25,9 +25,12 @@ Available methods:
 - Nearest neighbour (Native)
 - Bilinear interpolation (Native, Default)
 - AMD FidelityFX FSR 1 (EASU)
+- Qualcomm SGSR 1 (single-frame spatial upscaler)
+- MWSR (single-frame spatial upscaler, experimental)
 
 Nearest and Bilinear are the same speed (fastest), but Bilinear looks smoother.
 FSR 1 produces sharper edges while upscaling with a small performance cost.
+SGSR 1 and MWSR are separate spatial reconstruction methods. MWSR uses an edge-aware cubic reconstruction pass; compare both with the same Render Scale on your device. The winner depends on GPU, output scale, and game content.
 
 *FSR 1 can have more downsides on older hardware.*
 
@@ -122,3 +125,18 @@ Other credits, citations, and licenses can be found in the mod's source code
 
 
 <!-- Build validation trigger: Android repair branch -->
+
+
+## <c-47f0ff>MWSR Quality Presets</c>
+
+MWSR is an experimental single-frame spatial upscaler with a GLSL ES 3.00 implementation. It reconstructs from the current RGB frame only; it does not use motion vectors, depth, temporal history, or neural inference. The mod preserves the game's premultiplied alpha when compositing the reconstructed frame.
+
+- Native: 100% per dimension (no upscaling).
+- Ultra Quality: 90% per dimension.
+- Quality: 82% per dimension.
+- Balanced: 75% per dimension.
+- Performance: 67% per dimension.
+- Ultra Performance: 59% per dimension.
+- Custom: uses the general Render Scale slider.
+
+Use the same source-resolution preset for SGSR 1 and MWSR when comparing. GPU timings must be measured on the target device; published desktop and other-phone results do not predict Adreno 610 performance.

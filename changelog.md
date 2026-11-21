@@ -1,3 +1,10 @@
+## 2.4.4
+
+- Replaced the experimental AQR-4 custom reconstruction path with the open-source MWSR spatial upscaler.
+- Added independent MWSR quality presets and retained SGSR 1 as the on-device comparison baseline.
+- Added premultiplied-alpha-safe compositing and a linear fallback when GLES 3.0 or MWSR shader compilation is unavailable.
+- MWSR performance is not assumed: use Android GPU diagnostics to compare it with SGSR 1 on the target device.
+
 ## 2.4.2
 
 - Added experimental UltraScale2D, a dedicated four-sample diagonal edge-directed reconstruction shader operating at integer-reduced render resolutions, separate from FSR Lite.
