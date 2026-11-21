@@ -28,7 +28,7 @@ object ShizukuBridge {
 
     fun connected(): Boolean = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
     fun granted(): Boolean = runCatching {
-        connected() && Shizuku.checkSelfPermission()
+        connected() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
     }.getOrDefault(false)
     fun uid(): Int? = runCatching { if (granted()) Shizuku.getUid() else null }.getOrNull()
     fun serviceConnected(): Boolean = remote != null
