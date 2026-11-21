@@ -8,7 +8,7 @@
   },
   "id": "tiromixo2013.bettervisuals-gsr",
   "name": "Better Visuals and FPS",
-  "version": "2.4.2",
+  "version": "2.4.3",
   "developer": "tiromixo2013",
   "description": "Neat upscaling and post-processing mod.",
   "tags": [
@@ -121,6 +121,38 @@
         "AQR-4",
         "UltraScale2D"
       ]
+    },
+    "aqr4-title": {
+      "type": "title",
+      "name": "AQR-4 Upscaler"
+    },
+    "aqr4-quality-preset": {
+      "type": "string",
+      "name": "AQR-4 Quality Preset",
+      "description": "Controls AQR-4 source resolution. Native bypasses the upscaler for native-resolution performance; lower presets reduce scene rendering resolution and invoke the four-tap reconstruction pass.",
+      "default": "Native",
+      "one-of": [
+        "Native",
+        "Ultra Quality",
+        "Quality",
+        "Balanced",
+        "Performance",
+        "Ultra Performance"
+      ]
+    },
+    "aqr4-edge-strength": {
+      "type": "float",
+      "name": "AQR-4 Edge Strength",
+      "description": "Strength of adaptive edge and diagonal reconstruction.",
+      "default": 0.75,
+      "min": 0,
+      "max": 1,
+      "control": {
+        "arrows": true,
+        "arrow-step": 0.05,
+        "slider": true,
+        "slider-step": 0.05
+      }
     },
     "fsr-sharpness": {
       "type": "float",
@@ -358,34 +390,6 @@
         "Performance",
         "Ultra Performance"
       ]
-    },
-    "aqr4-quality-preset": {
-      "type": "string",
-      "name": "AQR-4 Quality Preset",
-      "description": "Controls AQR-4 source resolution. Native bypasses the upscaler for native-resolution performance; lower presets reduce scene rendering resolution and invoke the four-tap reconstruction pass.",
-      "default": "Native",
-      "one-of": [
-        "Native",
-        "Ultra Quality",
-        "Quality",
-        "Balanced",
-        "Performance",
-        "Ultra Performance"
-      ]
-    },
-    "aqr4-edge-strength": {
-      "type": "float",
-      "name": "AQR-4 Edge Strength",
-      "description": "Strength of adaptive edge and diagonal reconstruction.",
-      "default": 0.75,
-      "min": 0,
-      "max": 1,
-      "control": {
-        "arrows": true,
-        "arrow-step": 0.05,
-        "slider": true,
-        "slider-step": 0.05
-      }
     }
   }
 }
