@@ -170,6 +170,10 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
     private val nearestMode: Boolean get() = upscaleMethod == 1
     @Volatile var sharpeningEnabled = true
         private set
+    @Volatile var casEnabled = false
+        private set
+    @Volatile var casSharpness = 0.5f
+        private set
     @Volatile var renderScale = 0.75f
         private set
     @Volatile var statusMessage = "Renderer ready."
@@ -179,8 +183,15 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
     private var upscaleProgram = 0
     private var sgsr1Program = 0
     private var fsrLiteProgram = 0
+    private var mwsrProgram = 0
+    private var casProgram = 0
     private var framebuffer = 0
     private var sceneTexture = 0
+    private var postFramebuffer = 0
+    private var postTexture = 0
+    private var postWidth = 0
+    private var postHeight = 0
+    private var mwsrParamsDirty = true
     private var sceneWidth = 0
     private var sceneHeight = 0
     private var outputWidth = 0
@@ -188,22 +199,25 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
     private lateinit var triangleBuffer: FloatBuffer
     private lateinit var quadBuffer: FloatBuffer
 
-    fun configure(enabled: Boolean, method: Int, sharpen: Boolean, scale: Float) {
+    fun configure(enabled: Boolean, method: Int, sharpen: Boolean, scale: Float, cas: Boolean, casAmount: Float) {
         upscalingEnabled = enabled
-        val requestedMethod = method.coerceIn(0, 3)
+        val requestedMethod = method.coerceIn(0, 4)
         val available = when (requestedMethod) {
             2 -> sgsr1Program != 0
             3 -> fsrLiteProgram != 0
+            4 -> mwsrProgram != 0
             else -> true
         }
         upscaleMethod = if (available) requestedMethod else 0
         sharpeningEnabled = sharpen
+        casEnabled = cas && casProgram != 0
+        casSharpness = casAmount.coerceIn(0f, 1f)
         renderScale = scale.coerceIn(0.5f, 1f)
-        statusMessage = if (available) {
-            "Applied to the sample GLES renderer: " +
-                listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)")[upscaleMethod]
-        } else {
-            "Requested shader failed to compile on this GPU; safely fell back to Bilinear."
+        statusMessage = buildString {
+            append("Sample GLES: ")
+            append(listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR")[upscaleMethod])
+            if (!available) append(" (shader unavailable; Bilinear fallback)")
+            if (cas) append(if (casEnabled) " + AMD CAS" else " (CAS shader unavailable)")
         }
     }
 
@@ -271,6 +285,14 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             val source = assets.open("shaders/fsr_lite_6tap.frag").bufferedReader().use { it.readText() }
             linkProgram(vertex, source)
         }.getOrDefault(0)
+        mwsrProgram = runCatching {
+            val source = assets.open("shaders/mwsr_up.frag").bufferedReader().use { it.readText() }
+            linkProgram(vertex, source)
+        }.getOrDefault(0)
+        casProgram = runCatching {
+            val source = assets.open("shaders/amd_cas_sharpen.frag").bufferedReader().use { it.readText() }
+            linkProgram(vertex, source)
+        }.getOrDefault(0)
         triangleBuffer = floatBuffer(floatArrayOf(
             -0.72f, -0.62f, 0f, 0f,
              0.72f, -0.62f, 1f, 0f,
@@ -290,6 +312,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         outputWidth = width.coerceAtLeast(1)
         outputHeight = height.coerceAtLeast(1)
         ensureSceneTarget()
+        mwsrParamsDirty = true
     }
 
     override fun onDrawFrame(gl: GL10?) {
