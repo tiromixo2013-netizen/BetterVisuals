@@ -229,7 +229,7 @@ private fun UpscalerLibraryCard() {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Text("BUILT-IN SHADER LIBRARY", color = Violet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            Text("4 packaged techniques", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("${UpscaleTechniqueCatalog.all.size} packaged techniques", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             UpscaleTechniqueCatalog.all.forEach { technique ->
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
