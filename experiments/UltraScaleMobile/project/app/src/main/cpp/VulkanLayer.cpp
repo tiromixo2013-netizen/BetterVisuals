@@ -14,6 +14,12 @@ std::unordered_map<VkDevice, PFN_vkGetDeviceProcAddr> gDevices;
 std::unordered_map<VkPhysicalDevice, VkInstance> gPhysicalDevices;
 std::unordered_map<VkQueue, PFN_vkQueuePresentKHR> gQueues;
 std::unordered_map<VkQueue, VkDevice> gQueueDevices;
+struct SwapchainInfo {
+    VkFormat format = VK_FORMAT_UNDEFINED;
+    VkExtent2D extent{0, 0};
+    uint32_t imageCount = 0;
+};
+std::unordered_map<VkSwapchainKHR, SwapchainInfo> gSwapchains;
 std::atomic<uint64_t> gPresentedFrames{0};
 
 VkLayerInstanceCreateInfo* FindInstanceLink(const VkInstanceCreateInfo* info) {
@@ -50,6 +56,10 @@ VKAPI_ATTR void VKAPI_CALL LayerDestroyDevice(VkDevice, const VkAllocationCallba
 VKAPI_ATTR void VKAPI_CALL LayerGetDeviceQueue(VkDevice, uint32_t, uint32_t, VkQueue*);
 VKAPI_ATTR void VKAPI_CALL LayerGetDeviceQueue2(VkDevice, const VkDeviceQueueInfo2*, VkQueue*);
 VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresent(VkQueue, const VkPresentInfoKHR*);
+VKAPI_ATTR VkResult VKAPI_CALL LayerCreateSwapchain(VkDevice, const VkSwapchainCreateInfoKHR*, const VkAllocationCallbacks*, VkSwapchainKHR*);
+VKAPI_ATTR VkResult VKAPI_CALL LayerGetSwapchainImages(VkDevice, VkSwapchainKHR, uint32_t*, VkImage*);
+VKAPI_ATTR VkResult VKAPI_CALL LayerAcquireNextImage(VkDevice, VkSwapchainKHR, uint64_t, VkSemaphore, VkFence, uint32_t*);
+VKAPI_ATTR void VKAPI_CALL LayerDestroySwapchain(VkDevice, VkSwapchainKHR, const VkAllocationCallbacks*);
 
 extern "C" __attribute__((visibility("default"))) VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(uint32_t* count, VkLayerProperties* props) {
     if (!count) return VK_ERROR_INITIALIZATION_FAILED;
@@ -218,12 +228,83 @@ VKAPI_ATTR void VKAPI_CALL LayerGetDeviceQueue2(VkDevice device, const VkDeviceQ
         if (present) { std::lock_guard<std::mutex> lock(gMutex); gQueues[*queue] = present; gQueueDevices[*queue] = device; }
     }
 }
+VKAPI_ATTR VkResult VKAPI_CALL LayerCreateSwapchain(
+    VkDevice device, const VkSwapchainCreateInfoKHR* info,
+    const VkAllocationCallbacks* allocator, VkSwapchainKHR* swapchain) {
+    PFN_vkGetDeviceProcAddr gdpa = nullptr;
+    { std::lock_guard<std::mutex> lock(gMutex); auto it = gDevices.find(device); if (it != gDevices.end()) gdpa = it->second; }
+    auto create = gdpa ? reinterpret_cast<PFN_vkCreateSwapchainKHR>(gdpa(device, "vkCreateSwapchainKHR")) : nullptr;
+    if (!create) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    const VkResult result = create(device, info, allocator, swapchain);
+    if (result == VK_SUCCESS && info && swapchain && *swapchain) {
+        std::lock_guard<std::mutex> lock(gMutex);
+        gSwapchains[*swapchain] = {info->imageFormat, info->imageExtent, 0};
+        __android_log_print(ANDROID_LOG_INFO, "UltraScaleVK",
+            "Swapchain created extent=%ux%u format=%d images=%u",
+            info->imageExtent.width, info->imageExtent.height,
+            static_cast<int>(info->imageFormat), info->minImageCount);
+    }
+    return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL LayerGetSwapchainImages(
+    VkDevice device, VkSwapchainKHR swapchain, uint32_t* count, VkImage* images) {
+    PFN_vkGetDeviceProcAddr gdpa = nullptr;
+    { std::lock_guard<std::mutex> lock(gMutex); auto it = gDevices.find(device); if (it != gDevices.end()) gdpa = it->second; }
+    auto getImages = gdpa ? reinterpret_cast<PFN_vkGetSwapchainImagesKHR>(gdpa(device, "vkGetSwapchainImagesKHR")) : nullptr;
+    if (!getImages) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    const VkResult result = getImages(device, swapchain, count, images);
+    if ((result == VK_SUCCESS || result == VK_INCOMPLETE) && count) {
+        std::lock_guard<std::mutex> lock(gMutex);
+        auto it = gSwapchains.find(swapchain);
+        if (it != gSwapchains.end()) it->second.imageCount = *count;
+    }
+    return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL LayerAcquireNextImage(
+    VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout,
+    VkSemaphore semaphore, VkFence fence, uint32_t* imageIndex) {
+    PFN_vkGetDeviceProcAddr gdpa = nullptr;
+    { std::lock_guard<std::mutex> lock(gMutex); auto it = gDevices.find(device); if (it != gDevices.end()) gdpa = it->second; }
+    auto acquire = gdpa ? reinterpret_cast<PFN_vkAcquireNextImageKHR>(gdpa(device, "vkAcquireNextImageKHR")) : nullptr;
+    if (!acquire) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    const VkResult result = acquire(device, swapchain, timeout, semaphore, fence, imageIndex);
+    if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
+        SwapchainInfo info{};
+        { std::lock_guard<std::mutex> lock(gMutex); auto it = gSwapchains.find(swapchain); if (it != gSwapchains.end()) info = it->second; }
+        __android_log_print(ANDROID_LOG_VERBOSE, "UltraScaleVK",
+            "Acquire swapchain image=%u extent=%ux%u result=%d",
+            imageIndex ? *imageIndex : 0, info.extent.width, info.extent.height, result);
+    }
+    return result;
+}
+
+VKAPI_ATTR void VKAPI_CALL LayerDestroySwapchain(
+    VkDevice device, VkSwapchainKHR swapchain, const VkAllocationCallbacks* allocator) {
+    PFN_vkGetDeviceProcAddr gdpa = nullptr;
+    { std::lock_guard<std::mutex> lock(gMutex); auto it = gDevices.find(device); if (it != gDevices.end()) gdpa = it->second; }
+    auto destroy = gdpa ? reinterpret_cast<PFN_vkDestroySwapchainKHR>(gdpa(device, "vkDestroySwapchainKHR")) : nullptr;
+    { std::lock_guard<std::mutex> lock(gMutex); gSwapchains.erase(swapchain); }
+    if (destroy) destroy(device, swapchain, allocator);
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresent(VkQueue queue, const VkPresentInfoKHR* info) {
     PFN_vkQueuePresentKHR next = nullptr;
     { std::lock_guard<std::mutex> lock(gMutex); auto it = gQueues.find(queue); if (it != gQueues.end()) next = it->second; }
     if (!next) return VK_ERROR_INITIALIZATION_FAILED;
     const uint64_t frame = ++gPresentedFrames;
-    if ((frame % 600) == 1) __android_log_print(ANDROID_LOG_INFO, "UltraScaleVK", "Pass-through present observed frame=%llu", static_cast<unsigned long long>(frame));
+    if ((frame % 600) == 1 && info) {
+        for (uint32_t i = 0; i < info->swapchainCount; ++i) {
+            SwapchainInfo state{};
+            { std::lock_guard<std::mutex> lock(gMutex); auto it = gSwapchains.find(info->pSwapchains[i]); if (it != gSwapchains.end()) state = it->second; }
+            const uint32_t imageIndex = info->pImageIndices ? info->pImageIndices[i] : 0;
+            __android_log_print(ANDROID_LOG_INFO, "UltraScaleVK",
+                "Present frame=%llu swapchain_image=%u extent=%ux%u format=%d image_count=%u",
+                static_cast<unsigned long long>(frame), imageIndex,
+                state.extent.width, state.extent.height, static_cast<int>(state.format), state.imageCount);
+        }
+    }
     return next(queue, info);
 }
 
@@ -252,6 +333,10 @@ extern "C" __attribute__((visibility("default"))) VKAPI_ATTR PFN_vkVoidFunction 
     if (std::strcmp(name, "vkGetDeviceQueue") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerGetDeviceQueue);
     if (std::strcmp(name, "vkGetDeviceQueue2") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerGetDeviceQueue2);
     if (std::strcmp(name, "vkQueuePresentKHR") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerQueuePresent);
+    if (std::strcmp(name, "vkCreateSwapchainKHR") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerCreateSwapchain);
+    if (std::strcmp(name, "vkGetSwapchainImagesKHR") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerGetSwapchainImages);
+    if (std::strcmp(name, "vkAcquireNextImageKHR") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerAcquireNextImage);
+    if (std::strcmp(name, "vkDestroySwapchainKHR") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerDestroySwapchain);
     PFN_vkGetDeviceProcAddr next = nullptr;
     { std::lock_guard<std::mutex> lock(gMutex); auto it = gDevices.find(device); if (it != gDevices.end()) next = it->second; }
     return next ? next(device, name) : nullptr;
