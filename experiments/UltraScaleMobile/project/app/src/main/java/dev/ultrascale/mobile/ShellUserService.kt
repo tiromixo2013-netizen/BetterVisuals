@@ -23,10 +23,12 @@ class ShellUserService : ICommandService.Stub() {
             val existingLayers = readSetting(layerKey).split(':').filter { it.isNotBlank() }.toMutableSet()
             existingLayers += layerName
             layerPackagesNow += layerPackage
-            runSettings("put", "enable_gpu_debug_layers", "1")
-            runSettings("put", "gpu_debug_app", targetPackage)
+            // Stage the complete layer configuration before switching it on. This avoids
+            // exposing a partially-written setup if the target process starts concurrently.
             runSettings("put", "gpu_debug_layer_app", layerPackagesNow.joinToString(":"))
             runSettings("put", layerKey, existingLayers.joinToString(":"))
+            runSettings("put", "gpu_debug_app", targetPackage)
+            runSettings("put", "enable_gpu_debug_layers", "1")
             return "Configured $api layer for $targetPackage; existing layer entries were preserved. Fully stop and relaunch the game."
         }
 
