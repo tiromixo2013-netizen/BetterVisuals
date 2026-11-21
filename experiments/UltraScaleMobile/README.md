@@ -18,7 +18,9 @@ A third-party app cannot silently load code into arbitrary production games. And
 The app currently provides **pass-through diagnostics**, not upscaling yet:
 - GLES layer observes `eglSwapBuffers` and forwards it.
 - Vulkan layer reports itself to the loader, tracks physical devices and forwards instance/device creation, destruction and queue-present calls.
-- Vulkan and GLES layer settings can be enabled together for games that switch APIs.
+- Vulkan and GLES layer settings can be enabled together for games that switch APIs; the UI has separate disable controls for each API.
+- Existing colon-separated layer names and layer-package entries are preserved when UltraScale is enabled or disabled. The app refuses to overwrite another app's active GPU debug target.
+- Android's documented global settings select one target package at a time, so this prototype cannot configure multiple games simultaneously.
 - Neither layer modifies textures, render targets, shaders, resolution or frame timing. Do not label an upscaler active until an actual render pass is integrated and measured.
 
 ## Test with the included sample game
@@ -28,7 +30,7 @@ The app currently provides **pass-through diagnostics**, not upscaling yet:
 4. Select **UltraScale Layer Test Game** and enable Vulkan or GLES.
 5. Launch the sample game. Its GLES triangle continuously renders; tap **Run Vulkan API test** to create a Vulkan instance/device.
 6. Inspect logcat for `UltraScaleVK` / `UltraScaleGLES` messages.
-7. Clear debug-layer settings after testing.
+7. Use the matching **Disable Vulkan** / **Disable GLES** control after testing.
 
 ## Test with another owned game
 1. Build and install the UltraScale Mobile app.
