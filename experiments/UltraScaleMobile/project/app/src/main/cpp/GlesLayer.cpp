@@ -42,6 +42,9 @@ struct ContextState {
     uint64_t drawCalls = 0;
     uint64_t attachmentUpdates = 0;
     GLuint lastAttachedTexture = 0;
+    GLuint lastDrawFramebuffer = 0;
+    GLuint lastDrawTexture = 0;
+    TextureInfo lastDrawTextureInfo{};
     std::unordered_map<GLuint, TextureInfo> textures;
     std::unordered_map<GLuint, std::unordered_map<GLenum, TextureInfo>> framebufferAttachments;
 };
@@ -54,6 +57,8 @@ struct FrameTelemetry {
     uint64_t drawCalls = 0;
     uint64_t attachmentUpdates = 0;
     GLuint lastAttachedTexture = 0;
+    GLuint lastDrawFramebuffer = 0;
+    GLuint lastDrawTexture = 0;
     TextureInfo targetTextureInfo{};
 };
 
@@ -215,22 +220,33 @@ void LayerViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
     state.viewportHeight = height;
 }
 
-void LayerDrawArrays(GLenum mode, GLint first, GLsizei count) {
+void RecordDrawForCurrentContext() {
     const EGLContext context = CurrentContext();
-    if (context != EGL_NO_CONTEXT) {
-        std::lock_guard<std::mutex> lock(g_contextMutex);
-        ++StateFor(context).drawCalls;
+    if (context == EGL_NO_CONTEXT) return;
+    std::lock_guard<std::mutex> lock(g_contextMutex);
+    auto& state = StateFor(context);
+    ++state.drawCalls;
+    state.lastDrawFramebuffer = state.boundFramebuffer;
+    state.lastDrawTexture = 0;
+    state.lastDrawTextureInfo = {};
+    const auto framebuffer = state.framebufferAttachments.find(state.boundFramebuffer);
+    if (framebuffer != state.framebufferAttachments.end()) {
+        const auto color = framebuffer->second.find(GL_COLOR_ATTACHMENT0);
+        if (color != framebuffer->second.end()) {
+            state.lastDrawTexture = color->second.texture;
+            state.lastDrawTextureInfo = color->second;
+        }
     }
+}
+
+void LayerDrawArrays(GLenum mode, GLint first, GLsizei count) {
     if (g_nextDrawArrays) g_nextDrawArrays(mode, first, count);
+    RecordDrawForCurrentContext();
 }
 
 void LayerDrawElements(GLenum mode, GLsizei count, GLenum type, const void* indices) {
-    const EGLContext context = CurrentContext();
-    if (context != EGL_NO_CONTEXT) {
-        std::lock_guard<std::mutex> lock(g_contextMutex);
-        ++StateFor(context).drawCalls;
-    }
     if (g_nextDrawElements) g_nextDrawElements(mode, count, type, indices);
+    RecordDrawForCurrentContext();
 }
 
 void LayerFramebufferTexture2D(
@@ -288,11 +304,9 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
             state.drawCalls = 0;
             snapshot.attachmentUpdates = state.attachmentUpdates;
             snapshot.lastAttachedTexture = state.lastAttachedTexture;
-            const auto framebuffer = state.framebufferAttachments.find(state.boundFramebuffer);
-            if (framebuffer != state.framebufferAttachments.end()) {
-                const auto color = framebuffer->second.find(GL_COLOR_ATTACHMENT0);
-                if (color != framebuffer->second.end()) snapshot.targetTextureInfo = color->second;
-            }
+            snapshot.lastDrawFramebuffer = state.lastDrawFramebuffer;
+            snapshot.lastDrawTexture = state.lastDrawTexture;
+            snapshot.targetTextureInfo = state.lastDrawTextureInfo;
         }
     }
 
@@ -302,9 +316,10 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
         const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - start).count();
         __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
-            "Layer telemetry frame=%llu surface=%dx%d context=%p fbo=%u viewport=%d,%d %dx%d draws=%llu attachments=%llu texture=%u texture_size=%dx%d internal_format=0x%x swap_call=%lldus result=%d",
+            "Layer telemetry frame=%llu surface=%dx%d context=%p bound_fbo=%u last_draw_fbo=%u last_draw_texture=%u viewport=%d,%d %dx%d draws=%llu attachments=%llu last_attached=%u texture_size=%dx%d internal_format=0x%x swap_call=%lldus result=%d",
             static_cast<unsigned long long>(frame), width, height,
             reinterpret_cast<void*>(context), snapshot.boundFramebuffer,
+            snapshot.lastDrawFramebuffer, snapshot.lastDrawTexture,
             snapshot.viewportX, snapshot.viewportY,
             snapshot.viewportWidth, snapshot.viewportHeight,
             static_cast<unsigned long long>(snapshot.drawCalls),
