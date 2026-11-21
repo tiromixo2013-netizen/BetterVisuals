@@ -25,7 +25,7 @@ data class ApiReport(
     val targetSdk: Int,
     val nativeAbis: Set<String>,
     val nativeLibraryCount: Int,
-    val manifestVulkanOptIn: Boolean
+    val manifestLayerOptIn: Boolean
 )
 
 object GraphicsApiScanner {
@@ -42,6 +42,7 @@ object GraphicsApiScanner {
         }.getOrNull()
 
         val libs = linkedSetOf<String>()
+        var nativeLibraryEntries = 0
         val abis = linkedSetOf<String>()
         val paths = listOfNotNull(app.sourceDir) + (app.splitSourceDirs?.toList() ?: emptyList())
         paths.forEach { path ->
@@ -52,6 +53,7 @@ object GraphicsApiScanner {
                     while (entries.hasMoreElements() && count++ < 12000) {
                         val name = entries.nextElement().name
                         if (name.startsWith("lib/") && name.endsWith(".so")) {
+                            nativeLibraryEntries++
                             val parts = name.split('/')
                             if (parts.size >= 3) {
                                 abis += parts[1]
@@ -110,7 +112,7 @@ object GraphicsApiScanner {
             gameKind = kind,
             candidateApis = candidates,
             confidence = if (engine == "Unknown") "Low" else "Heuristic",
-            evidence = "Static APK scan: ${libs.size} native libraries across ${abis.size} ABI(s). Candidate APIs are not proof of the active runtime API.",
+            evidence = "Static APK scan: $nativeLibraryEntries native-library entries across ${abis.size} ABI(s). Candidate APIs are not proof of the active runtime API.",
             vulkanLayer = vulkanReadiness,
             glesLayer = glesReadiness,
             targetAllowsVulkan = optIn || debuggable || rootAvailable,
@@ -119,8 +121,8 @@ object GraphicsApiScanner {
             versionCode = versionCode,
             targetSdk = app.targetSdkVersion,
             nativeAbis = abis,
-            nativeLibraryCount = libs.size,
-            manifestVulkanOptIn = optIn
+            nativeLibraryCount = nativeLibraryEntries,
+            manifestLayerOptIn = optIn
         )
     }
 }
