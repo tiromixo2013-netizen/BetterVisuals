@@ -311,20 +311,6 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         }.getOrDefault(0)
 
 
-    private fun loadFsr1ShaderProgram(vertexSource: String): Int = runCatching {
-        // Port the upstream GLES 2-style EASU fragment to this sample's GLES 3.0
-        // interface without changing its reconstruction math.
-        val source = assets.open("shaders/amd_fsr1_easu.frag").bufferedReader().use { it.readText() }
-            .replaceFirst("#ifdef GL_ES", "#version 300 es\n#ifdef GL_ES")
-            .replace("varying vec2 v_texCoord;", "in vec2 vUv;\nout vec4 fragColor;")
-            .replace("v_texCoord", "vUv")
-            .replace("texture2D(", "texture(")
-            .replace("gl_FragColor", "fragColor")
-        linkProgram(vertexSource, source)
-    }.onFailure {
-        shaderDiagnostics += "AMD FSR1 EASU failed: ${it.message ?: it.javaClass.simpleName}"
-    }.getOrDefault(0)
-
     // GLSurfaceView may recreate its EGL context after pause/resume or surface loss.
     // Every GL object name from the previous context is invalid in the new one.
     private fun resetContextResources() {
@@ -426,7 +412,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         }
         fsrLiteProgram = loadShaderProgram("FSR Lite", vertex, "shaders/fsr_lite_6tap.frag")
         mwsrProgram = loadShaderProgram("MWSR", vertex, "shaders/mwsr_up.frag")
-        fsr1Program = loadFsr1ShaderProgram(vertex)
+        fsr1Program = loadShaderProgram("AMD FSR1 EASU", vertex, "shaders/amd_fsr1_easu.frag")
         casProgram = loadShaderProgram("CAS", vertex, "shaders/amd_cas_sharpen.frag")
         if (upscaleMethod == 2 && sgsr1Program == 0) {
             upscaleMethod = 0
