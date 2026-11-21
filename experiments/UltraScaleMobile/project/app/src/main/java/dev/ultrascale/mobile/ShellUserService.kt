@@ -25,10 +25,14 @@ class ShellUserService : ICommandService.Stub() {
             layerPackagesNow += layerPackage
             // Stage the complete layer configuration before switching it on. This avoids
             // exposing a partially-written setup if the target process starts concurrently.
-            runSettings("put", "gpu_debug_layer_app", layerPackagesNow.joinToString(":"))
-            runSettings("put", layerKey, existingLayers.joinToString(":"))
-            runSettings("put", "gpu_debug_app", targetPackage)
-            runSettings("put", "enable_gpu_debug_layers", "1")
+            writeSettingsTransaction(
+                mapOf(
+                    "gpu_debug_layer_app" to layerPackagesNow.joinToString(":"),
+                    layerKey to existingLayers.joinToString(":"),
+                    "gpu_debug_app" to targetPackage,
+                    "enable_gpu_debug_layers" to "1"
+                )
+            )
             return "Configured $api layer for $targetPackage; existing layer entries were preserved. Fully stop and relaunch the game."
         }
 
@@ -37,19 +41,43 @@ class ShellUserService : ICommandService.Stub() {
         }
         val existingLayers = readSetting(layerKey).split(':').filter { it.isNotBlank() }.toMutableSet()
         existingLayers.remove(layerName)
-        if (existingLayers.isEmpty()) runSettings("delete", layerKey, null)
-        else runSettings("put", layerKey, existingLayers.joinToString(":"))
-
+        val changes = linkedMapOf<String, String?>()
+        changes[layerKey] = existingLayers.takeIf { it.isNotEmpty() }?.joinToString(":")
         // Keep the layer-package search list intact: it may also host unrelated layers.
         // Disable the global switch only when both Vulkan and GLES layer lists are empty.
-        val anyVulkanLayers = readSetting("gpu_debug_layers").isNotBlank()
-        val anyGlesLayers = readSetting("gpu_debug_layers_gles").isNotBlank()
+        val anyVulkanLayers = if (api == "vulkan") existingLayers.isNotEmpty()
+            else readSetting("gpu_debug_layers").isNotBlank()
+        val anyGlesLayers = if (api == "gles") existingLayers.isNotEmpty()
+            else readSetting("gpu_debug_layers_gles").isNotBlank()
         if (!anyVulkanLayers && !anyGlesLayers) {
-            runSettings("delete", "enable_gpu_debug_layers", null)
-            runSettings("delete", "gpu_debug_app", null)
+            changes["enable_gpu_debug_layers"] = null
+            changes["gpu_debug_app"] = null
         }
+        writeSettingsTransaction(changes)
         return "Disabled UltraScale $api layer for $targetPackage; unrelated layer names and package search entries were preserved. Restart the game."
 
+    }
+
+    /**
+     * Apply global GPU settings as a small transaction. Android settings are not
+     * transactional, so restore the exact previous values if any write fails.
+     */
+    private fun writeSettingsTransaction(changes: Map<String, String?>) {
+        val before = changes.keys.associateWith(::readSetting)
+        try {
+            changes.forEach { (key, value) ->
+                if (value == null) runSettings("delete", key, null)
+                else runSettings("put", key, value)
+            }
+        } catch (failure: Throwable) {
+            before.forEach { (key, value) ->
+                runCatching {
+                    if (value.isBlank()) runSettings("delete", key, null)
+                    else runSettings("put", key, value)
+                }
+            }
+            throw failure
+        }
     }
 
     private fun readSetting(key: String): String {
