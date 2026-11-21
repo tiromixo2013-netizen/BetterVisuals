@@ -7,9 +7,10 @@ Standalone Android app experiment in an isolated feature branch. It does not cha
 - APK native-library scan for engine and possible API candidates. This is heuristic, not runtime API detection.
 - Native device probe for Vulkan loader and EGL vendor/version.
 - Separate NDK shared libraries:
-  - `libVkLayer_ultrascale_api_lab.so`: Vulkan loader layer pass-through prototype; loader-facing entry points are explicitly exported despite hidden-by-default native symbol visibility.
-  - `libGLES_ultrascale.so`: GLES layer pass-through prototype intercepting `eglSwapBuffers`; every 600 frames it samples EGL surface dimensions, current context, swap-call duration and result for diagnostics.
+  - `libVkLayer_ultrascale_api_lab.so`: Vulkan loader layer pass-through prototype; tracks instance/device/queue dispatch, swapchain creation/destruction, image enumeration/acquisition, format, extent and sampled present indices.
+  - `libGLES_ultrascale.so`: GLES layer pass-through prototype intercepting framebuffer/texture binding, texture allocation, viewport and draw calls; sampled frame logs include per-context texture dimensions, attachment metadata, surface size and swap-call duration.
 - The included sample game now has its own **Graphics Settings — Advanced** menu. Its GLES renderer renders into a lower-resolution FBO and offers Bilinear, Nearest, Qualcomm SGSR1 Mobile, UltraScale FSR Lite, and upstream MWSR. An optional AMD CAS post-sharpen pass can be enabled independently. Render scale can be changed live while the sample is running. The quality presets are Ultra Quality (90%), Quality (82%), Balanced (75%), Performance (67%) and Ultra Performance (59%), with a 50–100% Custom slider. The optional AMD FidelityFX CAS switch is a separate post-process with adjustable sharpness; legacy extra-sharpening remains limited to Bilinear / Nearest.
+- The standalone Android app now packages four shader sources in `app/src/main/assets/upscalers/` and exposes them in a Built-in Shader Library card: FSR Lite 6-tap, MWSR, SGSR1 Mobile and AMD CAS. `UpscaleTechniqueCatalog.source(...)` loads the source assets. This is a source bundle/catalog, not a claim that the external layer applies these shaders to a third-party game. See [SHADER_BUNDLE.md](SHADER_BUNDLE.md) for provenance, licenses and integration boundaries.
 - Optional Shizuku UserService configures Android's documented per-app GPU debug-layer settings (using a dedicated shell-identity Binder service, not the deprecated Shizuku newProcess API). Settings changes are applied with rollback to their prior values if a write fails.
 - AGP 8 BuildConfig generation is explicitly enabled for the Shizuku service component-name binding.
 - Android SDK 35, JDK 17, NDK 27.2, arm64-v8a and armeabi-v7a CI build.
@@ -25,8 +26,8 @@ Standalone Android app experiment in an isolated feature branch. It does not cha
 A third-party app cannot silently load code into arbitrary production games. For Vulkan, Android permits a target that is debuggable, has the API-30+ `com.android.graphics.injectLayers.enable=true` manifest opt-in, or is on a supported rooted userdebug environment. GLES is stricter for external local layers: the target must be debuggable or the device must provide actual root access; Vulkan's manifest opt-in alone does not authorize a production GLES target. The Shizuku control only writes documented debug-layer settings; it does not bypass these rules. ADB shell UID 2000 is not root.
 
 The external Vulkan/GLES injection layers still provide **pass-through diagnostics only**; they do not yet post-process arbitrary third-party game frames. The sample game's in-process GLES integration is a separate working prototype demonstrating a real render path and native game settings:
-- GLES layer observes `eglSwapBuffers` and forwards it.
-- Vulkan layer reports itself to the loader, tracks physical devices and forwards instance/device creation, destruction and queue-present calls.
+- GLES layer observes render-target texture allocation/attachment and draw/viewport state per EGL context, then forwards every call unchanged.
+- Vulkan layer reports itself to the loader, tracks physical devices and forwards instance/device creation, destruction, swapchain lifecycle, image acquisition and queue-present calls.
 - Vulkan and GLES layer settings can be enabled together for games that switch APIs; the UI has separate disable controls for each API.
 - Existing colon-separated layer names and layer-package entries are preserved when UltraScale is enabled or disabled. The app refuses to overwrite another app's active GPU debug target.
 - Android's documented global settings select one target package at a time, so this prototype cannot configure multiple games simultaneously.
