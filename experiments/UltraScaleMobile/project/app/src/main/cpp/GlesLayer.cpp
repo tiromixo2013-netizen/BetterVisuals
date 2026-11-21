@@ -1,5 +1,6 @@
 #include <EGL/egl.h>
 #include <android/log.h>
+#include <shadowhook.h>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -14,6 +15,7 @@ static GetNextProc g_getNext = nullptr;
 static EglSwapBuffers g_nextSwapBuffers = nullptr;
 static EglQuerySurface g_nextQuerySurface = nullptr;
 static std::atomic<uint64_t> g_frames{0};
+static std::atomic<bool> g_hookBackendReady{false};
 
 static EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
     const uint64_t frame = ++g_frames;
@@ -46,6 +48,10 @@ extern "C" __attribute__((visibility("default")))
 void AndroidGLESLayer_Initialize(void* layer_id, GetNextProc get_next_layer_proc_address) {
     g_layerId = layer_id;
     g_getNext = get_next_layer_proc_address;
+    // Initializes the reusable in-process hook engine. No cross-process attach,
+    // ptrace, permission bypass, or automatic game-memory modification occurs.
+    const int hookInit = shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
+    g_hookBackendReady.store(hookInit == 0, std::memory_order_release);
     if (g_getNext) {
         g_nextSwapBuffers = reinterpret_cast<EglSwapBuffers>(
             g_getNext(g_layerId, "eglSwapBuffers"));
@@ -53,7 +59,8 @@ void AndroidGLESLayer_Initialize(void* layer_id, GetNextProc get_next_layer_proc
             g_getNext(g_layerId, "eglQuerySurface"));
     }
     __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
-        "UltraScale GLES diagnostic layer initialized");
+        "UltraScale GLES diagnostic layer initialized; ShadowHook backend=%s (init=%d)",
+        g_hookBackendReady.load(std::memory_order_acquire) ? "ready" : "unavailable", hookInit);
 }
 
 extern "C" __attribute__((visibility("default")))
