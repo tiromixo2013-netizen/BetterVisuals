@@ -6,7 +6,8 @@ The Android app packages the following shader sources under
 
 | Technique | Role | Shader profile | Source/license notes |
 |---|---|---|---|
-| AMD FidelityFX FSR1 EASU | Spatial reconstruction | GLSL ES 1.00-style fragment source (GLES 2.0+) | AMD official-derived EASU shader source, MIT; full notice retained in asset |\n| FSR Lite 6-tap | Spatial reconstruction | GLSL ES 3.00 | Project-authored EASU-inspired approximation; not official AMD FidelityFX FSR |
+| AMD FidelityFX FSR1 EASU | Spatial reconstruction | GLSL ES 1.00-style fragment source (GLES 2.0+) | AMD official-derived EASU shader source, MIT; full notice retained in asset |
+| FSR Lite 6-tap | Spatial reconstruction | GLSL ES 3.00 | Project-authored EASU-inspired approximation; not official AMD FidelityFX FSR |
 | MWSR | Spatial reconstruction | GLSL ES 3.00 | MoonlightWeb Super Resolution, MIT; original copyright and license notice retained in source |
 | SGSR1 Mobile | Edge-adaptive reconstruction | GLSL ES 3.10 | Qualcomm Innovation Center source, BSD-3-Clause; notice retained in source |
 | AMD CAS | Sharpening only | GLSL ES 3.00 | AMD FidelityFX CAS-derived sharpen-only path, MIT; notice retained in source |
