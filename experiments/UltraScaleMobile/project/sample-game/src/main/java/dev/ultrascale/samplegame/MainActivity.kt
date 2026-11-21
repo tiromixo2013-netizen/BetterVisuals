@@ -315,8 +315,8 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         // Port the upstream GLES 2-style EASU fragment to this sample's GLES 3.0
         // interface without changing its reconstruction math.
         val source = assets.open("shaders/amd_fsr1_easu.frag").bufferedReader().use { it.readText() }
-            .replaceFirst("#ifdef GL_ES", "#version 300 es\\n#ifdef GL_ES")
-            .replace("varying vec2 v_texCoord;", "in vec2 vUv;\\nout vec4 fragColor;")
+            .replaceFirst("#ifdef GL_ES", "#version 300 es\n#ifdef GL_ES")
+            .replace("varying vec2 v_texCoord;", "in vec2 vUv;\nout vec4 fragColor;")
             .replace("v_texCoord", "vUv")
             .replace("texture2D(", "texture(")
             .replace("gl_FragColor", "fragColor")
