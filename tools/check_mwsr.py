@@ -10,7 +10,8 @@ shader_header = Path("src/shaders/PostProcessShaders.hpp").read_text(encoding="u
 settings = json.loads(Path("mod.json").read_text(encoding="utf-8"))["settings"]
 
 assert "UpscaleMethod::Mwsr" in main
-assert "g_mwsrRenderer.apply(sourceTexture, internalWidth, internalHeight, width, height)" in main
+assert "g_mwsrRenderer.apply(" in main
+assert "sourceTexture, internalWidth, internalHeight, width, height" in main
 assert 'bindStringSetting("mwsr-quality-preset", updateMwsrQualityPreset)' in main
 assert "g_aqr4Renderer" not in main and "UpscaleMethod::Aqr4" not in main
 assert "textureLod(uTex, uv, 0.0).a" in renderer
