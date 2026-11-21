@@ -24,6 +24,15 @@ data class UpscaleTechnique(
 object UpscaleTechniqueCatalog {
     val all = listOf(
         UpscaleTechnique(
+            id = "amd_fsr1_easu",
+            title = "AMD FidelityFX FSR1 · EASU",
+            role = TechniqueRole.UPSCALE,
+            assetName = "amd_fsr1_easu.frag",
+            minimumGles = "OpenGL ES 2.0+",
+            license = "MIT",
+            note = "Full EASU spatial reconstruction source; higher sampling cost than the lightweight 6-tap fallback."
+        ),
+        UpscaleTechnique(
             id = "fsr_lite_6tap",
             title = "FSR Lite · 6-tap",
             role = TechniqueRole.UPSCALE,
