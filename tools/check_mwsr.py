@@ -29,6 +29,12 @@ assert "class MwsrRenderer final" in header
 assert "kAqr4Shader" not in shader_header
 assert "MWSR" in settings["upscale-method"]["one-of"]
 assert "AQR-4" not in settings["upscale-method"]["one-of"]
+assert "Integer Scaling" not in settings["upscale-method"]["one-of"]
+assert "UltraScale2D" not in settings["upscale-method"]["one-of"]
+assert "integer-scaling-quality-preset" not in settings
+assert "ultrascale2d-quality-preset" not in settings
+assert "SmartInteger" not in main and "UltraScale2D" not in main
+assert "Integer Scaling" not in main and "integerScaling" not in main
 assert settings["mwsr-quality-preset"]["default"] == "Balanced"
 assert settings["mwsr-quality-preset"]["one-of"] == [
     "Custom", "Native", "Ultra Quality", "Quality", "Balanced", "Performance", "Ultra Performance"
