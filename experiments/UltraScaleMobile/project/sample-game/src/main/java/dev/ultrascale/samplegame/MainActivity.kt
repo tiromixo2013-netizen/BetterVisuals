@@ -72,7 +72,7 @@ class MainActivity : Activity() {
             isChecked = renderer.upscalingEnabled
         }
         val sharpen = Switch(this).apply {
-            text = "CAS-style sharpening"
+            text = "Extra sharpening (Bilinear / Nearest only)"
             isChecked = renderer.sharpeningEnabled
         }
         val presetLabel = TextView(this).apply { text = "Quality preset" }
@@ -131,8 +131,8 @@ class MainActivity : Activity() {
                 val newScale = (50 + scale.progress) / 100f
                 glView.queueEvent {
                     renderer.configure(newEnabled, newMethod, newSharpen, newScale)
+                    runOnUiThread { status.text = renderer.statusMessage }
                 }
-                status.text = "Applied to the sample game's GLES renderer: ${method.selectedItem}."
             }
             .show()
     }
@@ -151,6 +151,8 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         private set
     @Volatile var renderScale = 0.75f
         private set
+    @Volatile var statusMessage = "Renderer ready."
+        private set
 
     private var sceneProgram = 0
     private var upscaleProgram = 0
@@ -167,9 +169,21 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
 
     fun configure(enabled: Boolean, method: Int, sharpen: Boolean, scale: Float) {
         upscalingEnabled = enabled
-        upscaleMethod = method.coerceIn(0, 3)
+        val requestedMethod = method.coerceIn(0, 3)
+        val available = when (requestedMethod) {
+            2 -> sgsr1Program != 0
+            3 -> fsrLiteProgram != 0
+            else -> true
+        }
+        upscaleMethod = if (available) requestedMethod else 0
         sharpeningEnabled = sharpen
         renderScale = scale.coerceIn(0.5f, 1f)
+        statusMessage = if (available) {
+            "Applied to the sample GLES renderer: " +
+                listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)")[upscaleMethod]
+        } else {
+            "Requested shader failed to compile on this GPU; safely fell back to Bilinear."
+        }
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
