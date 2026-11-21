@@ -1,6 +1,7 @@
 package dev.ultrascale.samplegame
 
 import android.app.Activity
+import android.content.res.AssetManager
 import android.app.AlertDialog
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
@@ -48,7 +49,7 @@ class MainActivity : Activity() {
             text = "Graphics Settings — Advanced"
             setOnClickListener { showAdvancedSettings() }
         }
-        renderer = UpscaleTestRenderer()
+        renderer = UpscaleTestRenderer(assets)
         glView = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
             setRenderer(renderer)
@@ -86,8 +87,8 @@ class MainActivity : Activity() {
         val methodLabel = TextView(this).apply { text = "Upscale method" }
         val method = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                listOf("Bilinear", "Nearest"))
-            setSelection(if (renderer.nearestMode) 1 else 0)
+                listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)"))
+            setSelection(renderer.upscaleMethod)
         }
         val scaleLabel = TextView(this).apply {
             text = "Internal render scale: ${(renderer.renderScale * 100).toInt()}%"
@@ -126,12 +127,12 @@ class MainActivity : Activity() {
             .setPositiveButton("Apply") { _, _ ->
                 val newEnabled = enabled.isChecked
                 val newSharpen = sharpen.isChecked
-                val newNearest = method.selectedItemPosition == 1
+                val newMethod = method.selectedItemPosition
                 val newScale = (50 + scale.progress) / 100f
                 glView.queueEvent {
-                    renderer.configure(newEnabled, newNearest, newSharpen, newScale)
+                    renderer.configure(newEnabled, newMethod, newSharpen, newScale)
                 }
-                status.text = "Applied to the sample game's GLES renderer."
+                status.text = "Applied to the sample game's GLES renderer: ${method.selectedItem}."
             }
             .show()
     }
@@ -140,11 +141,12 @@ class MainActivity : Activity() {
     override fun onResume() { super.onResume(); if (::glView.isInitialized) glView.onResume() }
 }
 
-private class UpscaleTestRenderer : GLSurfaceView.Renderer {
+private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceView.Renderer {
     @Volatile var upscalingEnabled = true
         private set
-    @Volatile var nearestMode = false
+    @Volatile var upscaleMethod = 0
         private set
+    private val nearestMode: Boolean get() = upscaleMethod == 1
     @Volatile var sharpeningEnabled = true
         private set
     @Volatile var renderScale = 0.75f
@@ -152,6 +154,8 @@ private class UpscaleTestRenderer : GLSurfaceView.Renderer {
 
     private var sceneProgram = 0
     private var upscaleProgram = 0
+    private var sgsr1Program = 0
+    private var fsrLiteProgram = 0
     private var framebuffer = 0
     private var sceneTexture = 0
     private var sceneWidth = 0
@@ -161,9 +165,9 @@ private class UpscaleTestRenderer : GLSurfaceView.Renderer {
     private lateinit var triangleBuffer: FloatBuffer
     private lateinit var quadBuffer: FloatBuffer
 
-    fun configure(enabled: Boolean, nearest: Boolean, sharpen: Boolean, scale: Float) {
+    fun configure(enabled: Boolean, method: Int, sharpen: Boolean, scale: Float) {
         upscalingEnabled = enabled
-        nearestMode = nearest
+        upscaleMethod = method.coerceIn(0, 3)
         sharpeningEnabled = sharpen
         renderScale = scale.coerceIn(0.5f, 1f)
     }
@@ -214,6 +218,24 @@ private class UpscaleTestRenderer : GLSurfaceView.Renderer {
         """.trimIndent()
         sceneProgram = linkProgram(vertex, sceneFragment)
         upscaleProgram = linkProgram(vertex, upscaleFragment)
+        val sgsrVertex = """
+            #version 300 es
+            layout(location=0) in vec2 aPosition;
+            layout(location=1) in vec2 aUv;
+            layout(location=0) out vec4 in_TEXCOORD0;
+            void main() {
+                gl_Position = vec4(aPosition, 0.0, 1.0);
+                in_TEXCOORD0 = vec4(aUv, 0.0, 1.0);
+            }
+        """.trimIndent()
+        sgsr1Program = runCatching {
+            val source = assets.open("shaders/sgsr1_mobile.frag").bufferedReader().use { it.readText() }
+            linkProgram(sgsrVertex, source)
+        }.getOrDefault(0)
+        fsrLiteProgram = runCatching {
+            val source = assets.open("shaders/fsr_lite_6tap.frag").bufferedReader().use { it.readText() }
+            linkProgram(vertex, source)
+        }.getOrDefault(0)
         triangleBuffer = floatBuffer(floatArrayOf(
             -0.72f, -0.62f, 0f, 0f,
              0.72f, -0.62f, 1f, 0f,
@@ -246,17 +268,37 @@ private class UpscaleTestRenderer : GLSurfaceView.Renderer {
             drawScene()
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, outputWidth, outputHeight)
-            GLES30.glUseProgram(upscaleProgram)
-            bindQuad(upscaleProgram, quadBuffer)
+            val selectedProgram = when {
+                upscaleMethod == 2 && sgsr1Program != 0 -> sgsr1Program
+                upscaleMethod == 3 && fsrLiteProgram != 0 -> fsrLiteProgram
+                else -> upscaleProgram
+            }
+            GLES30.glUseProgram(selectedProgram)
+            bindQuad(selectedProgram, quadBuffer)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, sceneTexture)
-            GLES30.glUniform1i(GLES30.glGetUniformLocation(upscaleProgram, "uScene"), 0)
-            GLES30.glUniform2f(GLES30.glGetUniformLocation(upscaleProgram, "uTexel"),
-                1f / sceneWidth.coerceAtLeast(1), 1f / sceneHeight.coerceAtLeast(1))
-            GLES30.glUniform1f(GLES30.glGetUniformLocation(upscaleProgram, "uSharpen"),
-                if (sharpeningEnabled) 1f else 0f)
-            GLES30.glUniform1f(GLES30.glGetUniformLocation(upscaleProgram, "uNearest"),
-                if (nearestMode) 1f else 0f)
+            when (selectedProgram) {
+                sgsr1Program -> {
+                    GLES30.glUniform1i(GLES30.glGetUniformLocation(sgsr1Program, "ps0"), 0)
+                    val viewportLocation = GLES30.glGetUniformLocation(sgsr1Program, "ViewportInfo[0]")
+                    GLES30.glUniform4f(viewportLocation, 1f / sceneWidth, 1f / sceneHeight,
+                        sceneWidth.toFloat(), sceneHeight.toFloat())
+                }
+                fsrLiteProgram -> {
+                    GLES30.glUniform1i(GLES30.glGetUniformLocation(fsrLiteProgram, "uScene"), 0)
+                    GLES30.glUniform2f(GLES30.glGetUniformLocation(fsrLiteProgram, "uTexel"),
+                        1f / sceneWidth.coerceAtLeast(1), 1f / sceneHeight.coerceAtLeast(1))
+                }
+                else -> {
+                    GLES30.glUniform1i(GLES30.glGetUniformLocation(upscaleProgram, "uScene"), 0)
+                    GLES30.glUniform2f(GLES30.glGetUniformLocation(upscaleProgram, "uTexel"),
+                        1f / sceneWidth.coerceAtLeast(1), 1f / sceneHeight.coerceAtLeast(1))
+                    GLES30.glUniform1f(GLES30.glGetUniformLocation(upscaleProgram, "uSharpen"),
+                        if (sharpeningEnabled) 1f else 0f)
+                    GLES30.glUniform1f(GLES30.glGetUniformLocation(upscaleProgram, "uNearest"),
+                        if (nearestMode) 1f else 0f)
+                }
+            }
             GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
         } else {
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
