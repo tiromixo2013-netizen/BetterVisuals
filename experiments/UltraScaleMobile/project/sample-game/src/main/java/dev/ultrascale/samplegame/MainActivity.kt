@@ -50,6 +50,15 @@ class MainActivity : Activity() {
             setOnClickListener { showAdvancedSettings() }
         }
         renderer = UpscaleTestRenderer(assets)
+        val diagnostics = Button(this).apply {
+            text = "Refresh GLES diagnostics"
+            setOnClickListener {
+                glView.queueEvent {
+                    val report = renderer.runtimeReport()
+                    runOnUiThread { status.text = report }
+                }
+            }
+        }
         glView = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
             setRenderer(renderer)
@@ -57,6 +66,7 @@ class MainActivity : Activity() {
         }
         root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(advanced, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        root.addView(diagnostics, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(vulkan, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(glView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
@@ -196,6 +206,8 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
     private var sceneHeight = 0
     private var outputWidth = 0
     private var outputHeight = 0
+    private var sceneTargetStatus = "not created"
+    private val shaderDiagnostics = mutableListOf<String>()
     private lateinit var triangleBuffer: FloatBuffer
     private lateinit var quadBuffer: FloatBuffer
 
@@ -221,7 +233,38 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         }
     }
 
+    fun runtimeReport(): String {
+        val vendor = GLES30.glGetString(GLES30.GL_VENDOR) ?: "unknown"
+        val renderer = GLES30.glGetString(GLES30.GL_RENDERER) ?: "unknown"
+        val version = GLES30.glGetString(GLES30.GL_VERSION) ?: "unknown"
+        val method = listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR")[upscaleMethod]
+        return buildString {
+            append("GLES runtime: ").append(version)
+            append("\nGPU: ").append(vendor).append(" / ").append(renderer)
+            append("\nActive method: ").append(method)
+            append("\nRender target: ").append(sceneWidth).append("x").append(sceneHeight)
+            append(" -> ").append(outputWidth).append("x").append(outputHeight)
+            append("\nScene FBO: ").append(sceneTargetStatus)
+            append("\nCAS: ").append(if (casEnabled) "enabled" else "disabled")
+            if (shaderDiagnostics.isNotEmpty()) {
+                append("\nShader diagnostics:")
+                shaderDiagnostics.forEach { append("\n• ").append(it) }
+            } else {
+                append("\nShader diagnostics: all loaded shaders compiled and linked")
+            }
+        }
+    }
+
+    private fun loadShaderProgram(label: String, vertexSource: String, assetPath: String): Int =
+        runCatching {
+            val source = assets.open(assetPath).bufferedReader().use { it.readText() }
+            linkProgram(vertexSource, source)
+        }.onFailure {
+            shaderDiagnostics += "$label failed: ${it.message ?: it.javaClass.simpleName}"
+        }.getOrDefault(0)
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        shaderDiagnostics.clear()
         val vertex = """
             #version 300 es
             layout(location=0) in vec2 aPosition;
@@ -236,7 +279,17 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             void main() {
                 vec2 p = gl_FragCoord.xy;
                 float pulse = 0.5 + 0.5 * sin(p.x * 0.035) * cos(p.y * 0.035);
-                color = vec4(0.08 + pulse * 0.12, 0.38 + pulse * 0.38, 0.72 + pulse * 0.25, 1.0);
+                float checker = mod(floor(p.x * 0.25) + floor(p.y * 0.25), 2.0);
+                float fineLines = step(0.82, fract((p.x + p.y) * 0.075));
+                float gridX = 1.0 - step(1.0, mod(p.x, 12.0));
+                float gridY = 1.0 - step(1.0, mod(p.y, 12.0));
+                float diagonal = 1.0 - step(1.5, abs(mod(p.x - p.y, 24.0) - 12.0));
+                vec3 base = vec3(0.08 + pulse * 0.12, 0.32 + pulse * 0.30, 0.58 + pulse * 0.24);
+                base = mix(base, vec3(0.92, 0.78, 0.18), checker * 0.22);
+                base = mix(base, vec3(0.96, 0.96, 1.0), fineLines * 0.55);
+                base = mix(base, vec3(0.04, 0.06, 0.09), max(gridX, gridY) * 0.72);
+                base = mix(base, vec3(0.95, 0.22, 0.12), diagonal * 0.5);
+                color = vec4(base, 1.0);
             }
         """.trimIndent()
         val upscaleFragment = """
@@ -277,22 +330,10 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
                 in_TEXCOORD0 = vec4(aUv, 0.0, 1.0);
             }
         """.trimIndent()
-        sgsr1Program = runCatching {
-            val source = assets.open("shaders/sgsr1_mobile.frag").bufferedReader().use { it.readText() }
-            linkProgram(sgsrVertex, source)
-        }.getOrDefault(0)
-        fsrLiteProgram = runCatching {
-            val source = assets.open("shaders/fsr_lite_6tap.frag").bufferedReader().use { it.readText() }
-            linkProgram(vertex, source)
-        }.getOrDefault(0)
-        mwsrProgram = runCatching {
-            val source = assets.open("shaders/mwsr_up.frag").bufferedReader().use { it.readText() }
-            linkProgram(vertex, source)
-        }.getOrDefault(0)
-        casProgram = runCatching {
-            val source = assets.open("shaders/amd_cas_sharpen.frag").bufferedReader().use { it.readText() }
-            linkProgram(vertex, source)
-        }.getOrDefault(0)
+        sgsr1Program = loadShaderProgram("SGSR1", sgsrVertex, "shaders/sgsr1_mobile.frag")
+        fsrLiteProgram = loadShaderProgram("FSR Lite", vertex, "shaders/fsr_lite_6tap.frag")
+        mwsrProgram = loadShaderProgram("MWSR", vertex, "shaders/mwsr_up.frag")
+        casProgram = loadShaderProgram("CAS", vertex, "shaders/amd_cas_sharpen.frag")
         mwsrParamsDirty = true
         triangleBuffer = floatBuffer(floatArrayOf(
             -0.72f, -0.62f, 0f, 0f,
@@ -398,7 +439,9 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, framebuffer)
         GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0,
             GLES30.GL_TEXTURE_2D, sceneTexture, 0)
-        val complete = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE
+        val framebufferStatus = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER)
+        val complete = framebufferStatus == GLES30.GL_FRAMEBUFFER_COMPLETE
+        sceneTargetStatus = if (complete) "complete" else "incomplete (0x${framebufferStatus.toString(16)})"
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         if (!complete) {
             GLES30.glDeleteFramebuffers(1, intArrayOf(framebuffer), 0)
@@ -509,8 +552,8 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         GLES30.glClearColor(0.035f, 0.045f, 0.075f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
         GLES30.glUseProgram(sceneProgram)
-        bindQuad(sceneProgram, triangleBuffer, GLES30.GL_TRIANGLES)
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
+        bindQuad(sceneProgram, quadBuffer)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
         GLES30.glDisableVertexAttribArray(0)
         GLES30.glDisableVertexAttribArray(1)
     }
