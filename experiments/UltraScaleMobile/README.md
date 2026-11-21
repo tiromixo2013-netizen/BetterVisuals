@@ -20,7 +20,16 @@ The app currently provides **pass-through diagnostics**, not upscaling yet:
 - Vulkan layer reports itself to the loader and forwards instance/device creation and destruction.
 - Neither layer modifies textures, render targets, shaders, resolution or frame timing. Do not label an upscaler active until an actual render pass is integrated and measured.
 
-## Test with an owned game
+## Test with the included sample game
+1. Build and install both APKs from the GitHub Actions artifact.
+2. Start Shizuku using Wireless Debugging and grant UltraScale permission.
+3. In UltraScale, connect the Shizuku shell service.
+4. Select **UltraScale Layer Test Game** and enable Vulkan or GLES.
+5. Launch the sample game. Its GLES triangle continuously renders; tap **Run Vulkan API test** to create a Vulkan instance/device.
+6. Inspect logcat for `UltraScaleVK` / `UltraScaleGLES` messages.
+7. Clear debug-layer settings after testing.
+
+## Test with another owned game
 1. Build and install the UltraScale Mobile app.
 2. Create an owned/debuggable Android game or test harness that uses Vulkan or GLES.
 3. For API 30+, add the documented manifest opt-in metadata to that test app.
@@ -33,6 +42,8 @@ The app currently provides **pass-through diagnostics**, not upscaling yet:
 ## Build
 Open `project/` in Android Studio (JDK 17, SDK 35, NDK 27.2.12479018, CMake 3.22.1), or let GitHub Actions run:
 `gradle lintDebug testDebugUnitTest assembleDebug`.
+
+Research references and community implementation notes are in [RESEARCH_NOTES.md](RESEARCH_NOTES.md).
 
 ## Next milestones
 1. Compile and validate the loader prototypes on a real Android 15 device.
