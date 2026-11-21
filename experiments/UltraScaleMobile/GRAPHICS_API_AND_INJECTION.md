@@ -57,3 +57,19 @@ No exploit chains, hidden permission bypasses, process-memory patching, or bypas
 - This removes the need to implement ARM64/ARM32 inline-hook trampolines, PLT relocation patching, hook chaining, and recursion management from scratch for an owned or explicitly authorized test target.
 - ShadowHook is **not** a process injector and does not grant access to arbitrary production games. Android must first load the layer through its documented opt-in/debuggable/userdebug path. The backend is not yet attached to GLES draw calls; render-target acquisition and a safe frame integration contract remain separate work.
 - The sample-game is the authorized opt-in validation target. Do not report third-party game injection as supported unless the target has opted in and the full frame path is proven.
+
+## 9. Engine-side render integration references
+For a target game that can include an SDK/plugin, prefer the engine's supported render callback over guessing internal function addresses:
+- Unity: native rendering plug-in interface and render-thread events. The callback receives the engine-controlled render-thread opportunity; texture/resource ownership still follows Unity's documented graphics interfaces.
+- Godot: Android plugin / GDExtension integration, with the engine owning the RenderingDevice and render lifecycle.
+- Unreal: engine plugin / renderer extension using the engine's RHI and render graph; this is a source/plugin integration, not a generic external Android hook.
+- Cocos: use the matching Cocos native renderer/plugin API for the specific Creator/native version; do not assume one ABI across all game versions.
+
+These are integration routes for owned games or developers who explicitly opt in. They do not create a universal injection route for unrelated production APKs.
+
+## 10. Validation tools
+- Android GPU Inspector (AGI): system profiling and supported frame profiling for GPU/CPU/memory behavior.
+- RenderDoc: frame capture and inspection of Vulkan and OpenGL ES for supported debuggable/authorized targets.
+- Khronos Vulkan validation layers: validate Vulkan API usage and layer-chain correctness before measuring performance.
+
+A hook backend reporting "ready" is only an initialization result. It is not evidence that a game's draw calls were intercepted, a render target was obtained, or an upscaler was presented.
