@@ -121,10 +121,9 @@ namespace {
 
     std::atomic<AntiAliasingMethod> g_antiAliasingMethod = AntiAliasingMethod::SmaaHigh;
     std::atomic<UpscaleMethod> g_upscaleMethod = UpscaleMethod::Nearest;
-    // Zero selects Custom (1.0); positive values are source-resolution ratios.
-    std::atomic<float> g_fsrPresetScale = 0.f;
-    std::atomic<float> g_sgsrPresetScale = 0.f;
-    std::atomic<float> g_mwsrPresetScale = 0.f;
+    // Zero selects Custom (Render Scale); positive values are exact shared
+    // source-resolution ratios used by every upscaling method.
+    std::atomic<float> g_upscaleQualityScale = 0.f;
     std::atomic<int> g_sgsrOperationMode = 1;
     std::atomic<float> g_renderScale = 1.f;
     std::atomic<bool> g_casEnabled = false;
@@ -295,30 +294,18 @@ namespace {
         g_upscaleMethod.store(UpscaleMethod::Nearest, std::memory_order_relaxed);
     }
 
-    void updateFsrQualityPreset(std::string_view value) {
+    void updateUpscaleQualityPreset(std::string_view value) {
         float scale = 0.f;
-        if (value == "Ultra Quality") scale = 0.77f;
-        else if (value == "Quality") scale = 0.67f;
-        else if (value == "Balanced") scale = 0.59f;
-        else if (value == "Performance") scale = 0.50f;
-        else if (value == "Ultra Performance") scale = 0.33f;
+        if (value == "Native") scale = 1.00f;
+        else if (value == "Ultra Quality") scale = 0.90f;
+        else if (value == "Quality") scale = 0.82f;
+        else if (value == "Balanced") scale = 0.75f;
+        else if (value == "Performance") scale = 0.67f;
+        else if (value == "Ultra Performance") scale = 0.59f;
         else if (value != "Custom") {
-            log::warn("Unknown FSR 1 quality preset '{}', using Custom", value);
+            log::warn("Unknown upscaling quality preset '{}', using Custom", value);
         }
-        g_fsrPresetScale.store(scale, std::memory_order_relaxed);
-    }
-
-    void updateSgsrQualityPreset(std::string_view value) {
-        float scale = 0.f;
-        if (value == "Ultra Quality") scale = 0.77f;
-        else if (value == "Quality") scale = 0.67f;
-        else if (value == "Balanced") scale = 0.59f;
-        else if (value == "Performance") scale = 0.50f;
-        else if (value == "Ultra Performance") scale = 0.33f;
-        else if (value != "Custom") {
-            log::warn("Unknown SGSR 1 quality preset '{}', using Custom", value);
-        }
-        g_sgsrPresetScale.store(scale, std::memory_order_relaxed);
+        g_upscaleQualityScale.store(scale, std::memory_order_relaxed);
     }
 
     void updateSgsrOperationMode(std::string_view value) {
@@ -749,19 +736,14 @@ namespace {
 
         auto const effectCount = config.effectCount();
         auto const configuredScale = g_renderScale.load(std::memory_order_relaxed);
-        auto const mwsrUpscaling = config.upscaling == UpscaleMethod::Mwsr;
-        auto const presetScale = (config.upscaling == UpscaleMethod::Fsr ||
-            config.upscaling == UpscaleMethod::FsrLite) ?
-            g_fsrPresetScale.load(std::memory_order_relaxed) :
-            (config.upscaling == UpscaleMethod::Sgsr ?
-                g_sgsrPresetScale.load(std::memory_order_relaxed) :
-                (mwsrUpscaling ?
-                    g_mwsrPresetScale.load(std::memory_order_relaxed) : 0.f));
-        auto const requestedScale = presetScale > 0.f ?
-            presetScale * configuredScale : configuredScale;
+        auto const presetScale = g_upscaleQualityScale.load(std::memory_order_relaxed);
+        // A named quality preset is an exact shared input-resolution choice.
+        // Render Scale is only used for Custom, so every algorithm receives the
+        // same source dimensions when the same preset is selected.
+        auto const requestedScale = presetScale > 0.f ? presetScale : configuredScale;
         auto const usesSpatialUpscaler =
             config.upscaling == UpscaleMethod::Fsr || config.upscaling == UpscaleMethod::FsrLite ||
-            config.upscaling == UpscaleMethod::Sgsr || mwsrUpscaling;
+            config.upscaling == UpscaleMethod::Sgsr || config.upscaling == UpscaleMethod::Mwsr;
         auto const renderScale =
             std::clamp(requestedScale, 0.25f, usesSpatialUpscaler ? 1.f : 1.2f);
         // A selected spatial-upscaler quality preset owns the base resolution.
@@ -1714,9 +1696,7 @@ $on_mod(Loaded) {
     listenForSettingChanges<bool>("full-scene-effects", applyFullScene);
     bindDoubleSetting("render-scale", g_renderScale, 0.25f, 1.2f, 1.f);
     bindStringSetting("upscale-method", updateUpscaleMethod);
-    bindStringSetting("fsr-quality-preset", updateFsrQualityPreset);
-    bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset);
-    bindStringSetting("mwsr-quality-preset", updateMwsrQualityPreset);
+    bindStringSetting("upscale-quality-preset", updateUpscaleQualityPreset);
     bindBoolSetting("mwsr-chroma444", g_mwsrChroma444);
     bindStringSetting("sgsr-operation-mode", updateSgsrOperationMode);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
