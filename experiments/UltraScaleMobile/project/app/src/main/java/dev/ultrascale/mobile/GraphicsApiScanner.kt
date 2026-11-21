@@ -60,7 +60,8 @@ object GraphicsApiScanner {
             else -> GameKind.HYBRID_OR_UNKNOWN
         }
         val debuggable = app.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-        val optIn = runCatching {
+        // Android's manifest opt-in is honored for apps targeting API 30+.
+        val optIn = app.targetSdkVersion >= Build.VERSION_CODES.R && runCatching {
             app.metaData?.getBoolean("com.android.graphics.injectLayers.enable", false) == true
         }.getOrDefault(false)
         val privilegedBuild = Build.TYPE == "userdebug" || Build.TYPE == "eng"
