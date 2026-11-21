@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
                             Switch(checked = showAllApps, onCheckedChange = { showAllApps = it })
                         }
                         Text("Installed ${if (showAllApps) "apps" else "games"}: ${games.size}")
-                        Text("Layer injection is available only when the target opts in, is debuggable, or runs on a supported userdebug device.")
+                        Text("External layers require target opt-in or a debuggable target. Non-debuggable targets require actual root access; userdebug build type alone is not sufficient.")
                     }
                     items(games, key = { it.first.packageName }) { (app, label) ->
                         val report = GraphicsApiScanner.inspect(this@MainActivity, app)
@@ -74,7 +74,13 @@ class MainActivity : ComponentActivity() {
                                 Text("Engine: ${report.engine} • Type: ${report.gameKind}")
                                 Text("Possible APIs: ${report.candidateApis.joinToString()}")
                                 Text("Evidence: ${report.confidence} — ${report.evidence}")
-                                Text("Layer eligibility: ${if (report.targetAllowsLayers) "Eligible" else "Target must opt in / be debuggable"}")
+                                val eligibility = when {
+                                    report.vulkanLayer == LayerReadiness.ELIGIBLE_OPT_IN -> "Eligible — manifest opt-in"
+                                    report.vulkanLayer == LayerReadiness.ELIGIBLE_DEBUG -> "Eligible — debuggable target"
+                                    report.vulkanLayer == LayerReadiness.ELIGIBLE_ROOT -> "Eligible — Shizuku root"
+                                    else -> "Not eligible — target opt-in/debuggable or root required"
+                                }
+                                Text("Layer eligibility: $eligibility")
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Button(enabled = report.targetAllowsLayers && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
                                         onClick = {
