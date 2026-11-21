@@ -2,7 +2,7 @@ package dev.ultrascale.mobile
 
 import android.content.Context
 
-enum class TechniqueRole { UPSCALE, RECONSTRUCTION, SHARPEN }
+enum class TechniqueRole { UPSCALE, RECONSTRUCTION, TEMPORAL_REFERENCE, SHARPEN }
 
 data class UpscaleTechnique(
     val id: String,
@@ -23,6 +23,15 @@ data class UpscaleTechnique(
  */
 object UpscaleTechniqueCatalog {
     val all = listOf(
+        UpscaleTechnique(
+            id = "sgsr2_2pass_fs",
+            title = "Qualcomm SGSR2 · 2-pass fragment",
+            role = TechniqueRole.TEMPORAL_REFERENCE,
+            assetName = "sgsr2_2pass_upscale.frag",
+            minimumGles = "Vulkan GLSL ES 3.20",
+            license = "BSD-3-Clause",
+            note = "Official temporal shader set. Convert/upscale/vertex sources are bundled; requires depth, motion vectors, jitter, camera transforms and ping-pong history. Reference only, not enabled in the sample renderer."
+        ),
         UpscaleTechnique(
             id = "amd_fsr1_easu",
             title = "AMD FidelityFX FSR1 · EASU",
