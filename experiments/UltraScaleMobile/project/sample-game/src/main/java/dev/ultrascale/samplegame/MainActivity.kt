@@ -140,7 +140,7 @@ class MainActivity : Activity() {
         val methodLabel = TextView(this).apply { text = "Upscale method" }
         val method = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR (upstream lightweight)"))
+                listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR (upstream lightweight)", "AMD FSR1 EASU"))
             setSelection(renderer.upscaleMethod)
         }
         val scaleLabel = TextView(this).apply {
@@ -221,6 +221,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
     private var sgsr1Program = 0
     private var fsrLiteProgram = 0
     private var mwsrProgram = 0
+    private var fsr1Program = 0
     private var casProgram = 0
     private var framebuffer = 0
     private var sceneTexture = 0
@@ -242,11 +243,12 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
 
     fun configure(enabled: Boolean, method: Int, sharpen: Boolean, scale: Float, cas: Boolean, casAmount: Float) {
         upscalingEnabled = enabled
-        val requestedMethod = method.coerceIn(0, 4)
+        val requestedMethod = method.coerceIn(0, 5)
         val available = when (requestedMethod) {
             2 -> sgsr1Program != 0
             3 -> fsrLiteProgram != 0
             4 -> mwsrProgram != 0
+            5 -> fsr1Program != 0
             else -> true
         }
         upscaleMethod = if (available) requestedMethod else 0
@@ -256,7 +258,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         renderScale = scale.coerceIn(0.5f, 1f)
         statusMessage = buildString {
             append("Sample GLES: ")
-            append(listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR")[upscaleMethod])
+            append(listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR", "AMD FSR1 EASU")[upscaleMethod])
             if (!available) append(" (shader unavailable; Bilinear fallback)")
             if (cas) append(if (casEnabled) " + AMD CAS" else " (CAS shader unavailable)")
         }
@@ -308,6 +310,21 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             shaderDiagnostics += "$label failed: ${it.message ?: it.javaClass.simpleName}"
         }.getOrDefault(0)
 
+
+    private fun loadFsr1ShaderProgram(vertexSource: String): Int = runCatching {
+        // Port the upstream GLES 2-style EASU fragment to this sample's GLES 3.0
+        // interface without changing its reconstruction math.
+        val source = assets.open("shaders/amd_fsr1_easu.frag").bufferedReader().use { it.readText() }
+            .replaceFirst("#ifdef GL_ES", "#version 300 es\\n#ifdef GL_ES")
+            .replace("varying vec2 v_texCoord;", "in vec2 vUv;\\nout vec4 fragColor;")
+            .replace("v_texCoord", "vUv")
+            .replace("texture2D(", "texture(")
+            .replace("gl_FragColor", "fragColor")
+        linkProgram(vertexSource, source)
+    }.onFailure {
+        shaderDiagnostics += "AMD FSR1 EASU failed: ${it.message ?: it.javaClass.simpleName}"
+    }.getOrDefault(0)
+
     // GLSurfaceView may recreate its EGL context after pause/resume or surface loss.
     // Every GL object name from the previous context is invalid in the new one.
     private fun resetContextResources() {
@@ -316,6 +333,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         sgsr1Program = 0
         fsrLiteProgram = 0
         mwsrProgram = 0
+        fsr1Program = 0
         casProgram = 0
         framebuffer = 0
         sceneTexture = 0
@@ -408,6 +426,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         }
         fsrLiteProgram = loadShaderProgram("FSR Lite", vertex, "shaders/fsr_lite_6tap.frag")
         mwsrProgram = loadShaderProgram("MWSR", vertex, "shaders/mwsr_up.frag")
+        fsr1Program = loadFsr1ShaderProgram(vertex)
         casProgram = loadShaderProgram("CAS", vertex, "shaders/amd_cas_sharpen.frag")
         if (upscaleMethod == 2 && sgsr1Program == 0) {
             upscaleMethod = 0
@@ -418,6 +437,9 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         } else if (upscaleMethod == 4 && mwsrProgram == 0) {
             upscaleMethod = 0
             statusMessage = "MWSR unavailable after graphics-context recreation; using Bilinear."
+        } else if (upscaleMethod == 5 && fsr1Program == 0) {
+            upscaleMethod = 0
+            statusMessage = "AMD FSR1 EASU unavailable after graphics-context recreation; using Bilinear."
         }
         if (casEnabled && casProgram == 0) {
             casEnabled = false
@@ -462,6 +484,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
                 upscaleMethod == 2 && sgsr1Program != 0 -> sgsr1Program
                 upscaleMethod == 3 && fsrLiteProgram != 0 -> fsrLiteProgram
                 upscaleMethod == 4 && mwsrProgram != 0 -> mwsrProgram
+                upscaleMethod == 5 && fsr1Program != 0 -> fsr1Program
                 else -> upscaleProgram
             }
             GLES30.glUseProgram(selectedProgram)
@@ -481,6 +504,12 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
                         1f / sceneWidth.coerceAtLeast(1), 1f / sceneHeight.coerceAtLeast(1))
                 }
                 mwsrProgram -> applyMwsrUniforms()
+                fsr1Program -> {
+                    GLES30.glUniform1i(GLES30.glGetUniformLocation(fsr1Program, "u_texture"), 0)
+                    GLES30.glUniform2f(GLES30.glGetUniformLocation(fsr1Program, "u_invResolution"),
+                        1f / sceneWidth.coerceAtLeast(1), 1f / sceneHeight.coerceAtLeast(1))
+                    GLES30.glUniform1f(GLES30.glGetUniformLocation(fsr1Program, "u_sharpness"), 1f)
+                }
                 else -> {
                     GLES30.glUniform1i(GLES30.glGetUniformLocation(upscaleProgram, "uScene"), 0)
                     GLES30.glUniform2f(GLES30.glGetUniformLocation(upscaleProgram, "uTexel"),
