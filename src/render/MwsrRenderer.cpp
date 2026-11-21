@@ -236,7 +236,18 @@ namespace bv::render {
         }
 
         GlStateGuard state;
-        auto const p = mwsrLaw(inputWidth, inputHeight, outputWidth, outputHeight);
+        // The parameter law uses logarithms and depends only on the four
+        // dimensions. Recompute only after a resize or render-scale change.
+        if (m_cachedInputWidth != inputWidth || m_cachedInputHeight != inputHeight ||
+            m_cachedOutputWidth != outputWidth || m_cachedOutputHeight != outputHeight) {
+            auto const p = mwsrLaw(inputWidth, inputHeight, outputWidth, outputHeight);
+            m_cachedKernel = {p.kc, p.ft, p.kg, p.kr, p.kwc, p.kl};
+            m_cachedInputWidth = inputWidth;
+            m_cachedInputHeight = inputHeight;
+            m_cachedOutputWidth = outputWidth;
+            m_cachedOutputHeight = outputHeight;
+        }
+        auto const& p = m_cachedKernel;
         float const inputW = static_cast<float>(inputWidth);
         float const inputH = static_cast<float>(inputHeight);
 
@@ -257,10 +268,10 @@ namespace bv::render {
         );
         glUniform4f(
             m_dimsAcrossUniform,
-            inputW, inputH, p.kr / inputW, p.kr / inputH
+            inputW, inputH, p[3] / inputW, p[3] / inputH
         );
-        glUniform4f(m_kernelUniform, p.kc, p.ft, p.kg, p.kwc);
-        glUniform4f(m_boundUniform, p.kl, 1.0f, 0.0f, 0.0f);
+        glUniform4f(m_kernelUniform, p[0], p[1], p[2], p[4]);
+        glUniform4f(m_boundUniform, p[5], 1.0f, 0.0f, 0.0f);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, inputTexture);
         m_quad.bind();
@@ -278,6 +289,11 @@ namespace bv::render {
         m_kernelUniform = -1;
         m_boundUniform = -1;
         m_attempted = false;
+        m_cachedKernel = {};
+        m_cachedInputWidth = 0;
+        m_cachedInputHeight = 0;
+        m_cachedOutputWidth = 0;
+        m_cachedOutputHeight = 0;
     }
 
 } // namespace bv::render
