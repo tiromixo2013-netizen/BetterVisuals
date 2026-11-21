@@ -34,5 +34,5 @@ Research sources reviewed before designing this branch:
 ## Current experiment status
 - GLES: pass-through layer intercepts `eglSwapBuffers` and logs periodic frame counts.
 - Vulkan: pass-through layer exposes Android loader introspection, tracks instance/physical-device/device dispatch, and observes queue present calls.
-- The owned sample-game module opts in, renders a GLES triangle, and creates a Vulkan instance/device.
-- These are diagnostic prototypes. They are not yet upscalers, and have not yet been proven by a device build/run in this repository.
+- The owned sample-game module opts in, renders a synthetic checker/grid/diagonal test scene through an off-screen GLES framebuffer, and creates a Vulkan instance/device for a separate API smoke test. Its in-process spatial shader passes are distinct from the external pass-through layers.
+- Android CI has compiled and packaged the sample APK and shader assets. Actual on-device shader compilation, rendered-image inspection, GPU timing and thermal validation remain unverified; a successful CI build is not a device-runtime pass.
