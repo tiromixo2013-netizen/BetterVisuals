@@ -1,6 +1,7 @@
 #include <EGL/egl.h>
 #include <android/log.h>
 #include <shadowhook.h>
+#include <bytehook.h>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -16,6 +17,7 @@ static EglSwapBuffers g_nextSwapBuffers = nullptr;
 static EglQuerySurface g_nextQuerySurface = nullptr;
 static std::atomic<uint64_t> g_frames{0};
 static std::atomic<bool> g_hookBackendReady{false};
+static std::atomic<bool> g_pltBackendReady{false};
 
 static EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
     const uint64_t frame = ++g_frames;
@@ -52,6 +54,9 @@ void AndroidGLESLayer_Initialize(void* layer_id, GetNextProc get_next_layer_proc
     // ptrace, permission bypass, or automatic game-memory modification occurs.
     const int hookInit = shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
     g_hookBackendReady.store(hookInit == 0, std::memory_order_release);
+    // ByteHook supplies PLT hooks; initialize only after its ShadowHook dependency.
+    const int pltInit = hookInit == 0 ? bytehook_init(BYTEHOOK_MODE_AUTOMATIC, false) : -1;
+    g_pltBackendReady.store(pltInit == BYTEHOOK_STATUS_CODE_OK, std::memory_order_release);
     if (g_getNext) {
         g_nextSwapBuffers = reinterpret_cast<EglSwapBuffers>(
             g_getNext(g_layerId, "eglSwapBuffers"));
@@ -59,8 +64,9 @@ void AndroidGLESLayer_Initialize(void* layer_id, GetNextProc get_next_layer_proc
             g_getNext(g_layerId, "eglQuerySurface"));
     }
     __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
-        "UltraScale GLES diagnostic layer initialized; ShadowHook backend=%s (init=%d)",
-        g_hookBackendReady.load(std::memory_order_acquire) ? "ready" : "unavailable", hookInit);
+        "UltraScale GLES diagnostic layer initialized; inline=%s (%d), PLT=%s (%d)",
+        g_hookBackendReady.load(std::memory_order_acquire) ? "ready" : "unavailable", hookInit,
+        g_pltBackendReady.load(std::memory_order_acquire) ? "ready" : "unavailable", pltInit);
 }
 
 extern "C" __attribute__((visibility("default")))
