@@ -41,4 +41,6 @@ dependencies {
     implementation("com.bytedance.android:shadowhook:2.0.1")
     // Complementary PLT hook backend; ByteHook 1.1.2 depends on ShadowHook 2.0.1.
     implementation("com.bytedance:bytehook:1.1.2")
+    // Static APK/DEX/manifest parser for engine fingerprinting.
+    implementation("net.dongliu:apk-parser:2.6.10")
 }
