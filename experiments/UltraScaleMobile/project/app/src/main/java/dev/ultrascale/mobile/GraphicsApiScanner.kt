@@ -8,7 +8,7 @@ import java.util.zip.ZipFile
 
 enum class RenderApi { VULKAN, OPENGL_ES, UNKNOWN }
 enum class GameKind { TWO_D_LIKELY, THREE_D_LIKELY, HYBRID_OR_UNKNOWN }
-enum class LayerReadiness { APP_OPT_IN_REQUIRED, DEBUG_OR_PRIVILEGED_ONLY, NOT_CONFIRMED }
+enum class LayerReadiness { ELIGIBLE_OPT_IN, ELIGIBLE_DEBUG, APP_OPT_IN_REQUIRED }
 
 data class ApiReport(
     val engine: String,
@@ -17,11 +17,16 @@ data class ApiReport(
     val confidence: String,
     val evidence: String,
     val vulkanLayer: LayerReadiness,
-    val glesLayer: LayerReadiness
+    val glesLayer: LayerReadiness,
+    val targetAllowsLayers: Boolean
 )
 
 object GraphicsApiScanner {
-    fun inspect(context: Context, app: ApplicationInfo): ApiReport {
+    @Suppress("DEPRECATION")
+    fun inspect(context: Context, suppliedApp: ApplicationInfo): ApiReport {
+        val app = runCatching {
+            context.packageManager.getApplicationInfo(suppliedApp.packageName, PackageManager.GET_META_DATA)
+        }.getOrDefault(suppliedApp)
         val libs = linkedSetOf<String>()
         val paths = listOf(app.sourceDir) + (app.splitSourceDirs?.toList() ?: emptyList())
         paths.forEach { path ->
@@ -29,7 +34,7 @@ object GraphicsApiScanner {
                 ZipFile(path).use { zip ->
                     val entries = zip.entries()
                     var count = 0
-                    while (entries.hasMoreElements() && count++ < 4000) {
+                    while (entries.hasMoreElements() && count++ < 6000) {
                         val name = entries.nextElement().name.lowercase()
                         if (name.endsWith(".so")) libs += name.substringAfterLast('/')
                     }
@@ -44,22 +49,30 @@ object GraphicsApiScanner {
             libs.any { it.contains("gdx") } -> "libGDX"
             else -> "Unknown"
         }
-        val apis = linkedSetOf<RenderApi>()
-        if (libs.any { it.contains("vulkan") } || engine in setOf("Unity", "Unreal", "Godot")) apis += RenderApi.VULKAN
+        val candidates = linkedSetOf<RenderApi>()
+        if (libs.any { it.contains("vulkan") } || engine in setOf("Unity", "Unreal", "Godot")) candidates += RenderApi.VULKAN
         if (libs.any { it.contains("gles") || it.contains("egl") || it.contains("opengl") } ||
-            engine in setOf("Unity", "Unreal", "Godot", "Cocos", "libGDX")) apis += RenderApi.OPENGL_ES
-        val gameKind = when (engine) {
+            engine in setOf("Unity", "Unreal", "Godot", "Cocos", "libGDX")) candidates += RenderApi.OPENGL_ES
+        val kind = when (engine) {
             "Cocos" -> GameKind.TWO_D_LIKELY
             "Unreal" -> GameKind.THREE_D_LIKELY
             else -> GameKind.HYBRID_OR_UNKNOWN
         }
         val debuggable = app.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        val optIn = runCatching {
+            app.metaData?.getBoolean("com.android.graphics.injectLayers.enable", false) == true
+        }.getOrDefault(false)
         val privilegedBuild = Build.TYPE == "userdebug" || Build.TYPE == "eng"
-        val layer = if (debuggable || privilegedBuild) LayerReadiness.DEBUG_OR_PRIVILEGED_ONLY else LayerReadiness.APP_OPT_IN_REQUIRED
+        val readiness = when {
+            optIn -> LayerReadiness.ELIGIBLE_OPT_IN
+            debuggable || privilegedBuild -> LayerReadiness.ELIGIBLE_DEBUG
+            else -> LayerReadiness.APP_OPT_IN_REQUIRED
+        }
         return ApiReport(
-            engine, gameKind, apis, if (engine == "Unknown") "Low" else "Heuristic",
-            "Static APK native-library signature only; not proof of active runtime API",
-            layer, layer
+            engine, kind, candidates,
+            if (engine == "Unknown") "Low" else "Heuristic",
+            "APK native-library signatures only; candidate APIs, not proof of the active runtime API",
+            readiness, readiness, optIn || debuggable || privilegedBuild
         )
     }
 }
