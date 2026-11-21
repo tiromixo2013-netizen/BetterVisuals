@@ -241,7 +241,7 @@ private fun UpscalerLibraryCard() {
                         Text(technique.title, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
                         StatusPill(if (technique.role == TechniqueRole.TEMPORAL_REFERENCE) "REFERENCE" else "BUNDLED")
                     }
-                    Text("${technique.role} · ${technique.minimumGles} · ${technique.license}", color = Muted, style = MaterialTheme.typography.labelSmall)
+                    Text("${technique.role} · ${technique.graphicsProfile} · ${technique.license}", color = Muted, style = MaterialTheme.typography.labelSmall)
                     Text(technique.note, color = Muted, style = MaterialTheme.typography.bodySmall)
                     TextButton(
                         onClick = {
