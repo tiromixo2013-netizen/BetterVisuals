@@ -7,6 +7,8 @@ import android.widget.ImageView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -222,6 +224,9 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun UpscalerLibraryCard() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var selectedTechnique by remember { mutableStateOf<UpscaleTechnique?>(null) }
+    var sourceText by remember { mutableStateOf("") }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -238,6 +243,14 @@ private fun UpscalerLibraryCard() {
                     }
                     Text("${technique.role} · ${technique.minimumGles} · ${technique.license}", color = Muted, style = MaterialTheme.typography.labelSmall)
                     Text(technique.note, color = Muted, style = MaterialTheme.typography.bodySmall)
+                    TextButton(
+                        onClick = {
+                            selectedTechnique = technique
+                            sourceText = runCatching { UpscaleTechniqueCatalog.source(context, technique) }
+                                .getOrElse { "Could not load shader asset: ${it.message}" }
+                        },
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 2.dp)
+                    ) { Text("Inspect bundled source") }
                 }
             }
             HorizontalDivider(color = Color.White.copy(alpha = .08f))
@@ -247,6 +260,23 @@ private fun UpscalerLibraryCard() {
                 style = MaterialTheme.typography.bodySmall
             )
         }
+    }
+    selectedTechnique?.let { technique ->
+        AlertDialog(
+            onDismissRequest = { selectedTechnique = null },
+            title = { Text(technique.title) },
+            text = {
+                Text(
+                    sourceText,
+                    modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { selectedTechnique = null }) { Text("Close") }
+            }
+        )
     }
 }
 
