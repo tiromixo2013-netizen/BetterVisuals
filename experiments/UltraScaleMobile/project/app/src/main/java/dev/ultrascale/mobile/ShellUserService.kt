@@ -24,10 +24,8 @@ class ShellUserService : ICommandService.Stub() {
         runSettings("put", "gpu_debug_layer_app", layerPackage)
         if (api == "vulkan") {
             runSettings("put", "gpu_debug_layers", "VK_LAYER_ULTRASCALE_api_lab")
-            runSettings("delete", "gpu_debug_layers_gles", null)
         } else {
             runSettings("put", "gpu_debug_layers_gles", "libGLES_ultrascale.so")
-            runSettings("delete", "gpu_debug_layers", null)
         }
         return "Configured $api debug layer for $targetPackage. Fully stop and relaunch the game."
     }
