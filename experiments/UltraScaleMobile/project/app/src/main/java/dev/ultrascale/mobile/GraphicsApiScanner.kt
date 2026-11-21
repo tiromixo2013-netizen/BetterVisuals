@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import java.io.File
 import java.util.zip.ZipFile
+import net.dongliu.apk.parser.ApkFile
 
 enum class RenderApi { VULKAN, OPENGL_ES, UNKNOWN }
 enum class GameKind { TWO_D_LIKELY, THREE_D_LIKELY, HYBRID_OR_UNKNOWN }
@@ -65,6 +67,31 @@ object GraphicsApiScanner {
             }
         }
 
+        // DEX signatures complement native-library names. Keep parsing bounded and
+        // best-effort: oversized APKs or unusual DEX layouts fall back to native evidence.
+        val dexEngine = paths.asSequence()
+            .filter { runCatching { File(it).length() in 1..(128L * 1024L * 1024L) }.getOrDefault(false) }
+            .take(4)
+            .mapNotNull { path ->
+                runCatching {
+                    ApkFile(File(path)).use { apk ->
+                        apk.dexClasses.asSequence().map { it.classType.lowercase() }.firstNotNullOfOrNull { type ->
+                            when {
+                                type.contains("com/unity3d/player/unityplayer") -> "Unity"
+                                type.contains("com/epicgames/unreal/gameactivity") ||
+                                    type.contains("com/epicgames/ue4/gameactivity") -> "Unreal"
+                                type.contains("org/godotengine/godot/godot") -> "Godot"
+                                type.contains("org/cocos2dx/lib/cocos2dxactivity") ||
+                                    type.contains("org/cocos2dx/lib/cocos2dxhelper") -> "Cocos"
+                                type.contains("com/badlogic/gdx/backends/android/androidapplication") -> "libGDX"
+                                else -> null
+                            }
+                        }
+                    }
+                }.getOrNull()
+            }
+            .firstOrNull()
+
         val engine = when {
             libs.any { it.contains("sample_vulkan_probe") } -> "UltraScale Test Harness"
             libs.any { it.contains("libunity") } -> "Unity"
@@ -72,6 +99,7 @@ object GraphicsApiScanner {
             libs.any { it.contains("godot") } -> "Godot"
             libs.any { it.contains("cocos") } -> "Cocos"
             libs.any { it.contains("gdx") } -> "libGDX"
+            dexEngine != null -> dexEngine
             else -> "Unknown"
         }
         val candidates = linkedSetOf<RenderApi>()
@@ -112,7 +140,9 @@ object GraphicsApiScanner {
             gameKind = kind,
             candidateApis = candidates,
             confidence = if (engine == "Unknown") "Low" else "Heuristic",
-            evidence = "Static APK scan: $nativeLibraryEntries native-library entries across ${abis.size} ABI(s). Candidate APIs are not proof of the active runtime API.",
+            evidence = "Static APK scan: $nativeLibraryEntries native-library entries across ${abis.size} ABI(s)." +
+                (dexEngine?.let { " DEX class signature: $it." } ?: " No recognized DEX engine signature.") +
+                " Candidate APIs are not proof of the active runtime API.",
             vulkanLayer = vulkanReadiness,
             glesLayer = glesReadiness,
             targetAllowsVulkan = optIn || debuggable || rootAvailable,
