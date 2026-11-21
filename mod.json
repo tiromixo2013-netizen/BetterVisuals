@@ -79,7 +79,9 @@
       "name": "Render GPU Diagnostics (Android)",
       "description": "Opt-in asynchronous GPU timing for scene capture and final upscaling. Requires GL_EXT_disjoint_timer_query; logs 60-frame averages. Adds query overhead while enabled.",
       "default": false,
-      "platforms": ["android"]
+      "platforms": [
+        "android"
+      ]
     },
     "frame-history-capture": {
       "type": "bool",
@@ -116,6 +118,7 @@
         "FSR Lite (6-Tap)",
         "SGSR 1",
         "Integer Scaling",
+        "AQR-4",
         "UltraScale2D"
       ]
     },
@@ -355,6 +358,34 @@
         "Performance",
         "Ultra Performance"
       ]
+    },
+    "aqr4-quality-preset": {
+      "type": "string",
+      "name": "AQR-4 Quality Preset",
+      "description": "Controls AQR-4 source resolution. Native bypasses the upscaler for native-resolution performance; lower presets reduce scene rendering resolution and invoke the four-tap reconstruction pass.",
+      "default": "Native",
+      "one-of": [
+        "Native",
+        "Ultra Quality",
+        "Quality",
+        "Balanced",
+        "Performance",
+        "Ultra Performance"
+      ]
+    },
+    "aqr4-edge-strength": {
+      "type": "float",
+      "name": "AQR-4 Edge Strength",
+      "description": "Strength of adaptive edge and diagonal reconstruction.",
+      "default": 0.75,
+      "min": 0,
+      "max": 1,
+      "control": {
+        "arrows": true,
+        "arrow-step": 0.05,
+        "slider": true,
+        "slider-step": 0.05
+      }
     }
   }
 }
