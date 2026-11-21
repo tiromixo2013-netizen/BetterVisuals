@@ -22,6 +22,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#version 300 es
 #ifdef GL_ES
     #ifdef GL_FRAGMENT_PRECISION_HIGH
         precision highp float;
@@ -33,7 +34,8 @@
 uniform sampler2D u_texture;
 uniform vec2 u_invResolution;
 uniform float u_sharpness;
-varying vec2 v_texCoord;
+in vec2 vUv;
+out vec4 fragColor;
 
 #define FSR_EPSILON (1e-7)
 
@@ -103,7 +105,7 @@ void main() {
 
     // Output pixel centers {0 to output-1} map to input texel space with a
     // half-texel shift, matching FsrEasuCon() constants.
-    vec2 pp = v_texCoord * inputSize - 0.5;
+    vec2 pp = vUv * inputSize - 0.5;
     vec2 fp = floor(pp);
     pp -= fp;
 
@@ -113,18 +115,18 @@ void main() {
     vec2 stepX = vec2(u_invResolution.x, 0.0);
     vec2 stepY = vec2(0.0, u_invResolution.y);
 
-    vec3 b = texture2D(u_texture, base - stepY).rgb;
-    vec3 c = texture2D(u_texture, base + stepX - stepY).rgb;
-    vec3 i = texture2D(u_texture, base - stepX + stepY).rgb;
-    vec3 j = texture2D(u_texture, base + stepY).rgb;
-    vec4 f = texture2D(u_texture, base);
-    vec3 e = texture2D(u_texture, base - stepX).rgb;
-    vec3 k = texture2D(u_texture, base + stepX + stepY).rgb;
-    vec3 l = texture2D(u_texture, base + 2.0 * stepX + stepY).rgb;
-    vec3 h = texture2D(u_texture, base + 2.0 * stepX).rgb;
-    vec3 g = texture2D(u_texture, base + stepX).rgb;
-    vec3 o = texture2D(u_texture, base + stepX + 2.0 * stepY).rgb;
-    vec3 n = texture2D(u_texture, base + 2.0 * stepY).rgb;
+    vec3 b = texture(u_texture, base - stepY).rgb;
+    vec3 c = texture(u_texture, base + stepX - stepY).rgb;
+    vec3 i = texture(u_texture, base - stepX + stepY).rgb;
+    vec3 j = texture(u_texture, base + stepY).rgb;
+    vec4 f = texture(u_texture, base);
+    vec3 e = texture(u_texture, base - stepX).rgb;
+    vec3 k = texture(u_texture, base + stepX + stepY).rgb;
+    vec3 l = texture(u_texture, base + 2.0 * stepX + stepY).rgb;
+    vec3 h = texture(u_texture, base + 2.0 * stepX).rgb;
+    vec3 g = texture(u_texture, base + stepX).rgb;
+    vec3 o = texture(u_texture, base + stepX + 2.0 * stepY).rgb;
+    vec3 n = texture(u_texture, base + 2.0 * stepY).rgb;
 
     float bL = tapLuma(b);
     float cL = tapLuma(c);
@@ -201,5 +203,5 @@ void main() {
         min(max4, max(min4, accumulation * (1.0 / weight))),
         clamp(u_sharpness, 0.0, 1.0)
     );
-    gl_FragColor = vec4(pixel, f.a);
+    fragColor = vec4(pixel, f.a);
 }
