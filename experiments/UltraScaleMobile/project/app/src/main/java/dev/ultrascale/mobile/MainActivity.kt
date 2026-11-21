@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
                                             feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.VULKAN, true)
                                                 .fold({ "Vulkan: $it" }, { "Vulkan failed: ${it.message}" })
                                         }) { Text("Enable Vulkan") }
-                                    Button(enabled = report.targetAllowsLayers && ShizukuBridge.granted(),
+                                    Button(enabled = report.targetAllowsLayers && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
                                         onClick = {
                                             feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.OPENGL_ES, true)
                                                 .fold({ "GLES: $it" }, { "GLES failed: ${it.message}" })
