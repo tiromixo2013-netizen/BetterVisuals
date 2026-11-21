@@ -38,9 +38,19 @@ struct ContextState {
     uint64_t drawCalls = 0;
     uint64_t attachmentUpdates = 0;
     GLuint lastAttachedTexture = 0;
-    TextureInfo lastAttachedTextureInfo{};
     std::unordered_map<GLuint, TextureInfo> textures;
-    std::unordered_map<GLuint, TextureInfo> framebufferColorAttachments;
+    std::unordered_map<GLuint, std::unordered_map<GLenum, TextureInfo>> framebufferAttachments;
+};
+struct FrameTelemetry {
+    GLuint boundFramebuffer = 0;
+    GLint viewportX = 0;
+    GLint viewportY = 0;
+    GLsizei viewportWidth = 0;
+    GLsizei viewportHeight = 0;
+    uint64_t drawCalls = 0;
+    uint64_t attachmentUpdates = 0;
+    GLuint lastAttachedTexture = 0;
+    TextureInfo targetTextureInfo{};
 };
 
 std::mutex g_contextMutex;
@@ -165,16 +175,16 @@ void LayerFramebufferTexture2D(
     ++state.attachmentUpdates;
     state.lastAttachedTexture = texture;
     if (texture == 0) {
-        state.framebufferColorAttachments.erase(state.boundFramebuffer);
-        state.lastAttachedTextureInfo = {};
+        auto framebuffer = state.framebufferAttachments.find(state.boundFramebuffer);
+        if (framebuffer != state.framebufferAttachments.end()) {
+            framebuffer->second.erase(attachment);
+            if (framebuffer->second.empty()) state.framebufferAttachments.erase(framebuffer);
+        }
         return;
     }
     auto found = state.textures.find(texture);
     if (found != state.textures.end()) {
-        state.framebufferColorAttachments[state.boundFramebuffer] = found->second;
-        state.lastAttachedTextureInfo = found->second;
-    } else {
-        state.lastAttachedTextureInfo = {};
+        state.framebufferAttachments[state.boundFramebuffer][attachment] = found->second;
     }
 }
 
@@ -191,11 +201,26 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
     }
 
     const EGLContext context = CurrentContext();
-    ContextState snapshot{};
+    FrameTelemetry snapshot{};
     if (sampleFrame && context != EGL_NO_CONTEXT) {
         std::lock_guard<std::mutex> lock(g_contextMutex);
         const auto found = g_contexts.find(context);
-        if (found != g_contexts.end()) snapshot = found->second;
+        if (found != g_contexts.end()) {
+            const auto& state = found->second;
+            snapshot.boundFramebuffer = state.boundFramebuffer;
+            snapshot.viewportX = state.viewportX;
+            snapshot.viewportY = state.viewportY;
+            snapshot.viewportWidth = state.viewportWidth;
+            snapshot.viewportHeight = state.viewportHeight;
+            snapshot.drawCalls = state.drawCalls;
+            snapshot.attachmentUpdates = state.attachmentUpdates;
+            snapshot.lastAttachedTexture = state.lastAttachedTexture;
+            const auto framebuffer = state.framebufferAttachments.find(state.boundFramebuffer);
+            if (framebuffer != state.framebufferAttachments.end()) {
+                const auto color = framebuffer->second.find(GL_COLOR_ATTACHMENT0);
+                if (color != framebuffer->second.end()) snapshot.targetTextureInfo = color->second;
+            }
+        }
     }
 
     const auto start = std::chrono::steady_clock::now();
@@ -212,9 +237,9 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
             static_cast<unsigned long long>(snapshot.drawCalls),
             static_cast<unsigned long long>(snapshot.attachmentUpdates),
             snapshot.lastAttachedTexture,
-            snapshot.lastAttachedTextureInfo.width,
-            snapshot.lastAttachedTextureInfo.height,
-            snapshot.lastAttachedTextureInfo.internalFormat,
+            snapshot.targetTextureInfo.width,
+            snapshot.targetTextureInfo.height,
+            snapshot.targetTextureInfo.internalFormat,
             static_cast<long long>(elapsed), static_cast<int>(result));
     }
     return result;
