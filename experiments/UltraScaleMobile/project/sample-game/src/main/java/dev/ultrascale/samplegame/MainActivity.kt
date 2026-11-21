@@ -418,7 +418,74 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         }
         sceneWidth = wantedWidth
         sceneHeight = wantedHeight
+        mwsrParamsDirty = true
         return true
+    }
+
+    private fun ensurePostTarget(): Boolean {
+        if (postWidth == outputWidth && postHeight == outputHeight && postFramebuffer != 0) return true
+        if (postFramebuffer != 0) GLES30.glDeleteFramebuffers(1, intArrayOf(postFramebuffer), 0)
+        if (postTexture != 0) GLES30.glDeleteTextures(1, intArrayOf(postTexture), 0)
+        val textures = IntArray(1)
+        GLES30.glGenTextures(1, textures, 0)
+        postTexture = textures[0]
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, postTexture)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, outputWidth, outputHeight,
+            0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+        val fbos = IntArray(1)
+        GLES30.glGenFramebuffers(1, fbos, 0)
+        postFramebuffer = fbos[0]
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, postFramebuffer)
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0,
+            GLES30.GL_TEXTURE_2D, postTexture, 0)
+        val complete = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        if (!complete) {
+            GLES30.glDeleteFramebuffers(1, intArrayOf(postFramebuffer), 0)
+            GLES30.glDeleteTextures(1, intArrayOf(postTexture), 0)
+            postFramebuffer = 0
+            postTexture = 0
+            postWidth = 0
+            postHeight = 0
+            return false
+        }
+        postWidth = outputWidth
+        postHeight = outputHeight
+        return true
+    }
+
+    private fun applyMwsrUniforms() {
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(mwsrProgram, "uTex"), 0)
+        if (!mwsrParamsDirty) return
+        val inW = sceneWidth.coerceAtLeast(1)
+        val inH = sceneHeight.coerceAtLeast(1)
+        val outW = outputWidth.coerceAtLeast(1)
+        val outH = outputHeight.coerceAtLeast(1)
+        val scale = minOf(outW.toFloat() / inW, outH.toFloat() / inH).coerceIn(1.07f, 4f)
+        val x = kotlin.math.ln(scale.toDouble()).toFloat()
+        fun curve(c0: Float, c1: Float, c2: Float) = c0 + x * (c1 + x * c2)
+        val kc = curve(0.63535834f, 0.021845682f, 0.12781268f)
+        val kgBase = curve(-0.12884139f, 2.5844684f, -1.260092f)
+        val kr = curve(1.0071546f, -1.0209067f, 0.5699606f)
+        val klBase = curve(0.33416995f, -0.2962022f, 0.08628272f)
+        val force = 1f + 0.35f * (kotlin.math.ln(scale / (4f / 3f)) /
+            kotlin.math.ln(2f / (4f / 3f))).coerceIn(0f, 1f)
+        val kg = kgBase * force
+        val kl = klBase * force
+        GLES30.glUniform4f(GLES30.glGetUniformLocation(mwsrProgram, "uTexelScale"),
+            1f / inW, 1f / inH, outW.toFloat() / inW, outH.toFloat() / inH)
+        GLES30.glUniform4f(GLES30.glGetUniformLocation(mwsrProgram, "uDimsAcross"),
+            inW.toFloat(), inH.toFloat(), kr / inW, kr / inH)
+        GLES30.glUniform4f(GLES30.glGetUniformLocation(mwsrProgram, "uKernel"),
+            kc, 0.005f, kg, 0.1f)
+        GLES30.glUniform4f(GLES30.glGetUniformLocation(mwsrProgram, "uZone"), 0f, 0f, 1f, 1f)
+        GLES30.glUniform4f(GLES30.glGetUniformLocation(mwsrProgram, "uZoneBonus"), 0f, 0f, 0f, 0f)
+        GLES30.glUniform4f(GLES30.glGetUniformLocation(mwsrProgram, "uBound"), kl, 0f, 0f, 0f)
+        mwsrParamsDirty = false
     }
 
     private fun drawScene() {
