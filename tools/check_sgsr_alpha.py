@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static checks for SGSR1 alpha-safe capture and restored quality presets."""
+"""Static checks for SGSR1 alpha-safe capture and shared quality presets."""
 
 import json
 from pathlib import Path
@@ -27,24 +27,21 @@ assert "glViewport(callerViewport[0], callerViewport[1], callerViewport[2], call
 assert "glUniform1i(m_operationModeUniform, operationMode)" in sgsr
 assert "glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)" in sgsr
 
-# SGSR1 and FSR1 presets must be separate and bind to their own upscaler.
-assert "sgsr-quality-preset" in settings
-assert settings["sgsr-quality-preset"]["default"] == "Custom"
-assert settings["sgsr-quality-preset"]["one-of"] == settings["fsr-quality-preset"]["one-of"]
-assert "g_sgsrPresetScale" in main
-assert "updateSgsrQualityPreset" in main
-assert 'bindStringSetting("sgsr-quality-preset", updateSgsrQualityPreset)' in main
+# SGSR1 shares the same source-resolution preset as every other method.
+assert "upscale-quality-preset" in settings
+assert settings["upscale-quality-preset"]["default"] == "Custom"
+assert "g_upscaleQualityScale" in main
+assert "updateUpscaleQualityPreset" in main
+assert 'bindStringSetting("upscale-quality-preset", updateUpscaleQualityPreset)' in main
 assert "config.upscaling == UpscaleMethod::Sgsr" in main
 assert "g_sgsrOperationMode" in main
 assert "updateSgsrOperationMode" in main
 assert 'bindStringSetting("sgsr-operation-mode", updateSgsrOperationMode)' in main
 assert settings["sgsr-operation-mode"]["default"] == "RGBA"
 assert settings["sgsr-operation-mode"]["one-of"] == ["RGBA", "RGBY", "LERP"]
-assert "auto const presetScale = (config.upscaling == UpscaleMethod::Fsr ||" in main
-assert "config.upscaling == UpscaleMethod::FsrLite)" in main
 
 # Avoid repeating a synchronous capability query on every frame-history swap.
 assert "GL_MAX_TEXTURE_SIZE is invariant for a live context" in main
 assert "GLint m_maxTextureSize = 0;" in main
 
-print("SGSR1 alpha, independent quality presets, and FG context-cache checks passed.")
+print("SGSR1 alpha, shared quality presets, and FG context-cache checks passed.")
