@@ -17,7 +17,10 @@ import android.widget.TextView
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.egl.EGLContext
+import javax.microedition.khronos.egl.EGLDisplay
 import javax.microedition.khronos.opengles.GL10
 
 class MainActivity : Activity() {
@@ -61,6 +64,30 @@ class MainActivity : Activity() {
         }
         glView = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
+            // Request GLES 3.1 explicitly so SGSR1's GLSL ES 3.10 textureGather
+            // shader can compile. Fall back to GLES 3.0 only when the EGL driver
+            // does not expose EGL_KHR_create_context or rejects the 3.1 context.
+            setEGLContextFactory(object : GLSurfaceView.EGLContextFactory {
+                override fun createContext(egl: EGL10, display: EGLDisplay, config: EGLConfig): EGLContext {
+                    val extensions = egl.eglQueryString(display, EGL10.EGL_EXTENSIONS).orEmpty()
+                        .split(Regex("\\s+"))
+                    if ("EGL_KHR_create_context" in extensions) {
+                        val context31 = egl.eglCreateContext(
+                            display, config, EGL10.EGL_NO_CONTEXT,
+                            intArrayOf(0x3098, 3, 0x30FB, 1, EGL10.EGL_NONE)
+                        )
+                        if (context31 != null && context31 != EGL10.EGL_NO_CONTEXT) return context31
+                    }
+                    return egl.eglCreateContext(
+                        display, config, EGL10.EGL_NO_CONTEXT,
+                        intArrayOf(0x3098, 3, EGL10.EGL_NONE)
+                    )
+                }
+
+                override fun destroyContext(egl: EGL10, display: EGLDisplay, context: EGLContext) {
+                    egl.eglDestroyContext(display, context)
+                }
+            })
             setRenderer(renderer)
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
         }
