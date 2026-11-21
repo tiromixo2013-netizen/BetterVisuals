@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 var refresh by remember { mutableIntStateOf(0) }
+                var showAllApps by remember { mutableStateOf(false) }
                 var shizukuRefresh by remember { mutableIntStateOf(0) }
                 DisposableEffect(Unit) {
                     refreshPermissionUi = { shizukuRefresh++ }
@@ -37,7 +38,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 val shizukuStatus = remember(shizukuRefresh) { ShizukuBridge.status() }
-                val games = remember(refresh) { discoverGames() }
+                val games = remember(refresh, showAllApps) { discoverGames(showAllApps) }
                 LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item {
                         Text("UltraScale Mobile — API Lab", style = MaterialTheme.typography.headlineSmall)
@@ -56,7 +57,11 @@ class MainActivity : ComponentActivity() {
                         Text("Device graphics APIs", style = MaterialTheme.typography.titleMedium)
                         Text(deviceApis.first)
                         Text(deviceApis.second)
-                        Text("Installed games: ${games.size}")
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Text("Show all launchable apps")
+                            Switch(checked = showAllApps, onCheckedChange = { showAllApps = it })
+                        }
+                        Text("Installed ${if (showAllApps) "apps" else "games"}: ${games.size}")
                         Text("Layer injection is available only when the target opts in, is debuggable, or runs on a supported userdebug device.")
                     }
                     items(games, key = { it.first.packageName }) { (app, label) ->
@@ -98,14 +103,14 @@ class MainActivity : ComponentActivity() {
     }
 
     @Suppress("DEPRECATION")
-    private fun discoverGames(): List<Pair<ApplicationInfo, String>> {
+    private fun discoverGames(showAllApps: Boolean): List<Pair<ApplicationInfo, String>> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         return packageManager.queryIntentActivities(intent, 0)
             .mapNotNull { it.activityInfo?.applicationInfo }
             .filter { it.packageName != packageName }
             .distinctBy { it.packageName }
             .filter { app ->
-                app.category == ApplicationInfo.CATEGORY_GAME ||
+                showAllApps || app.category == ApplicationInfo.CATEGORY_GAME ||
                     (app.flags and ApplicationInfo.FLAG_IS_GAME) != 0
             }
             .map { it to packageManager.getApplicationLabel(it).toString() }
