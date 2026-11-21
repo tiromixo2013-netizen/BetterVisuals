@@ -21,9 +21,12 @@ using GlDrawElements = void (*)(GLenum, GLsizei, GLenum, const void*);
 using GlFramebufferTexture2D = void (*)(GLenum, GLenum, GLenum, GLuint, GLint);
 using GlTexImage2D = void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*);
 using GlTexStorage2D = void (*)(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
+using GlDeleteTextures = void (*)(GLsizei, const GLuint*);
+using GlDeleteFramebuffers = void (*)(GLsizei, const GLuint*);
 
 namespace {
 struct TextureInfo {
+    GLuint texture = 0;
     GLsizei width = 0;
     GLsizei height = 0;
     GLenum internalFormat = 0;
@@ -71,6 +74,8 @@ GlDrawElements g_nextDrawElements = nullptr;
 GlFramebufferTexture2D g_nextFramebufferTexture2D = nullptr;
 GlTexImage2D g_nextTexImage2D = nullptr;
 GlTexStorage2D g_nextTexStorage2D = nullptr;
+GlDeleteTextures g_nextDeleteTextures = nullptr;
+GlDeleteFramebuffers g_nextDeleteFramebuffers = nullptr;
 
 EGLContext CurrentContext() {
     return eglGetCurrentContext();
@@ -111,7 +116,7 @@ void LayerTexImage2D(GLenum target, GLint level, GLint internalFormat,
     auto& state = StateFor(context);
     if (state.boundTexture2D != 0) {
         state.textures[state.boundTexture2D] = {
-            width, height, static_cast<GLenum>(internalFormat)
+            state.boundTexture2D, width, height, static_cast<GLenum>(internalFormat)
         };
     }
 }
@@ -127,7 +132,47 @@ void LayerTexStorage2D(GLenum target, GLsizei levels, GLenum internalFormat,
     std::lock_guard<std::mutex> lock(g_contextMutex);
     auto& state = StateFor(context);
     if (state.boundTexture2D != 0) {
-        state.textures[state.boundTexture2D] = {width, height, internalFormat};
+        state.textures[state.boundTexture2D] = {state.boundTexture2D, width, height, internalFormat};
+    }
+}
+
+
+void LayerDeleteTextures(GLsizei count, const GLuint* textures) {
+    if (g_nextDeleteTextures) g_nextDeleteTextures(count, textures);
+    if (!textures || count <= 0) return;
+    std::lock_guard<std::mutex> lock(g_contextMutex);
+    for (auto& entry : g_contexts) {
+        auto& state = entry.second;
+        for (GLsizei i = 0; i < count; ++i) {
+            const GLuint texture = textures[i];
+            state.textures.erase(texture);
+            for (auto framebuffer = state.framebufferAttachments.begin();
+                 framebuffer != state.framebufferAttachments.end();) {
+                for (auto attachment = framebuffer->second.begin();
+                     attachment != framebuffer->second.end();) {
+                    if (attachment->second.texture == texture) {
+                        attachment = framebuffer->second.erase(attachment);
+                    } else {
+                        ++attachment;
+                    }
+                }
+                if (framebuffer->second.empty()) framebuffer = state.framebufferAttachments.erase(framebuffer);
+                else ++framebuffer;
+            }
+        }
+    }
+}
+
+void LayerDeleteFramebuffers(GLsizei count, const GLuint* framebuffers) {
+    if (g_nextDeleteFramebuffers) g_nextDeleteFramebuffers(count, framebuffers);
+    if (!framebuffers || count <= 0) return;
+    const EGLContext context = CurrentContext();
+    if (context == EGL_NO_CONTEXT) return;
+    std::lock_guard<std::mutex> lock(g_contextMutex);
+    auto& state = StateFor(context);
+    for (GLsizei i = 0; i < count; ++i) {
+        state.framebufferAttachments.erase(framebuffers[i]);
+        if (state.boundFramebuffer == framebuffers[i]) state.boundFramebuffer = 0;
     }
 }
 
@@ -293,6 +338,12 @@ void* AndroidGLESLayer_GetProcAddress(
     } else if (std::strcmp(funcName, "glTexStorage2D") == 0) {
         if (next) g_nextTexStorage2D = reinterpret_cast<GlTexStorage2D>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerTexStorage2D));
+    } else if (std::strcmp(funcName, "glDeleteTextures") == 0) {
+        if (next) g_nextDeleteTextures = reinterpret_cast<GlDeleteTextures>(next);
+        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerDeleteTextures));
+    } else if (std::strcmp(funcName, "glDeleteFramebuffers") == 0) {
+        if (next) g_nextDeleteFramebuffers = reinterpret_cast<GlDeleteFramebuffers>(next);
+        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerDeleteFramebuffers));
     } else if (std::strcmp(funcName, "glViewport") == 0) {
         if (next) g_nextViewport = reinterpret_cast<GlViewport>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerViewport));
