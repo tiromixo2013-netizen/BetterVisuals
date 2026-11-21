@@ -13,6 +13,7 @@
 using GetNextProc = void* (*)(void*, const char*);
 using EglSwapBuffers = EGLBoolean (*)(EGLDisplay, EGLSurface);
 using EglQuerySurface = EGLBoolean (*)(EGLDisplay, EGLSurface, EGLint, EGLint*);
+using EglDestroyContext = EGLBoolean (*)(EGLDisplay, EGLContext);
 using GlBindFramebuffer = void (*)(GLenum, GLuint);
 using GlBindTexture = void (*)(GLenum, GLuint);
 using GlViewport = void (*)(GLint, GLint, GLsizei, GLsizei);
@@ -66,6 +67,7 @@ void* g_layerId = nullptr;
 GetNextProc g_getNext = nullptr;
 EglSwapBuffers g_nextSwapBuffers = nullptr;
 EglQuerySurface g_nextQuerySurface = nullptr;
+EglDestroyContext g_nextDestroyContext = nullptr;
 GlBindFramebuffer g_nextBindFramebuffer = nullptr;
 GlBindTexture g_nextBindTexture = nullptr;
 GlViewport g_nextViewport = nullptr;
@@ -83,6 +85,17 @@ EGLContext CurrentContext() {
 
 ContextState& StateFor(EGLContext context) {
     return g_contexts[context];
+}
+
+
+EGLBoolean LayerDestroyContext(EGLDisplay display, EGLContext context) {
+    if (!g_nextDestroyContext) return EGL_FALSE;
+    const EGLBoolean result = g_nextDestroyContext(display, context);
+    if (result == EGL_TRUE) {
+        std::lock_guard<std::mutex> lock(g_contextMutex);
+        g_contexts.erase(context);
+    }
+    return result;
 }
 
 void LayerBindFramebuffer(GLenum target, GLuint framebuffer) {
@@ -328,6 +341,9 @@ void* AndroidGLESLayer_GetProcAddress(
     }
     if (std::strcmp(funcName, "eglQuerySurface") == 0) {
         if (next) g_nextQuerySurface = reinterpret_cast<EglQuerySurface>(next);
+    } else if (std::strcmp(funcName, "eglDestroyContext") == 0) {
+        if (next) g_nextDestroyContext = reinterpret_cast<EglDestroyContext>(next);
+        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerDestroyContext));
     } else if (std::strcmp(funcName, "glBindFramebuffer") == 0) {
         if (next) g_nextBindFramebuffer = reinterpret_cast<GlBindFramebuffer>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerBindFramebuffer));
