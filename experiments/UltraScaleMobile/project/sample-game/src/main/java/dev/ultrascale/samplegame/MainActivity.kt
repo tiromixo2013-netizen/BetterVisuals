@@ -306,7 +306,30 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             shaderDiagnostics += "$label failed: ${it.message ?: it.javaClass.simpleName}"
         }.getOrDefault(0)
 
+    // GLSurfaceView may recreate its EGL context after pause/resume or surface loss.
+    // Every GL object name from the previous context is invalid in the new one.
+    private fun resetContextResources() {
+        sceneProgram = 0
+        upscaleProgram = 0
+        sgsr1Program = 0
+        fsrLiteProgram = 0
+        mwsrProgram = 0
+        casProgram = 0
+        framebuffer = 0
+        sceneTexture = 0
+        postFramebuffer = 0
+        postTexture = 0
+        postWidth = 0
+        postHeight = 0
+        sceneWidth = 0
+        sceneHeight = 0
+        sceneTargetStatus = "recreating after EGL context change"
+        sgsr1Capability = "not checked"
+        mwsrParamsDirty = true
+    }
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        resetContextResources()
         shaderDiagnostics.clear()
         val vertex = """
             #version 300 es
@@ -383,6 +406,20 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         fsrLiteProgram = loadShaderProgram("FSR Lite", vertex, "shaders/fsr_lite_6tap.frag")
         mwsrProgram = loadShaderProgram("MWSR", vertex, "shaders/mwsr_up.frag")
         casProgram = loadShaderProgram("CAS", vertex, "shaders/amd_cas_sharpen.frag")
+        if (upscaleMethod == 2 && sgsr1Program == 0) {
+            upscaleMethod = 0
+            statusMessage = "SGSR1 unavailable after graphics-context recreation; using Bilinear."
+        } else if (upscaleMethod == 3 && fsrLiteProgram == 0) {
+            upscaleMethod = 0
+            statusMessage = "FSR Lite unavailable after graphics-context recreation; using Bilinear."
+        } else if (upscaleMethod == 4 && mwsrProgram == 0) {
+            upscaleMethod = 0
+            statusMessage = "MWSR unavailable after graphics-context recreation; using Bilinear."
+        }
+        if (casEnabled && casProgram == 0) {
+            casEnabled = false
+            statusMessage = "CAS unavailable after graphics-context recreation; sharpening disabled."
+        }
         mwsrParamsDirty = true
         triangleBuffer = floatBuffer(floatArrayOf(
             -0.72f, -0.62f, 0f, 0f,
@@ -574,7 +611,9 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         val inH = sceneHeight.coerceAtLeast(1)
         val outW = outputWidth.coerceAtLeast(1)
         val outH = outputHeight.coerceAtLeast(1)
-        val scale = minOf(outW.toFloat() / inW, outH.toFloat() / inH).coerceIn(1.07f, 4f)
+        // MWSR's reconstruction kernel also supports a 1:1 pass; do not
+        // invent a 7% upscale when the selected render scale is already 100%.
+        val scale = minOf(outW.toFloat() / inW, outH.toFloat() / inH).coerceIn(1f, 4f)
         val x = kotlin.math.ln(scale.toDouble()).toFloat()
         fun curve(c0: Float, c1: Float, c2: Float) = c0 + x * (c1 + x * c2)
         val kc = curve(0.63535834f, 0.021845682f, 0.12781268f)
