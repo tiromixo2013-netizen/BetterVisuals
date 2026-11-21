@@ -42,7 +42,7 @@ def main() -> None:
     assert "g_fsrPresetScale.load" in source
     assert "g_sgsrPresetScale.load" in source
     assert "config.upscaling == UpscaleMethod::Sgsr" in source
-    assert "smartIntegerScaling && presetScale > 0.f" in source
+    assert "(smartIntegerScaling || aqr4Upscaling) && presetScale > 0.f" in source
     assert "presetScale * configuredScale : configuredScale" in source
     assert "requestedScale, 0.25f, usesSpatialUpscaler ? 1.f : 1.2f" in source
     assert "auto const aaScale = (presetScale > 0.f || integerScaling) ? 1.f : ssaaFactor(config.aa)" in source
