@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "dev.ultrascale.mobile"
     compileSdk = 35
+    ndkVersion = "27.2.12479018"
     defaultConfig {
         applicationId = "dev.ultrascale.mobile"
         minSdk = 26
