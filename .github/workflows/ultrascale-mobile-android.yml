@@ -58,6 +58,21 @@ jobs:
               echo "Verified $expected"
             done
           done
+      - name: Verify sample game test APK and shaders
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="experiments/UltraScaleMobile/project/sample-game/build/outputs/apk/debug/sample-game-debug.apk"
+          test -f "$apk"
+          entries="$(unzip -Z1 "$apk")"
+          for shader in sgsr1_mobile.frag fsr_lite_6tap.frag mwsr_up.frag amd_cas_sharpen.frag; do
+            expected="assets/shaders/$shader"
+            if ! grep -Fxq "$expected" <<< "$entries"; then
+              echo "::error::Missing sample-game shader asset: $expected"
+              exit 1
+            fi
+            echo "Verified $expected"
+          done
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
