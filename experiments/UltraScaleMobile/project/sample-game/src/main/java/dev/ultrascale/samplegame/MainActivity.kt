@@ -293,6 +293,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             val source = assets.open("shaders/amd_cas_sharpen.frag").bufferedReader().use { it.readText() }
             linkProgram(vertex, source)
         }.getOrDefault(0)
+        mwsrParamsDirty = true
         triangleBuffer = floatBuffer(floatArrayOf(
             -0.72f, -0.62f, 0f, 0f,
              0.72f, -0.62f, 1f, 0f,
