@@ -239,7 +239,7 @@ private fun UpscalerLibraryCard() {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(technique.title, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                        StatusPill("BUNDLED")
+                        StatusPill(if (technique.role == TechniqueRole.TEMPORAL_REFERENCE) "REFERENCE" else "BUNDLED")
                     }
                     Text("${technique.role} · ${technique.minimumGles} · ${technique.license}", color = Muted, style = MaterialTheme.typography.labelSmall)
                     Text(technique.note, color = Muted, style = MaterialTheme.typography.bodySmall)
