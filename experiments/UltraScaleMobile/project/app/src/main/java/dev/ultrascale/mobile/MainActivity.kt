@@ -26,7 +26,15 @@ class MainActivity : ComponentActivity() {
                         Text("UltraScale Mobile — API Lab", style = MaterialTheme.typography.headlineSmall)
                         Text("Android 15+ • Vulkan / OpenGL ES • no ANGLE dependency")
                         Text("Shizuku: ${ShizukuBridge.status()}")
-                        Button(onClick = { ShizukuBridge.requestPermission(); refresh++ }) { Text("Request Shizuku permission") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { ShizukuBridge.requestPermission(); refresh++ }) { Text("Request permission") }
+                            Button(enabled = ShizukuBridge.granted(), onClick = {
+                                runCatching { ShizukuBridge.bindUserService() }
+                            }) { Text("Connect shell service") }
+                        }
+                        OutlinedButton(enabled = ShizukuBridge.serviceConnected(), onClick = {
+                            ShizukuBridge.stopUserService(); refresh++
+                        }) { Text("Stop shell service") }
                         val deviceApis = remember { NativeGraphicsProbe.report() }
                         Text("Device graphics APIs", style = MaterialTheme.typography.titleMedium)
                         Text(deviceApis.first)
