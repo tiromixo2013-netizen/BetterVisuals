@@ -6,6 +6,7 @@ The Android app packages the following shader sources under
 
 | Technique | Role | Shader profile | Source/license notes |
 |---|---|---|---|
+| Qualcomm SGSR2 2-pass fragment | Temporal upscaling reference | Vulkan GLSL ES 3.20 | Official Qualcomm shader set, BSD-3-Clause; convert, upscale and vertex sources bundled |
 | AMD FidelityFX FSR1 EASU | Spatial reconstruction | GLSL ES 1.00-style fragment source (GLES 2.0+) | AMD official-derived EASU shader source, MIT; full notice retained in asset |
 | FSR Lite 6-tap | Spatial reconstruction | GLSL ES 3.00 | Project-authored EASU-inspired approximation; not official AMD FidelityFX FSR |
 | MWSR | Spatial reconstruction | GLSL ES 3.00 | MoonlightWeb Super Resolution, MIT; original copyright and license notice retained in source |
@@ -28,12 +29,12 @@ game. A real render integration still needs:
 CAS is a sharpening pass and does not upscale. FSR Lite is a custom lightweight
 reconstruction shader, not AMD's official FSR implementation. MWSR and SGSR1
 need their source-specific uniforms and viewport conventions mapped before use.
-No SGSR2 implementation is included in this bundle because no SGSR2 shader source
-was present in the inspected project tree.
+SGSR2 source is included as a reference set, not a working runtime option: it requires depth and motion-vector inputs, camera reprojection/jitter parameters, per-frame history ping-pong, and a Vulkan descriptor/pipeline setup. The current sample renderer does not provide those temporal inputs.
 
 ## Android support notes
 
 - GLES 3.00 sources require an ES 3.0-capable context.
 - SGSR1 Mobile declares GLSL ES 3.10 and therefore requires ES 3.1 shader support.
+- SGSR2 is Vulkan GLSL ES 3.20 with descriptor-set bindings; it is not directly compilable as an OpenGL ES fragment shader and is bundled for future Vulkan pipeline integration.
 - The graphics layer remains pass-through/telemetry code. It does not yet replace
   game render targets or modify the game's own settings interface.
