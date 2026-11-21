@@ -31,6 +31,10 @@ reconstruction shader, not AMD's official FSR implementation. MWSR and SGSR1
 need their source-specific uniforms and viewport conventions mapped before use.
 SGSR2 source is included as a reference set, not a working runtime option: it requires depth and motion-vector inputs, camera reprojection/jitter parameters, per-frame history ping-pong, and a Vulkan descriptor/pipeline setup. The current sample renderer does not provide those temporal inputs.
 
+## Render-target discovery status
+
+The GLES layer records the framebuffer bound at each observed draw call and snapshots the most recently drawn framebuffer plus its color-attachment texture metadata at the next sampled swap. This avoids the common false assumption that the framebuffer still bound at `eglSwapBuffers` is the scene target: many engines bind framebuffer 0 again before presenting. The captured target is still a candidate only. Multi-pass engines may draw UI, post-processing, or intermediate passes last; shared EGL contexts, non-2D textures, renderbuffer attachments, and engine-specific render graphs require additional handling before any target can be safely replaced.
+
 ## Android support notes
 
 - GLES 3.00 sources require an ES 3.0-capable context.
