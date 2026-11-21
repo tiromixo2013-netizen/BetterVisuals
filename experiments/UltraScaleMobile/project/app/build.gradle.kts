@@ -26,7 +26,7 @@ android {
     externalNativeBuild {
         cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" }
     }
-    buildFeatures { compose = true; aidl = true; buildConfig = true }
+    buildFeatures { compose = true; aidl = true; buildConfig = true; prefab = true }
 }
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
@@ -37,4 +37,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+    // Native hook backend for code already loaded in an authorized target process.
+    implementation("com.bytedance.android:shadowhook:2.0.1")
 }
