@@ -87,6 +87,16 @@ ContextState& StateFor(EGLContext context) {
     return g_contexts[context];
 }
 
+void RefreshFramebufferTextureInfo(ContextState& state, GLuint texture) {
+    const auto found = state.textures.find(texture);
+    if (found == state.textures.end()) return;
+    for (auto& framebuffer : state.framebufferAttachments) {
+        for (auto& attachment : framebuffer.second) {
+            if (attachment.second.texture == texture) attachment.second = found->second;
+        }
+    }
+}
+
 
 EGLBoolean LayerDestroyContext(EGLDisplay display, EGLContext context) {
     if (!g_nextDestroyContext) return EGL_FALSE;
@@ -131,6 +141,7 @@ void LayerTexImage2D(GLenum target, GLint level, GLint internalFormat,
         state.textures[state.boundTexture2D] = {
             state.boundTexture2D, width, height, static_cast<GLenum>(internalFormat)
         };
+        RefreshFramebufferTextureInfo(state, state.boundTexture2D);
     }
 }
 
@@ -146,6 +157,7 @@ void LayerTexStorage2D(GLenum target, GLsizei levels, GLenum internalFormat,
     auto& state = StateFor(context);
     if (state.boundTexture2D != 0) {
         state.textures[state.boundTexture2D] = {state.boundTexture2D, width, height, internalFormat};
+        RefreshFramebufferTextureInfo(state, state.boundTexture2D);
     }
 }
 
