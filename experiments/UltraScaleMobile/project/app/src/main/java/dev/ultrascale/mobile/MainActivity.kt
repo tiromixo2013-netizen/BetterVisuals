@@ -24,6 +24,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 
 private val Ink = Color(0xFF10111A)
@@ -164,8 +166,29 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     items(games, key = { it.first.packageName }) { (app, label) ->
-                        val report = GraphicsApiScanner.inspect(this@MainActivity, app)
-                        GameCard(app, label, report)
+                        val report by produceState<ApiReport?>(initialValue = null, app.packageName) {
+                            value = withContext(Dispatchers.IO) {
+                                GraphicsApiScanner.inspect(this@MainActivity, app)
+                            }
+                        }
+                        if (report != null) {
+                            GameCard(app, label, report!!)
+                        } else {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Panel),
+                                shape = RoundedCornerShape(18.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    Modifier.padding(18.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    Text("Analyzing APK and engine signatures…", color = Muted)
+                                }
+                            }
+                        }
                     }
                     item {
                         Text(
