@@ -204,7 +204,7 @@ private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport) {
     val vulkanReady = RenderApi.VULKAN in report.candidateApis &&
         report.vulkanLayer in setOf(LayerReadiness.ELIGIBLE_OPT_IN, LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
     val glesReady = RenderApi.OPENGL_ES in report.candidateApis &&
-        report.glesLayer in setOf(LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
+        report.glesLayer in setOf(LayerReadiness.ELIGIBLE_OPT_IN, LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -248,7 +248,7 @@ private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport) {
                     Text("LAYER ELIGIBILITY", color = Violet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     EligibilityLine("Vulkan", vulkanReady, eligibilityText(report.vulkanLayer, true))
                     EligibilityLine("OpenGL ES", glesReady, eligibilityText(report.glesLayer, false))
-                    Text("Target Vulkan opt-in: ${if (report.manifestVulkanOptIn) "YES" else "NO"}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    Text("Target graphics-layer opt-in (Vulkan/GLES): ${if (report.manifestVulkanOptIn) "YES" else "NO"}", color = Muted, style = MaterialTheme.typography.bodySmall)
                     Text(report.evidence, color = Muted, style = MaterialTheme.typography.bodySmall)
                     Text("A candidate API is not runtime confirmation. Layer switches configure Android debug-layer settings only; they do not inject an upscaler or modify the game's own settings menu.", color = Muted, style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
