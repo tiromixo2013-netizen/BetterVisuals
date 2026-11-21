@@ -113,6 +113,31 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(VkPhysicalDevice physical, cons
     }
     return result;
 }
+VKAPI_ATTR VkResult VKAPI_CALL LayerEnumeratePhysicalDevices(VkInstance instance, uint32_t* count, VkPhysicalDevice* devices) {
+    if (!count) return VK_ERROR_INITIALIZATION_FAILED;
+
+    PFN_vkGetInstanceProcAddr next = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        auto found = gInstances.find(instance);
+        if (found != gInstances.end()) next = found->second;
+    }
+    if (!next) return VK_ERROR_INITIALIZATION_FAILED;
+
+    auto enumerate = reinterpret_cast<PFN_vkEnumeratePhysicalDevices>(
+        next(instance, "vkEnumeratePhysicalDevices"));
+    if (!enumerate) return VK_ERROR_INITIALIZATION_FAILED;
+
+    const VkResult result = enumerate(instance, count, devices);
+    if ((result == VK_SUCCESS || result == VK_INCOMPLETE) && devices) {
+        std::lock_guard<std::mutex> lock(gMutex);
+        for (uint32_t i = 0; i < *count; ++i) {
+            if (devices[i] != VK_NULL_HANDLE) gPhysicalDevices[devices[i]] = instance;
+        }
+    }
+    return result;
+}
+
 VKAPI_ATTR void VKAPI_CALL LayerDestroyInstance(VkInstance instance, const VkAllocationCallbacks* allocator) {
     PFN_vkGetInstanceProcAddr next = nullptr;
     { std::lock_guard<std::mutex> lock(gMutex); auto it = gInstances.find(instance); if (it != gInstances.end()) { next = it->second; gInstances.erase(it); }
