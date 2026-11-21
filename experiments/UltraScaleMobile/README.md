@@ -17,7 +17,8 @@ A third-party app cannot silently load code into arbitrary production games. And
 
 The app currently provides **pass-through diagnostics**, not upscaling yet:
 - GLES layer observes `eglSwapBuffers` and forwards it.
-- Vulkan layer reports itself to the loader and forwards instance/device creation and destruction.
+- Vulkan layer reports itself to the loader, tracks physical devices and forwards instance/device creation, destruction and queue-present calls.
+- Vulkan and GLES layer settings can be enabled together for games that switch APIs.
 - Neither layer modifies textures, render targets, shaders, resolution or frame timing. Do not label an upscaler active until an actual render pass is integrated and measured.
 
 ## Test with the included sample game
@@ -47,9 +48,9 @@ Research references and community implementation notes are in [RESEARCH_NOTES.md
 
 ## Next milestones
 1. Compile and validate the loader prototypes on a real Android 15 device.
-2. Add a sample game module that explicitly opts in and creates both render APIs.
-3. Implement safe frame-boundary render-target acquisition and state/synchronization handling.
-4. Add actual spatial upscaling and CAS to the integrated sample; benchmark GPU time, latency, thermal behavior.
+2. Validate both layer paths against the included opt-in sample on Android 15/16 devices.
+3. Implement safe frame-boundary render-target acquisition and API-specific state/synchronization handling.
+4. Add actual spatial upscaling and CAS to the integrated sample; benchmark GPU time, latency, and thermal behavior.
 5. Only then port the proven path into supported game integrations.
 
 No exploit chains, hidden permission bypasses, arbitrary process-memory modification or sandbox escapes are part of this project.
