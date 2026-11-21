@@ -20,12 +20,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 var refresh by remember { mutableIntStateOf(0) }
+                var shizukuRefresh by remember { mutableIntStateOf(0) }
+                DisposableEffect(Unit) {
+                    ShizukuBridge.statusListener = { runOnUiThread { shizukuRefresh++ } }
+                    onDispose { ShizukuBridge.statusListener = null }
+                }
+                val shizukuStatus = remember(shizukuRefresh) { ShizukuBridge.status() }
                 val games = remember(refresh) { discoverGames() }
                 LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item {
                         Text("UltraScale Mobile — API Lab", style = MaterialTheme.typography.headlineSmall)
                         Text("Android 15+ • Vulkan / OpenGL ES • no ANGLE dependency")
-                        Text("Shizuku: ${ShizukuBridge.status()}")
+                        Text("Shizuku: $shizukuStatus")
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = { ShizukuBridge.requestPermission(); refresh++ }) { Text("Request permission") }
                             Button(enabled = ShizukuBridge.granted(), onClick = {
