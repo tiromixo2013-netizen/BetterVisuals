@@ -1,7 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
-    <application android:allowBackup="false" android:label="UltraScale Mobile" android:supportsRtl="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">\n        <meta-data android:name="com.android.graphics.injectLayers.enable" android:value="true" />
+    <application android:allowBackup="false" android:label="UltraScale Mobile" android:supportsRtl="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <meta-data android:name="com.android.graphics.injectLayers.enable" android:value="true" />
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
