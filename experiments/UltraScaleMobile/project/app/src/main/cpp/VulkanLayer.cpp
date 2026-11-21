@@ -20,6 +20,7 @@ struct SwapchainInfo {
     uint32_t imageCount = 0;
 };
 std::unordered_map<VkSwapchainKHR, SwapchainInfo> gSwapchains;
+std::unordered_map<VkSwapchainKHR, VkDevice> gSwapchainDevices;
 std::atomic<uint64_t> gPresentedFrames{0};
 
 VkLayerInstanceCreateInfo* FindInstanceLink(const VkInstanceCreateInfo* info) {
@@ -202,6 +203,9 @@ VKAPI_ATTR void VKAPI_CALL LayerDestroyDevice(VkDevice device, const VkAllocatio
       auto it = gDevices.find(device); if (it != gDevices.end()) { next = it->second; gDevices.erase(it); }
       for (auto q = gQueueDevices.begin(); q != gQueueDevices.end();) {
           if (q->second == device) { gQueues.erase(q->first); q = gQueueDevices.erase(q); } else ++q;
+      }
+      for (auto s = gSwapchainDevices.begin(); s != gSwapchainDevices.end();) {
+          if (s->second == device) { gSwapchains.erase(s->first); s = gSwapchainDevices.erase(s); } else ++s;
       } }
     auto destroy = next ? reinterpret_cast<PFN_vkDestroyDevice>(next(device, "vkDestroyDevice")) : nullptr;
     if (destroy) destroy(device, allocator);
@@ -239,6 +243,7 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateSwapchain(
     if (result == VK_SUCCESS && info && swapchain && *swapchain) {
         std::lock_guard<std::mutex> lock(gMutex);
         gSwapchains[*swapchain] = {info->imageFormat, info->imageExtent, 0};
+        gSwapchainDevices[*swapchain] = device;
         __android_log_print(ANDROID_LOG_INFO, "UltraScaleVK",
             "Swapchain created extent=%ux%u format=%d images=%u",
             info->imageExtent.width, info->imageExtent.height,
@@ -285,7 +290,7 @@ VKAPI_ATTR void VKAPI_CALL LayerDestroySwapchain(
     PFN_vkGetDeviceProcAddr gdpa = nullptr;
     { std::lock_guard<std::mutex> lock(gMutex); auto it = gDevices.find(device); if (it != gDevices.end()) gdpa = it->second; }
     auto destroy = gdpa ? reinterpret_cast<PFN_vkDestroySwapchainKHR>(gdpa(device, "vkDestroySwapchainKHR")) : nullptr;
-    { std::lock_guard<std::mutex> lock(gMutex); gSwapchains.erase(swapchain); }
+    { std::lock_guard<std::mutex> lock(gMutex); gSwapchains.erase(swapchain); gSwapchainDevices.erase(swapchain); }
     if (destroy) destroy(device, swapchain, allocator);
 }
 
