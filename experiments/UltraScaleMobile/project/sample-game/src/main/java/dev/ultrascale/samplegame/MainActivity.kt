@@ -325,7 +325,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, framebuffer)
             GLES30.glViewport(0, 0, sceneWidth, sceneHeight)
             drawScene()
-            val useCas = casEnabled && casProgram != 0 && ensurePostTarget()
+            val useCas = prepareCasTarget()
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, if (useCas) postFramebuffer else 0)
             GLES30.glViewport(0, 0, outputWidth, outputHeight)
             val selectedProgram = when {
@@ -364,25 +364,13 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
             GLES30.glDisableVertexAttribArray(0)
             GLES30.glDisableVertexAttribArray(1)
-            if (useCas) {
-                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
-                GLES30.glViewport(0, 0, outputWidth, outputHeight)
-                GLES30.glUseProgram(casProgram)
-                bindQuad(casProgram, quadBuffer)
-                GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
-                GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, postTexture)
-                GLES30.glUniform1i(GLES30.glGetUniformLocation(casProgram, "uScene"), 0)
-                GLES30.glUniform2f(GLES30.glGetUniformLocation(casProgram, "uInputSize"),
-                    outputWidth.toFloat(), outputHeight.toFloat())
-                GLES30.glUniform1f(GLES30.glGetUniformLocation(casProgram, "uSharpness"), casSharpness)
-                GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
-                GLES30.glDisableVertexAttribArray(0)
-                GLES30.glDisableVertexAttribArray(1)
-            }
+            if (useCas) drawCasPass()
         } else {
-            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            val useCas = prepareCasTarget()
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, if (useCas) postFramebuffer else 0)
             GLES30.glViewport(0, 0, outputWidth, outputHeight)
             drawScene()
+            if (useCas) drawCasPass()
         }
     }
 
@@ -425,6 +413,30 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         sceneHeight = wantedHeight
         mwsrParamsDirty = true
         return true
+    }
+
+    private fun prepareCasTarget(): Boolean {
+        if (!casEnabled || casProgram == 0) return false
+        if (ensurePostTarget()) return true
+        casEnabled = false
+        statusMessage = "AMD CAS disabled: output framebuffer is unavailable on this device."
+        return false
+    }
+
+    private fun drawCasPass() {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        GLES30.glViewport(0, 0, outputWidth, outputHeight)
+        GLES30.glUseProgram(casProgram)
+        bindQuad(casProgram, quadBuffer)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, postTexture)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(casProgram, "uScene"), 0)
+        GLES30.glUniform2f(GLES30.glGetUniformLocation(casProgram, "uInputSize"),
+            outputWidth.toFloat(), outputHeight.toFloat())
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(casProgram, "uSharpness"), casSharpness)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+        GLES30.glDisableVertexAttribArray(0)
+        GLES30.glDisableVertexAttribArray(1)
     }
 
     private fun ensurePostTarget(): Boolean {
