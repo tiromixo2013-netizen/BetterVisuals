@@ -268,12 +268,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         if (version[0] > 3 || (version[0] == 3 && version[1] >= 1)) {
             return "supported (GLES ${version[0]}.${version[1]} core)"
         }
-        val extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS).orEmpty().split(Regex("\\s+"))
-        return if ("GL_EXT_texture_gather" in extensions) {
-            "supported (GL_EXT_texture_gather)"
-        } else {
-            "unsupported (requires GLES 3.1+ or GL_EXT_texture_gather; found GLES ${version[0]}.${version[1]})"
-        }
+        return "unsupported (SGSR1 shader requires GLSL ES 3.10 / GLES 3.1 core; found GLES ${version[0]}.${version[1]})"
     }
 
     private fun loadShaderProgram(label: String, vertexSource: String, assetPath: String): Int =
@@ -342,7 +337,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         sceneProgram = linkProgram(vertex, sceneFragment)
         upscaleProgram = linkProgram(vertex, upscaleFragment)
         val sgsrVertex = """
-            #version 300 es
+            #version 310 es
             layout(location=0) in vec2 aPosition;
             layout(location=1) in vec2 aUv;
             layout(location=0) out vec4 in_TEXCOORD0;
