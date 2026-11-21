@@ -18,6 +18,9 @@ assert "textureLod(uTex, uv, 0.0).a" in renderer
 assert "glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA" in renderer
 assert "CHROMA444 = true" in renderer
 assert "mwsrLaw(" in renderer
+assert "m_cachedInputWidth != inputWidth" in renderer
+assert "m_cachedOutputHeight != outputHeight" in renderer
+assert "m_cachedKernel = {p.kc, p.ft, p.kg, p.kr, p.kwc, p.kl}" in renderer
 assert "class MwsrRenderer final" in header
 assert "kAqr4Shader" not in shader_header
 assert "MWSR" in settings["upscale-method"]["one-of"]
