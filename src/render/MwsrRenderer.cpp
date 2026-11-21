@@ -20,9 +20,9 @@ namespace {
 // https://github.com/linckosz/moonlight-web/tree/main/mwsr
 //
 // This GLES 3.00 port keeps the upstream single-frame, edge-adaptive cubic
-// reconstruction. CHROMA444 is enabled because the game's capture is full-RGB,
-// not a chroma-subsampled video stream. Alpha is sampled from the original
-// premultiplied game-layer texture and the reconstructed RGB is bounded by it.
+// reconstruction. The upstream default (luma edge voting) is preserved; the
+// optional CHROMA444 path can be enabled for full-RGB game content. Alpha is
+// adapted for the game's premultiplied render target.
 
     constexpr char kVertex[] = R"glsl(#version 300 es
 precision highp float;
