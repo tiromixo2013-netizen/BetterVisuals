@@ -35,7 +35,7 @@ void AndroidGLESLayer_Initialize(void* layer_id, GetNextProc get_next_layer_proc
 }
 
 extern "C" __attribute__((visibility("default")))
-void* AndroidGLESLayer_GetProcAddress(const char* funcName, void* next) {
+void* AndroidGLESLayer_GetProcAddress(const char* funcName, __eglMustCastToProperFunctionPointerType next) {
     if (funcName && std::strcmp(funcName, "eglSwapBuffers") == 0) {
         if (next) g_nextSwapBuffers = reinterpret_cast<EglSwapBuffers>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerSwapBuffers));
