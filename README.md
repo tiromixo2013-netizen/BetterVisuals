@@ -65,6 +65,21 @@ UltraScale2D has its own input-resolution presets. Each percentage is applied to
 
 For example, Performance renders at half width and half height (25% of the original pixel count) before reconstruction. Lower presets can reduce rendering work, but fine details may be lost and actual GPU savings depend on the device and bottleneck. These are initial presets, not verified quality guarantees.
 
+
+## <c-47f0ff>MWSR Quality Presets</c>
+
+MWSR is an experimental single-frame spatial upscaler with a GLSL ES 3.00 implementation. It reconstructs from the current RGB frame only; it does not use motion vectors, depth, temporal history, or neural inference. The mod preserves the game's premultiplied alpha when compositing the reconstructed frame.
+
+- Native: 100% per dimension (no upscaling).
+- Ultra Quality: 90% per dimension.
+- Quality: 82% per dimension.
+- Balanced: 75% per dimension.
+- Performance: 67% per dimension.
+- Ultra Performance: 59% per dimension.
+- Custom: uses the general Render Scale slider.
+
+Use the same source-resolution preset for SGSR 1 and MWSR when comparing. GPU timings must be measured on the target device; published desktop and other-phone results do not predict Adreno 610 performance.
+
 ## <c-c247ff>Anti-aliasing</c>
 
 Makes the game look better while playing levels.
@@ -126,17 +141,3 @@ Other credits, citations, and licenses can be found in the mod's source code
 
 <!-- Build validation trigger: Android repair branch -->
 
-
-## <c-47f0ff>MWSR Quality Presets</c>
-
-MWSR is an experimental single-frame spatial upscaler with a GLSL ES 3.00 implementation. It reconstructs from the current RGB frame only; it does not use motion vectors, depth, temporal history, or neural inference. The mod preserves the game's premultiplied alpha when compositing the reconstructed frame.
-
-- Native: 100% per dimension (no upscaling).
-- Ultra Quality: 90% per dimension.
-- Quality: 82% per dimension.
-- Balanced: 75% per dimension.
-- Performance: 67% per dimension.
-- Ultra Performance: 59% per dimension.
-- Custom: uses the general Render Scale slider.
-
-Use the same source-resolution preset for SGSR 1 and MWSR when comparing. GPU timings must be measured on the target device; published desktop and other-phone results do not predict Adreno 610 performance.
