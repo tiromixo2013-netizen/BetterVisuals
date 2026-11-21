@@ -18,7 +18,9 @@ Research sources reviewed before designing this branch:
    - Recommends UserService for longer-lived privileged operations and marks `newProcess` as deprecated/planned for removal in API 14. This branch uses UserService IPC.
 7. [Vulkan loader layer guide](https://docs.vulkan.org/guide/latest/layers.html)
    - Explains layer chaining and the loader/layer interface.
-8. [Android NDK sample: LearnGLES](https://github.com/zoozooll/LearnGLES)
+8. [Reddit community discussion: switching Android HWUI to Vulkan](https://www.reddit.com/r/GalaxyS23Ultra/comments/1k8trp4/switch_to_vulkan_easily/)
+   - Community members share Shizuku/ADB commands that change the Android UI renderer. This changes HWUI, not a game's Vulkan/GLES process, so it is not treated as an injection solution.
+9. [Android NDK sample: LearnGLES](https://github.com/zoozooll/LearnGLES)
    - Useful reference for GLES shaders, native CMake, and Android rendering tests.
 
 ## Community findings translated into our design
