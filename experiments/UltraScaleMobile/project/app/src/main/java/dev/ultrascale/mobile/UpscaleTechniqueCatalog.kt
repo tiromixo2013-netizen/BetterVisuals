@@ -30,7 +30,7 @@ object UpscaleTechniqueCatalog {
             assetName = "sgsr2_2pass_upscale.frag",
             graphicsProfile = "Vulkan GLSL ES 3.20",
             license = "BSD-3-Clause",
-            note = "Official temporal shader set. Convert/upscale/vertex sources are bundled; requires depth, motion vectors, jitter, camera transforms and ping-pong history. Reference only, not enabled in the sample renderer."
+            note = "Official temporal shader set optimized for Adreno. Convert/upscale/vertex sources are bundled; requires depth, motion vectors, jitter, camera transforms and ping-pong history. Reference only, not enabled in the sample renderer."
         ),
         UpscaleTechnique(
             id = "amd_fsr1_easu",
