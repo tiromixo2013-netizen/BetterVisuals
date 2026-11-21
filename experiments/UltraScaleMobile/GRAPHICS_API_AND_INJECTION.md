@@ -73,3 +73,9 @@ These are integration routes for owned games or developers who explicitly opt in
 - Khronos Vulkan validation layers: validate Vulkan API usage and layer-chain correctness before measuring performance.
 
 A hook backend reporting "ready" is only an initialization result. It is not evidence that a game's draw calls were intercepted, a render target was obtained, or an upscaler was presented.
+
+
+## 11. Ready-made Android layer-loading mechanism
+- Use the platform EGL/GLES LayerLoader ABI (`AndroidGLESLayer_Initialize` and `AndroidGLESLayer_GetProcAddress`) rather than a custom cross-process injector. Android's loader provides the next-function chain; each wrapper must call the next function exactly once and preserve its return value/state contract.
+- For Vulkan, use the Khronos Vulkan loader layer interface (`vkNegotiateLoaderLayerInterfaceVersion`, `vkGetInstanceProcAddr`, `vkGetDeviceProcAddr`) and the Android layer discovery/opt-in rules. Keep the Vulkan layer as a pass-through until the full swapchain image, format, queue-family, synchronization, and present contract is implemented.
+- Platform loading is available only where the target app is debuggable, includes the required opt-in metadata, or runs in a supported userdebug/root lab configuration. A controller app cannot grant another app the required opt-in by adding metadata to its own manifest.
