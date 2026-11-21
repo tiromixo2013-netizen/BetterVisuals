@@ -377,6 +377,12 @@
                 "Performance",
                 "Ultra Performance"
             ]
+        },
+        "mwsr-chroma444": {
+            "type": "bool",
+            "name": "MWSR 4:4:4 Edge Detection",
+            "description": "Uses the steepest RGB channel instead of luma to detect coloured edges. Off matches the upstream MWSR default; enable to compare RGB edge detection in Geometry Dash.",
+            "default": false
         }
     }
 }
