@@ -9,7 +9,7 @@ data class UpscaleTechnique(
     val title: String,
     val role: TechniqueRole,
     val assetName: String,
-    val minimumGles: String,
+    val graphicsProfile: String,
     val license: String,
     val note: String
 )
@@ -28,7 +28,7 @@ object UpscaleTechniqueCatalog {
             title = "Qualcomm SGSR2 · 2-pass fragment",
             role = TechniqueRole.TEMPORAL_REFERENCE,
             assetName = "sgsr2_2pass_upscale.frag",
-            minimumGles = "Vulkan GLSL ES 3.20",
+            graphicsProfile = "Vulkan GLSL ES 3.20",
             license = "BSD-3-Clause",
             note = "Official temporal shader set. Convert/upscale/vertex sources are bundled; requires depth, motion vectors, jitter, camera transforms and ping-pong history. Reference only, not enabled in the sample renderer."
         ),
@@ -37,7 +37,7 @@ object UpscaleTechniqueCatalog {
             title = "AMD FidelityFX FSR1 · EASU",
             role = TechniqueRole.UPSCALE,
             assetName = "amd_fsr1_easu.frag",
-            minimumGles = "OpenGL ES 2.0+",
+            graphicsProfile = "OpenGL ES 2.0+",
             license = "MIT",
             note = "Full EASU spatial reconstruction source; higher sampling cost than the lightweight 6-tap fallback."
         ),
@@ -46,7 +46,7 @@ object UpscaleTechniqueCatalog {
             title = "FSR Lite · 6-tap",
             role = TechniqueRole.UPSCALE,
             assetName = "fsr_lite_6tap.frag",
-            minimumGles = "OpenGL ES 3.0",
+            graphicsProfile = "OpenGL ES 3.0",
             license = "Project custom shader",
             note = "Lightweight EASU-inspired reconstruction; not official AMD FSR."
         ),
@@ -55,7 +55,7 @@ object UpscaleTechniqueCatalog {
             title = "MWSR",
             role = TechniqueRole.RECONSTRUCTION,
             assetName = "mwsr_up.frag",
-            minimumGles = "OpenGL ES 3.0",
+            graphicsProfile = "OpenGL ES 3.0",
             license = "MIT",
             note = "MoonlightWeb Super Resolution shader; parameter mapping and integration pass required."
         ),
@@ -64,7 +64,7 @@ object UpscaleTechniqueCatalog {
             title = "SGSR1 Mobile",
             role = TechniqueRole.RECONSTRUCTION,
             assetName = "sgsr1_mobile.frag",
-            minimumGles = "OpenGL ES 3.1",
+            graphicsProfile = "OpenGL ES 3.1",
             license = "BSD-3-Clause",
             note = "Qualcomm-derived mobile shader; GLES 3.1 shader compilation and viewport mapping required."
         ),
@@ -73,7 +73,7 @@ object UpscaleTechniqueCatalog {
             title = "AMD FidelityFX CAS",
             role = TechniqueRole.SHARPEN,
             assetName = "amd_cas_sharpen.frag",
-            minimumGles = "OpenGL ES 3.0",
+            graphicsProfile = "OpenGL ES 3.0",
             license = "MIT",
             note = "Sharpen-only pass; does not increase render resolution."
         )
