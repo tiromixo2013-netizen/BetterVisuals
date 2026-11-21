@@ -109,7 +109,7 @@
         "upscale-method": {
             "type": "string",
             "name": "Upscale Method",
-            "description": "UltraScale2D is an ultra-light single-sample hardware-linear reconstruction pass. It minimizes shader work; use the Render Scale preset to reduce internal scene rendering resolution.",
+            "description": "Selects the reconstruction method used to present the internally rendered scene.",
             "default": "Bilinear",
             "one-of": [
                 "Nearest",
@@ -117,9 +117,7 @@
                 "FSR 1",
                 "FSR Lite (6-Tap)",
                 "SGSR 1",
-                "MWSR",
-                "Integer Scaling",
-                "UltraScale2D"
+                "MWSR"
             ]
         },
         "fsr-sharpness": {
@@ -341,32 +339,6 @@
             "type": "string",
             "name": "MWSR Quality Preset",
             "description": "Controls the MWSR input resolution. Native bypasses scaling; Custom uses Render Scale. Lower presets reduce scene rendering resolution before the single-frame MWSR reconstruction pass.",
-            "default": "Balanced",
-            "one-of": [
-                "Custom",
-                "Native",
-                "Ultra Quality",
-                "Quality",
-                "Balanced",
-                "Performance",
-                "Ultra Performance"
-            ]
-        },
-        "integer-scaling-quality-preset": {
-            "type": "string",
-            "name": "Integer Scaling Quality Preset",
-            "description": "Controls exact Native 1x, half-width/half-height 2x, or one-third-width/height 3x pixel-perfect capture for Integer Scaling only.",
-            "default": "Performance (2x)",
-            "one-of": [
-                "Native (1x)",
-                "Performance (2x)",
-                "Ultra Performance (3x)"
-            ]
-        },
-        "ultrascale2d-quality-preset": {
-            "type": "string",
-            "name": "UltraScale2D Quality Preset",
-            "description": "Sets the internal scene-rendering resolution before UltraScale2D reconstructs it to the full screen resolution. Ratios are per dimension; Custom uses Render Scale.",
             "default": "Balanced",
             "one-of": [
                 "Custom",
