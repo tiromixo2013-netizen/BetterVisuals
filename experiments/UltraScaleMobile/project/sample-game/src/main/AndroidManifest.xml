@@ -2,7 +2,6 @@
     <application
         android:allowBackup="false"
         android:appCategory="game"
-        android:debuggable="true"
         android:label="UltraScale Layer Test Game"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <meta-data android:name="com.android.graphics.injectLayers.enable" android:value="true" />
