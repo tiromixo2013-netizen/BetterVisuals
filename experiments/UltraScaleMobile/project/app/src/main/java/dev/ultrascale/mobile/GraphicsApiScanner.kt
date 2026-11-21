@@ -8,7 +8,7 @@ import java.util.zip.ZipFile
 
 enum class RenderApi { VULKAN, OPENGL_ES, UNKNOWN }
 enum class GameKind { TWO_D_LIKELY, THREE_D_LIKELY, HYBRID_OR_UNKNOWN }
-enum class LayerReadiness { ELIGIBLE_OPT_IN, ELIGIBLE_DEBUG, APP_OPT_IN_REQUIRED }
+enum class LayerReadiness { ELIGIBLE_OPT_IN, ELIGIBLE_DEBUG, ELIGIBLE_ROOT, APP_OPT_IN_REQUIRED }
 
 data class ApiReport(
     val engine: String,
@@ -64,17 +64,19 @@ object GraphicsApiScanner {
         val optIn = app.targetSdkVersion >= Build.VERSION_CODES.R && runCatching {
             app.metaData?.getBoolean("com.android.graphics.injectLayers.enable", false) == true
         }.getOrDefault(false)
-        val privilegedBuild = Build.TYPE == "userdebug" || Build.TYPE == "eng"
+        // A userdebug/eng build alone is not enough: non-debuggable targets need root.
+        val rootAvailable = ShizukuBridge.uid() == 0
         val readiness = when {
             optIn -> LayerReadiness.ELIGIBLE_OPT_IN
-            debuggable || privilegedBuild -> LayerReadiness.ELIGIBLE_DEBUG
+            debuggable -> LayerReadiness.ELIGIBLE_DEBUG
+            rootAvailable -> LayerReadiness.ELIGIBLE_ROOT
             else -> LayerReadiness.APP_OPT_IN_REQUIRED
         }
         return ApiReport(
             engine, kind, candidates,
             if (engine == "Unknown") "Low" else "Heuristic",
             "APK native-library signatures only; candidate APIs, not proof of the active runtime API",
-            readiness, readiness, optIn || debuggable || privilegedBuild
+            readiness, readiness, optIn || debuggable || rootAvailable
         )
     }
 }
