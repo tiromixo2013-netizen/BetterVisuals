@@ -160,6 +160,7 @@ namespace {
     bv::render::PostProcessRenderer g_fsrLiteRenderer;
     bv::render::PostProcessRenderer g_smartIntegerRenderer;
     bv::render::MwsrRenderer g_mwsrRenderer;
+    std::atomic<bool> g_mwsrChroma444 = false;
     bv::render::SgsrRenderer g_sgsrRenderer;
     bv::render::PostProcessRenderer g_casRenderer;
     bv::render::BloomRenderer g_bloomRenderer;
@@ -1024,7 +1025,8 @@ namespace {
                 }
                 else if (config.upscaling == UpscaleMethod::Mwsr) {
                     if (!g_mwsrRenderer.apply(
-                        sourceTexture, internalWidth, internalHeight, width, height
+                        sourceTexture, internalWidth, internalHeight, width, height,
+                        g_mwsrChroma444.load(std::memory_order_relaxed)
                     )) {
                         g_renderScaleRenderer.apply(sourceTexture);
                     }
@@ -1843,6 +1845,7 @@ $on_mod(Loaded) {
     bindStringSetting("integer-scaling-quality-preset", updateIntegerScalingPreset);
     bindStringSetting("ultrascale2d-quality-preset", updateUltraScale2DQualityPreset);
     bindStringSetting("mwsr-quality-preset", updateMwsrQualityPreset);
+    bindBoolSetting("mwsr-chroma444", g_mwsrChroma444);
     bindStringSetting("sgsr-operation-mode", updateSgsrOperationMode);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {
