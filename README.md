@@ -36,11 +36,11 @@ SGSR 1 and MWSR are separate spatial reconstruction methods. MWSR uses an edge-a
 
 ---
 
-## <c-47f0ff>MWSR Quality Presets</c>
+## <c-47f0ff>Shared Upscaling Quality Presets</c>
 
-MWSR is an experimental single-frame spatial upscaler with a GLSL ES 3.00 implementation. It reconstructs from the current RGB frame only; it does not use motion vectors, depth, temporal history, or neural inference. The mod preserves the game's premultiplied alpha when compositing the reconstructed frame.
+Every upscaling method uses the same input-resolution ratio. Selecting a preset changes the scene capture dimensions before the selected reconstruction method runs:
 
-- Native: 100% per dimension (no upscaling).
+- Native: 100% per dimension.
 - Ultra Quality: 90% per dimension.
 - Quality: 82% per dimension.
 - Balanced: 75% per dimension.
@@ -48,7 +48,7 @@ MWSR is an experimental single-frame spatial upscaler with a GLSL ES 3.00 implem
 - Ultra Performance: 59% per dimension.
 - Custom: uses the general Render Scale slider.
 
-Use the same source-resolution preset for SGSR 1 and MWSR when comparing. GPU timings must be measured on the target device; published desktop and other-phone results do not predict Adreno 610 performance.
+The named presets are exact ratios and are not multiplied by Render Scale. This keeps comparisons fair: the same preset gives FSR 1, FSR Lite, SGSR 1 and MWSR the same source dimensions. Nearest and Bilinear use the same reduced capture size without an advanced reconstruction shader.
 
 ## <c-c247ff>Anti-aliasing</c>
 
