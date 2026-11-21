@@ -530,6 +530,7 @@ namespace {
                 g_fsrRenderer.reset();
                 g_fsrLiteRenderer.reset();
                 g_smartIntegerRenderer.reset();
+                g_aqr4Renderer.reset();
                 g_renderScaleRenderer.reset();
                 g_ssaaRenderer.reset();
                 auto const& ssaaShader = config.aa == AntiAliasingMethod::Ssaa300 ?
@@ -541,6 +542,7 @@ namespace {
                 g_renderScaleRenderer.reset();
                 g_fsrLiteRenderer.reset();
                 g_smartIntegerRenderer.reset();
+                g_aqr4Renderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_fsrRenderer.prepare(bv::shaders::kFsrShader, key.width, key.height);
             }
@@ -548,6 +550,7 @@ namespace {
                 g_renderScaleRenderer.reset();
                 g_fsrRenderer.reset();
                 g_smartIntegerRenderer.reset();
+                g_aqr4Renderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_fsrLiteRenderer.prepare(bv::shaders::kFsrLiteShader, key.width, key.height);
             }
@@ -572,6 +575,7 @@ namespace {
             else {
                 g_fsrRenderer.reset();
                 g_fsrLiteRenderer.reset();
+                g_aqr4Renderer.reset();
                 g_ssaaRenderer.reset();
                 prepared = g_renderScaleRenderer.prepare(
                     bv::shaders::kRenderScaleShader, key.width, key.height
