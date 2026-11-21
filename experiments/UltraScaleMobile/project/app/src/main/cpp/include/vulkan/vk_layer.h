@@ -13,13 +13,6 @@
 
 #include <vulkan/vulkan_core.h>
 
-// Loader-private structure type values from the Vulkan loader interface.
-// These are intentionally outside the public Vulkan specification.
-typedef enum VkLayerStructureType {
-    VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO = (VkStructureType)1000000000,
-    VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO = (VkStructureType)1000000001
-} VkLayerStructureType;
-
 
 #define MAX_NUM_UNKNOWN_EXTS 250
 
