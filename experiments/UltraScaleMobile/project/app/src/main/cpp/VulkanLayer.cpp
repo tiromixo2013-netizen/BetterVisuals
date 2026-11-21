@@ -2,6 +2,7 @@
 #include <vulkan/vk_layer.h>
 #include <android/log.h>
 #include <cstring>
+#include <atomic>
 #include <mutex>
 #include <unordered_map>
 
@@ -11,6 +12,9 @@ std::mutex gMutex;
 std::unordered_map<VkInstance, PFN_vkGetInstanceProcAddr> gInstances;
 std::unordered_map<VkDevice, PFN_vkGetDeviceProcAddr> gDevices;
 std::unordered_map<VkPhysicalDevice, VkInstance> gPhysicalDevices;
+std::unordered_map<VkQueue, PFN_vkQueuePresentKHR> gQueues;
+std::unordered_map<VkQueue, VkDevice> gQueueDevices;
+std::atomic<uint64_t> gPresentedFrames{0};
 
 VkLayerInstanceCreateInfo* FindInstanceLink(const VkInstanceCreateInfo* info) {
     auto* item = reinterpret_cast<const VkBaseInStructure*>(info->pNext);
@@ -39,6 +43,9 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerCreateDevice(VkPhysicalDevice, const VkDevic
 VKAPI_ATTR VkResult VKAPI_CALL LayerEnumeratePhysicalDevices(VkInstance, uint32_t*, VkPhysicalDevice*);
 VKAPI_ATTR void VKAPI_CALL LayerDestroyInstance(VkInstance, const VkAllocationCallbacks*);
 VKAPI_ATTR void VKAPI_CALL LayerDestroyDevice(VkDevice, const VkAllocationCallbacks*);
+VKAPI_ATTR void VKAPI_CALL LayerGetDeviceQueue(VkDevice, uint32_t, uint32_t, VkQueue*);
+VKAPI_ATTR void VKAPI_CALL LayerGetDeviceQueue2(VkDevice, const VkDeviceQueueInfo2*, VkQueue*);
+VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresent(VkQueue, const VkPresentInfoKHR*);
 }
 
 extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(uint32_t* count, VkLayerProperties* props) {
@@ -117,9 +124,43 @@ VKAPI_ATTR void VKAPI_CALL LayerDestroyInstance(VkInstance instance, const VkAll
 }
 VKAPI_ATTR void VKAPI_CALL LayerDestroyDevice(VkDevice device, const VkAllocationCallbacks* allocator) {
     PFN_vkGetDeviceProcAddr next = nullptr;
-    { std::lock_guard<std::mutex> lock(gMutex); auto it = gDevices.find(device); if (it != gDevices.end()) { next = it->second; gDevices.erase(it); } }
+    { std::lock_guard<std::mutex> lock(gMutex);
+      auto it = gDevices.find(device); if (it != gDevices.end()) { next = it->second; gDevices.erase(it); }
+      for (auto q = gQueueDevices.begin(); q != gQueueDevices.end();) {
+          if (q->second == device) { gQueues.erase(q->first); q = gQueueDevices.erase(q); } else ++q;
+      } }
     auto destroy = next ? reinterpret_cast<PFN_vkDestroyDevice>(next(device, "vkDestroyDevice")) : nullptr;
     if (destroy) destroy(device, allocator);
+}
+VKAPI_ATTR void VKAPI_CALL LayerGetDeviceQueue(VkDevice device, uint32_t family, uint32_t index, VkQueue* queue) {
+    PFN_vkGetDeviceProcAddr next = nullptr;
+    { std::lock_guard<std::mutex> lock(gMutex); auto it = gDevices.find(device); if (it != gDevices.end()) next = it->second; }
+    auto getQueue = next ? reinterpret_cast<PFN_vkGetDeviceQueue>(next(device, "vkGetDeviceQueue")) : nullptr;
+    if (!getQueue) return;
+    getQueue(device, family, index, queue);
+    if (queue && *queue && next) {
+        auto present = reinterpret_cast<PFN_vkQueuePresentKHR>(next(device, "vkQueuePresentKHR"));
+        if (present) { std::lock_guard<std::mutex> lock(gMutex); gQueues[*queue] = present; gQueueDevices[*queue] = device; }
+    }
+}
+VKAPI_ATTR void VKAPI_CALL LayerGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2* info, VkQueue* queue) {
+    PFN_vkGetDeviceProcAddr next = nullptr;
+    { std::lock_guard<std::mutex> lock(gMutex); auto it = gDevices.find(device); if (it != gDevices.end()) next = it->second; }
+    auto getQueue = next ? reinterpret_cast<PFN_vkGetDeviceQueue2>(next(device, "vkGetDeviceQueue2")) : nullptr;
+    if (!getQueue) return;
+    getQueue(device, info, queue);
+    if (queue && *queue && next) {
+        auto present = reinterpret_cast<PFN_vkQueuePresentKHR>(next(device, "vkQueuePresentKHR"));
+        if (present) { std::lock_guard<std::mutex> lock(gMutex); gQueues[*queue] = present; gQueueDevices[*queue] = device; }
+    }
+}
+VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresent(VkQueue queue, const VkPresentInfoKHR* info) {
+    PFN_vkQueuePresentKHR next = nullptr;
+    { std::lock_guard<std::mutex> lock(gMutex); auto it = gQueues.find(queue); if (it != gQueues.end()) next = it->second; }
+    if (!next) return VK_ERROR_INITIALIZATION_FAILED;
+    const uint64_t frame = ++gPresentedFrames;
+    if ((frame % 600) == 1) __android_log_print(ANDROID_LOG_INFO, "UltraScaleVK", "Pass-through present observed frame=%llu", static_cast<unsigned long long>(frame));
+    return next(queue, info);
 }
 
 extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance, const char* name) {
@@ -141,6 +182,9 @@ extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice
     if (!name) return nullptr;
     if (std::strcmp(name, "vkGetDeviceProcAddr") == 0) return reinterpret_cast<PFN_vkVoidFunction>(vkGetDeviceProcAddr);
     if (std::strcmp(name, "vkDestroyDevice") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerDestroyDevice);
+    if (std::strcmp(name, "vkGetDeviceQueue") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerGetDeviceQueue);
+    if (std::strcmp(name, "vkGetDeviceQueue2") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerGetDeviceQueue2);
+    if (std::strcmp(name, "vkQueuePresentKHR") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerQueuePresent);
     PFN_vkGetDeviceProcAddr next = nullptr;
     { std::lock_guard<std::mutex> lock(gMutex); auto it = gDevices.find(device); if (it != gDevices.end()) next = it->second; }
     return next ? next(device, name) : nullptr;
