@@ -86,7 +86,8 @@ object GraphicsApiScanner {
         val optIn = app.targetSdkVersion >= Build.VERSION_CODES.R && runCatching {
             app.metaData?.getBoolean("com.android.graphics.injectLayers.enable", false) == true
         }.getOrDefault(false)
-        val rootAvailable = ShizukuBridge.uid() == 0
+        // Android documents root-based external layers for userdebug/eng builds, not merely UID 0 on a production build.
+        val rootAvailable = ShizukuBridge.uid() == 0 && Build.TYPE in setOf("userdebug", "eng")
 
         val vulkanReadiness = when {
             optIn -> LayerReadiness.ELIGIBLE_OPT_IN
