@@ -136,6 +136,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                    item { UpscalerLibraryCard() }
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -215,6 +216,37 @@ class MainActivity : ComponentActivity() {
             }
             .map { it to packageManager.getApplicationLabel(it).toString() }
             .sortedBy { it.second.lowercase() }
+    }
+}
+
+
+@Composable
+private fun UpscalerLibraryCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Panel)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            Text("BUILT-IN SHADER LIBRARY", color = Violet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text("4 packaged techniques", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            UpscaleTechniqueCatalog.all.forEach { technique ->
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(technique.title, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                        StatusPill("BUNDLED")
+                    }
+                    Text("${technique.role} · ${technique.minimumGles} · ${technique.license}", color = Muted, style = MaterialTheme.typography.labelSmall)
+                    Text(technique.note, color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            HorizontalDivider(color = Color.White.copy(alpha = .08f))
+            Text(
+                "Shader sources are packaged and loadable by the app. They are not yet applied to a game's render target; source capture, render-pass integration, output scaling and synchronization remain required.",
+                color = Muted,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
     }
 }
 
