@@ -48,3 +48,9 @@ Otherwise show DETECTED, INTEGRATION_REQUIRED, UNSUPPORTED or FAILED — never A
 
 ## 7. Security
 No exploit chains, hidden permission bypasses, process-memory patching, or bypass of app sandboxing. Research must use documented opt-in interfaces, owned test apps, debuggable builds and authorized lab devices.
+
+## 8. Reusable in-process hook backend
+- The Android app packages ByteDance ShadowHook 2.0.1 (MIT) as a native hook backend and initializes it from the GLES layer after Android has loaded that layer into the target process.
+- This removes the need to implement ARM64/ARM32 inline-hook trampolines, hook chaining, and recursion management from scratch for an owned or explicitly authorized test target.
+- ShadowHook is **not** a process injector and does not grant access to arbitrary production games. Android must first load the layer through its documented opt-in/debuggable/userdebug path. The backend is not yet attached to GLES draw calls; render-target acquisition and a safe frame integration contract remain separate work.
+- The sample-game is the authorized opt-in validation target. Do not report third-party game injection as supported unless the target has opted in and the full frame path is proven.
