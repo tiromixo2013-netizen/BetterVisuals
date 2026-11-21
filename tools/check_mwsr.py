@@ -35,8 +35,16 @@ assert "integer-scaling-quality-preset" not in settings
 assert "ultrascale2d-quality-preset" not in settings
 assert "SmartInteger" not in main and "UltraScale2D" not in main
 assert "Integer Scaling" not in main and "integerScaling" not in main
-assert settings["mwsr-quality-preset"]["default"] == "Balanced"
-assert settings["mwsr-quality-preset"]["one-of"] == [
+assert "fsr-quality-preset" not in settings
+assert "sgsr-quality-preset" not in settings
+assert "mwsr-quality-preset" not in settings
+assert settings["upscale-quality-preset"]["default"] == "Custom"
+assert settings["upscale-quality-preset"]["one-of"] == [
     "Custom", "Native", "Ultra Quality", "Quality", "Balanced", "Performance", "Ultra Performance"
 ]
+assert "g_upscaleQualityScale" in main
+assert "updateUpscaleQualityPreset" in main
+assert "g_fsrPresetScale" not in main
+assert "g_sgsrPresetScale" not in main
+assert "g_mwsrPresetScale" not in main
 print("MWSR registration, preset, alpha-compositing and AQR-4 removal checks passed.")
