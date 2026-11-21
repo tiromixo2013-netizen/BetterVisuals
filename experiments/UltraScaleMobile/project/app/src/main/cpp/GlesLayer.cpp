@@ -140,25 +140,27 @@ void LayerTexStorage2D(GLenum target, GLsizei levels, GLenum internalFormat,
 void LayerDeleteTextures(GLsizei count, const GLuint* textures) {
     if (g_nextDeleteTextures) g_nextDeleteTextures(count, textures);
     if (!textures || count <= 0) return;
+    const EGLContext context = CurrentContext();
+    if (context == EGL_NO_CONTEXT) return;
     std::lock_guard<std::mutex> lock(g_contextMutex);
-    for (auto& entry : g_contexts) {
-        auto& state = entry.second;
-        for (GLsizei i = 0; i < count; ++i) {
-            const GLuint texture = textures[i];
-            state.textures.erase(texture);
-            for (auto framebuffer = state.framebufferAttachments.begin();
-                 framebuffer != state.framebufferAttachments.end();) {
-                for (auto attachment = framebuffer->second.begin();
-                     attachment != framebuffer->second.end();) {
-                    if (attachment->second.texture == texture) {
-                        attachment = framebuffer->second.erase(attachment);
-                    } else {
-                        ++attachment;
-                    }
+    auto found = g_contexts.find(context);
+    if (found == g_contexts.end()) return;
+    auto& state = found->second;
+    for (GLsizei i = 0; i < count; ++i) {
+        const GLuint texture = textures[i];
+        state.textures.erase(texture);
+        for (auto framebuffer = state.framebufferAttachments.begin();
+             framebuffer != state.framebufferAttachments.end();) {
+            for (auto attachment = framebuffer->second.begin();
+                 attachment != framebuffer->second.end();) {
+                if (attachment->second.texture == texture) {
+                    attachment = framebuffer->second.erase(attachment);
+                } else {
+                    ++attachment;
                 }
-                if (framebuffer->second.empty()) framebuffer = state.framebufferAttachments.erase(framebuffer);
-                else ++framebuffer;
             }
+            if (framebuffer->second.empty()) framebuffer = state.framebufferAttachments.erase(framebuffer);
+            else ++framebuffer;
         }
     }
 }
