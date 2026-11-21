@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(ultrascale_sample_game LANGUAGES CXX)
+add_library(sample_vulkan_probe SHARED vulkan_probe.cpp)
+find_library(vulkan-lib vulkan)
+find_library(log-lib log)
+target_compile_features(sample_vulkan_probe PRIVATE cxx_std_17)
+target_link_libraries(sample_vulkan_probe PRIVATE ${vulkan-lib} ${log-lib})
