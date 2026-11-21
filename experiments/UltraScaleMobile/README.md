@@ -9,7 +9,8 @@ Standalone Android app experiment in an isolated feature branch. It does not cha
 - Separate NDK shared libraries:
   - `libVkLayer_ultrascale_api_lab.so`: Vulkan loader layer pass-through prototype; loader-facing entry points are explicitly exported despite hidden-by-default native symbol visibility.
   - `libGLES_ultrascale.so`: GLES layer pass-through prototype intercepting `eglSwapBuffers`.
-- Optional Shizuku UserService configures Android's documented per-app GPU debug-layer settings (using a dedicated shell-identity Binder service, not the deprecated Shizuku newProcess API).
+- Optional Shizuku UserService configures Android's documented per-app GPU debug-layer settings (using a dedicated shell-identity Binder service, not the deprecated Shizuku newProcess API). Settings changes are applied with rollback to their prior values if a write fails.
+- AGP 8 BuildConfig generation is explicitly enabled for the Shizuku service component-name binding.
 - Android SDK 35, JDK 17, NDK 27.2, arm64-v8a and armeabi-v7a CI build.
 
 ## Important: eligibility and limits
