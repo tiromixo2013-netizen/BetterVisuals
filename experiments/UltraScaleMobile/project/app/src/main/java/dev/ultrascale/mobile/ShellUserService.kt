@@ -11,23 +11,54 @@ class ShellUserService : ICommandService.Stub() {
         require(packagePattern.matcher(layerPackage).matches()) { "Invalid layer package" }
         require(api == "vulkan" || api == "gles") { "Unsupported graphics API" }
 
-        if (!enable) {
-            listOf("enable_gpu_debug_layers", "gpu_debug_app", "gpu_debug_layers",
-                "gpu_debug_layers_gles", "gpu_debug_layer_app").forEach { setting ->
-                runSettings("delete", setting, null)
+        val targetNow = readSetting("gpu_debug_app")
+        val layerPackagesNow = readSetting("gpu_debug_layer_app").split(':').filter { it.isNotBlank() }.toMutableSet()
+        val layerKey = if (api == "vulkan") "gpu_debug_layers" else "gpu_debug_layers_gles"
+        val layerName = if (api == "vulkan") "VK_LAYER_ULTRASCALE_api_lab" else "libGLES_ultrascale.so"
+
+        if (enable) {
+            require(targetNow.isBlank() || targetNow == targetPackage) {
+                "Android supports one per-app GPU debug target at a time ($targetNow). Disable that target first."
             }
-            return "All GPU debug-layer settings cleared. Restart the game."
+            val existingLayers = readSetting(layerKey).split(':').filter { it.isNotBlank() }.toMutableSet()
+            existingLayers += layerName
+            layerPackagesNow += layerPackage
+            runSettings("put", "enable_gpu_debug_layers", "1")
+            runSettings("put", "gpu_debug_app", targetPackage)
+            runSettings("put", "gpu_debug_layer_app", layerPackagesNow.joinToString(":"))
+            runSettings("put", layerKey, existingLayers.joinToString(":"))
+            return "Configured $api layer for $targetPackage; existing layer entries were preserved. Fully stop and relaunch the game."
         }
 
-        runSettings("put", "enable_gpu_debug_layers", "1")
-        runSettings("put", "gpu_debug_app", targetPackage)
-        runSettings("put", "gpu_debug_layer_app", layerPackage)
-        if (api == "vulkan") {
-            runSettings("put", "gpu_debug_layers", "VK_LAYER_ULTRASCALE_api_lab")
-        } else {
-            runSettings("put", "gpu_debug_layers_gles", "libGLES_ultrascale.so")
+        require(targetNow == targetPackage) {
+            "The active GPU debug target is '$targetNow', not '$targetPackage'; refusing to change another app's settings."
         }
-        return "Configured $api debug layer for $targetPackage. Fully stop and relaunch the game."
+        val existingLayers = readSetting(layerKey).split(':').filter { it.isNotBlank() }.toMutableSet()
+        existingLayers.remove(layerName)
+        if (existingLayers.isEmpty()) runSettings("delete", layerKey, null)
+        else runSettings("put", layerKey, existingLayers.joinToString(":"))
+
+        // Remove our layer APK only when neither UltraScale layer remains configured.
+        val vulkanStillEnabled = readSetting("gpu_debug_layers").split(':').any { it == "VK_LAYER_ULTRASCALE_api_lab" }
+        val glesStillEnabled = readSetting("gpu_debug_layers_gles").split(':').any { it == "libGLES_ultrascale.so" }
+        if (!vulkanStillEnabled && !glesStillEnabled) {
+            layerPackagesNow.remove(layerPackage)
+            if (layerPackagesNow.isEmpty()) runSettings("delete", "gpu_debug_layer_app", null)
+            else runSettings("put", "gpu_debug_layer_app", layerPackagesNow.joinToString(":"))
+            if (layerPackagesNow.isEmpty()) {
+                runSettings("delete", "enable_gpu_debug_layers", null)
+                runSettings("delete", "gpu_debug_app", null)
+            }
+        }
+        return "Disabled UltraScale $api layer for $targetPackage without clearing unrelated layer entries. Restart the game."
+    }
+
+    private fun readSetting(key: String): String {
+        val process = ProcessBuilder("settings", "get", "global", key).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().readText().trim()
+        val code = process.waitFor()
+        check(code == 0) { output.ifBlank { "settings get failed: $key" } }
+        return output.takeUnless { it == "null" } ?: ""
     }
 
     private fun runSettings(action: String, key: String, value: String?) {
