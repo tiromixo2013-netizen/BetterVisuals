@@ -8,7 +8,7 @@ Standalone Android app experiment in an isolated feature branch. It does not cha
 - Native device probe for Vulkan loader and EGL vendor/version.
 - Separate NDK shared libraries:
   - `libVkLayer_ultrascale_api_lab.so`: Vulkan loader layer pass-through prototype; loader-facing entry points are explicitly exported despite hidden-by-default native symbol visibility.
-  - `libGLES_ultrascale.so`: GLES layer pass-through prototype intercepting `eglSwapBuffers`.
+  - `libGLES_ultrascale.so`: GLES layer pass-through prototype intercepting `eglSwapBuffers`; every 600 frames it samples EGL surface dimensions, current context, swap-call duration and result for diagnostics.
 - The included sample game now has its own **Graphics Settings — Advanced** menu. Its GLES renderer renders into a lower-resolution FBO and runs a fullscreen upscale pass with Bilinear / Nearest sampling and optional lightweight CAS-style sharpening. Render scale can be changed live while the sample is running.
 - Optional Shizuku UserService configures Android's documented per-app GPU debug-layer settings (using a dedicated shell-identity Binder service, not the deprecated Shizuku newProcess API). Settings changes are applied with rollback to their prior values if a write fails.
 - AGP 8 BuildConfig generation is explicitly enabled for the Shizuku service component-name binding.
@@ -33,7 +33,7 @@ The external Vulkan/GLES injection layers still provide **pass-through diagnosti
 4. Select **UltraScale Layer Test Game** and enable Vulkan or GLES.
 5. Launch the sample game. Open **Graphics Settings — Advanced** to change render scale, Bilinear / Nearest sampling, sharpening and the live upscale pass while the game is running.
 6. Tap **Run Vulkan API test** to create a Vulkan instance/device.
-7. Inspect logcat for `UltraScaleVK` / `UltraScaleGLES` messages.
+7. Inspect logcat for `UltraScaleVK` / `UltraScaleGLES` messages. The GLES sample line includes surface size, context handle, swap-call time and EGL result; this is instrumentation only, not GPU execution time.
 8. Use the matching **Disable Vulkan** / **Disable GLES** control after testing.
 
 ## Test with another owned game
