@@ -324,11 +324,13 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, framebuffer)
             GLES30.glViewport(0, 0, sceneWidth, sceneHeight)
             drawScene()
-            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            val useCas = casEnabled && casProgram != 0 && ensurePostTarget()
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, if (useCas) postFramebuffer else 0)
             GLES30.glViewport(0, 0, outputWidth, outputHeight)
             val selectedProgram = when {
                 upscaleMethod == 2 && sgsr1Program != 0 -> sgsr1Program
                 upscaleMethod == 3 && fsrLiteProgram != 0 -> fsrLiteProgram
+                upscaleMethod == 4 && mwsrProgram != 0 -> mwsrProgram
                 else -> upscaleProgram
             }
             GLES30.glUseProgram(selectedProgram)
@@ -347,6 +349,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
                     GLES30.glUniform2f(GLES30.glGetUniformLocation(fsrLiteProgram, "uTexel"),
                         1f / sceneWidth.coerceAtLeast(1), 1f / sceneHeight.coerceAtLeast(1))
                 }
+                mwsrProgram -> applyMwsrUniforms()
                 else -> {
                     GLES30.glUniform1i(GLES30.glGetUniformLocation(upscaleProgram, "uScene"), 0)
                     GLES30.glUniform2f(GLES30.glGetUniformLocation(upscaleProgram, "uTexel"),
@@ -358,6 +361,19 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
                 }
             }
             GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+            if (useCas) {
+                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+                GLES30.glViewport(0, 0, outputWidth, outputHeight)
+                GLES30.glUseProgram(casProgram)
+                bindQuad(casProgram, quadBuffer)
+                GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+                GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, postTexture)
+                GLES30.glUniform1i(GLES30.glGetUniformLocation(casProgram, "uScene"), 0)
+                GLES30.glUniform2f(GLES30.glGetUniformLocation(casProgram, "uInputSize"),
+                    outputWidth.toFloat(), outputHeight.toFloat())
+                GLES30.glUniform1f(GLES30.glGetUniformLocation(casProgram, "uSharpness"), casSharpness)
+                GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+            }
         } else {
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, outputWidth, outputHeight)
