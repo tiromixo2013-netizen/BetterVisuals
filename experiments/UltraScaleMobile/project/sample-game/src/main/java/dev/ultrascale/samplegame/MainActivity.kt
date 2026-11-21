@@ -245,7 +245,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         return buildString {
             append("GLES runtime: ").append(version)
             append(" (").append(majorMinor[0]).append(".").append(majorMinor[1]).append(")")
-            append("\\nSGSR1 textureGather: ").append(sgsr1Capability)
+            append("\nSGSR1 textureGather: ").append(sgsr1Capability)
             append("\nGPU: ").append(vendor).append(" / ").append(renderer)
             append("\nActive method: ").append(method)
             append("\nRender target: ").append(sceneWidth).append("x").append(sceneHeight)
@@ -268,7 +268,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         if (version[0] > 3 || (version[0] == 3 && version[1] >= 1)) {
             return "supported (GLES ${version[0]}.${version[1]} core)"
         }
-        val extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS).orEmpty().split(Regex("\\\\s+"))
+        val extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS).orEmpty().split(Regex("\\s+"))
         return if ("GL_EXT_texture_gather" in extensions) {
             "supported (GL_EXT_texture_gather)"
         } else {
