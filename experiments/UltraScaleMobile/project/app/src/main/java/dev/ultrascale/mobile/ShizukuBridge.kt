@@ -17,16 +17,18 @@ object ShizukuBridge {
             .version(1)
     }
     @Volatile private var remote: ICommandService? = null
+    @Volatile var statusListener: (() -> Unit)? = null
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             remote = ICommandService.Stub.asInterface(service)
+            statusListener?.invoke()
         }
-        override fun onServiceDisconnected(name: ComponentName?) { remote = null }
+        override fun onServiceDisconnected(name: ComponentName?) { remote = null; statusListener?.invoke() }
     }
 
     fun connected(): Boolean = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
     fun granted(): Boolean = runCatching {
-        connected() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        connected() && Shizuku.checkSelfPermission()
     }.getOrDefault(false)
     fun uid(): Int? = runCatching { if (granted()) Shizuku.getUid() else null }.getOrNull()
     fun serviceConnected(): Boolean = remote != null
@@ -49,6 +51,7 @@ object ShizukuBridge {
     fun stopUserService() {
         runCatching { Shizuku.unbindUserService(args, connection, true) }
         remote = null
+        statusListener?.invoke()
     }
 
     fun configureDebugLayer(targetPackage: String, layerPackage: String, api: LayerApi, enable: Boolean): Result<String> = runCatching {
