@@ -20,7 +20,7 @@ void main() {
     float gy = abs(luma(u) - luma(d));
     float edge = clamp(max(gx, gy) * 3.0, 0.0, 1.0);
     vec3 alongEdge = gx > gy ? (u + d) * 0.5 : (l + r) * 0.5;
-    vec3 diagonal = (c * 4.0 + l + r + u + d) / 8.0;
+    vec3 diagonal = (c * 3.0 + l + r + u + d + q) / 8.0;
     vec3 reconstructed = mix(diagonal, alongEdge, edge * 0.35);
     float localMin = min(min(luma(l), luma(r)), min(luma(u), luma(d)));
     float localMax = max(max(luma(l), luma(r)), max(luma(u), luma(d)));
