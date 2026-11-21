@@ -7,7 +7,7 @@ Standalone Android app experiment in an isolated feature branch. It does not cha
 - APK native-library scan for engine and possible API candidates. This is heuristic, not runtime API detection.
 - Native device probe for Vulkan loader and EGL vendor/version.
 - Separate NDK shared libraries:
-  - `libVkLayer_ultrascale_api_lab.so`: Vulkan loader layer pass-through prototype.
+  - `libVkLayer_ultrascale_api_lab.so`: Vulkan loader layer pass-through prototype; loader-facing entry points are explicitly exported despite hidden-by-default native symbol visibility.
   - `libGLES_ultrascale.so`: GLES layer pass-through prototype intercepting `eglSwapBuffers`.
 - Optional Shizuku UserService configures Android's documented per-app GPU debug-layer settings (using a dedicated shell-identity Binder service, not the deprecated Shizuku newProcess API).
 - Android SDK 35, JDK 17, NDK 27.2, arm64-v8a and armeabi-v7a CI build.
