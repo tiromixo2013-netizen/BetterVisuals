@@ -40,5 +40,5 @@ void* AndroidGLESLayer_GetProcAddress(const char* funcName, __eglMustCastToPrope
         if (next) g_nextSwapBuffers = reinterpret_cast<EglSwapBuffers>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerSwapBuffers));
     }
-    return next;
+    return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(next));
 }
