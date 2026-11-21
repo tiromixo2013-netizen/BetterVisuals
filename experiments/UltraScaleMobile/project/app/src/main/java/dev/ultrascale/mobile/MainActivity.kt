@@ -201,8 +201,10 @@ private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport) {
     var feedback by remember(app.packageName) { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
     val isAsphalt = app.packageName == "com.gameloft.android.ANMP.GloftA8HM"
-    val vulkanReady = report.vulkanLayer in setOf(LayerReadiness.ELIGIBLE_OPT_IN, LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
-    val glesReady = report.glesLayer in setOf(LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
+    val vulkanReady = RenderApi.VULKAN in report.candidateApis &&
+        report.vulkanLayer in setOf(LayerReadiness.ELIGIBLE_OPT_IN, LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
+    val glesReady = RenderApi.OPENGL_ES in report.candidateApis &&
+        report.glesLayer in setOf(LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -229,6 +231,9 @@ private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport) {
                 StatusPill(report.confidence.toString())
             }
             Text("Engine: ${report.engine}", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Text("Version: ${report.versionName} (${report.versionCode}) · Target SDK ${report.targetSdk}", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Text("Native ABI: ${report.nativeAbis.joinToString().ifBlank { "No packaged native libraries" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Text("Native libraries: ${report.nativeLibraryCount}", color = Muted, style = MaterialTheme.typography.bodySmall)
             Text("Candidate APIs: ${report.candidateApis.joinToString().ifBlank { "Not detected" }}", style = MaterialTheme.typography.bodyMedium)
             Text(
                 "Runtime API is not confirmed by APK signature scanning.",
@@ -243,8 +248,9 @@ private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport) {
                     Text("LAYER ELIGIBILITY", color = Violet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     EligibilityLine("Vulkan", vulkanReady, eligibilityText(report.vulkanLayer, true))
                     EligibilityLine("OpenGL ES", glesReady, eligibilityText(report.glesLayer, false))
+                    Text("Target Vulkan opt-in: ${if (report.manifestVulkanOptIn) "YES" else "NO"}", color = Muted, style = MaterialTheme.typography.bodySmall)
                     Text(report.evidence, color = Muted, style = MaterialTheme.typography.bodySmall)
-                    Text("Layer switches configure Android's debug layer settings only. They do not install an upscaler into the game.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    Text("A candidate API is not runtime confirmation. Layer switches configure Android debug-layer settings only; they do not inject an upscaler or modify the game's own settings menu.", color = Muted, style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Button(
                             enabled = vulkanReady && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
