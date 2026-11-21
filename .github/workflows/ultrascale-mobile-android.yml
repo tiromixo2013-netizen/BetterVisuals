@@ -65,7 +65,7 @@ jobs:
           apk="experiments/UltraScaleMobile/project/app/build/outputs/apk/debug/app-debug.apk"
           test -f "$apk"
           entries="$(unzip -Z1 "$apk")"
-          for shader in amd_fsr1_easu.frag fsr_lite_6tap.frag mwsr_up.frag sgsr1_mobile.frag amd_cas_sharpen.frag; do
+          for shader in sgsr2_2pass_convert.frag sgsr2_2pass_upscale.frag sgsr2_2pass_vertex.vert amd_fsr1_easu.frag fsr_lite_6tap.frag mwsr_up.frag sgsr1_mobile.frag amd_cas_sharpen.frag; do
             expected="assets/upscalers/$shader"
             if ! grep -Fxq "$expected" <<< "$entries"; then
               echo "::error::Missing app shader asset: $expected"
