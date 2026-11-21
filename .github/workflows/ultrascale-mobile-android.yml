@@ -43,6 +43,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: UltraScaleMobile-debug-apk
-          path: experiments/UltraScaleMobile/project/app/build/outputs/apk/debug/*.apk
+          path: |
+            experiments/UltraScaleMobile/project/app/build/outputs/apk/debug/*.apk
+            experiments/UltraScaleMobile/project/sample-game/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
