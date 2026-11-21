@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
                                 Text("Evidence: ${report.confidence} — ${report.evidence}")
                                 Text("Layer eligibility: ${if (report.targetAllowsLayers) "Eligible" else "Target must opt in / be debuggable"}")
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(enabled = report.targetAllowsLayers && ShizukuBridge.granted(),
+                                    Button(enabled = report.targetAllowsLayers && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
                                         onClick = {
                                             feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.VULKAN, true)
                                                 .fold({ "Vulkan: $it" }, { "Vulkan failed: ${it.message}" })
@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
                                                 .fold({ "GLES: $it" }, { "GLES failed: ${it.message}" })
                                         }) { Text("Enable GLES") }
                                 }
-                                OutlinedButton(enabled = ShizukuBridge.granted(),
+                                OutlinedButton(enabled = ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
                                     onClick = {
                                         feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.VULKAN, false)
                                             .fold({ "Debug layers cleared: $it" }, { "Clear failed: ${it.message}" })
