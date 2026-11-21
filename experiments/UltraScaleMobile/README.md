@@ -1,34 +1,44 @@
 # UltraScale Mobile — Android API / Injection Lab
 
-Standalone Android companion-app experiment, isolated from the BetterVisuals mod and default branch.
+Standalone Android app experiment in an isolated feature branch. It does not change the default branch or BetterVisuals mod source.
 
-## Focus
-- Android 15+ target (compile SDK 35), JDK 17 and NDK C++17.
-- Independent Vulkan and OpenGL ES/EGL native capability probes; ANGLE is not a dependency.
-- Optional Shizuku bridge; ADB shell UID 2000 is not root.
-- Installed launchable app catalog, likely engine and conservative 2D/3D/Hybrid classification.
-- Static APK native-library scanning for candidate APIs; never presented as proof of the active runtime API.
-- Separate Vulkan and GLES readiness states.
-- NDK build for arm64-v8a and armeabi-v7a.
+## Current implementation (0.6.0 layer lab)
+- Kotlin / Jetpack Compose game discovery, filtered using Android's game category metadata.
+- APK native-library scan for engine and possible API candidates. This is heuristic, not runtime API detection.
+- Native device probe for Vulkan loader and EGL vendor/version.
+- Separate NDK shared libraries:
+  - `libVkLayer_ultrascale_api_lab.so`: Vulkan loader layer pass-through prototype.
+  - `libGLES_ultrascale.so`: GLES layer pass-through prototype intercepting `eglSwapBuffers`.
+- Optional Shizuku controls configure Android's documented per-app GPU debug-layer settings.
+- Android SDK 35, JDK 17, NDK 27.2, arm64-v8a and armeabi-v7a CI build.
 
-## Build locally
-Open `project/` in Android Studio (JDK 17, Android SDK 35, NDK and CMake 3.22.1), or run:
-`gradle --no-daemon lintDebug assembleDebug`
+## Important: eligibility and limits
+A third-party app cannot silently load code into arbitrary production games. Android requires the target app to opt in using `com.android.graphics.injectLayers.enable=true`, be debuggable, or run on a supported userdebug/rooted environment. The Shizuku control only writes the documented debug-layer settings; it does not bypass these rules. ADB shell UID 2000 is not root.
 
-GitHub Actions builds a debug APK and publishes it as the `UltraScaleMobile-api-lab-debug` artifact.
+The app currently provides **pass-through diagnostics**, not upscaling yet:
+- GLES layer observes `eglSwapBuffers` and forwards it.
+- Vulkan layer reports itself to the loader and forwards instance/device creation and destruction.
+- Neither layer modifies textures, render targets, shaders, resolution or frame timing. Do not label an upscaler active until an actual render pass is integrated and measured.
 
-## Injection model
-1. **Developer-integrated mode (preferred):** the game bundles the SDK/backend and explicitly supplies render targets and synchronization.
-2. **Opt-in graphics layer mode:** only where the target app and device graphics loader explicitly support it.
-3. **Debug / privileged lab mode:** debuggable target or authorized userdebug/root test device, subject to vendor and OS restrictions.
-4. **Ordinary production game without opt-in:** report integration required; do not claim injection.
+## Test with an owned game
+1. Build and install the UltraScale Mobile app.
+2. Create an owned/debuggable Android game or test harness that uses Vulkan or GLES.
+3. For API 30+, add the documented manifest opt-in metadata to that test app.
+4. Start Shizuku through Wireless Debugging and grant UltraScale permission.
+5. In UltraScale, select the test app and enable the matching layer.
+6. Fully stop and relaunch the test app.
+7. Check logcat for `UltraScaleVK` or `UltraScaleGLES` messages. Confirm the app still renders correctly.
+8. Disable the layer when finished.
 
-Shizuku is an optional control plane for permitted ADB/Root operations. It does not bypass Android's app sandbox or grant arbitrary access to another game's memory or graphics loader. No exploit, process patching or security bypass is included.
+## Build
+Open `project/` in Android Studio (JDK 17, SDK 35, NDK 27.2.12479018, CMake 3.22.1), or let GitHub Actions run:
+`gradle lintDebug testDebugUnitTest assembleDebug`.
 
-## Detection limitations
-APK scanning and engine signatures identify likely support only. Unity, Unreal and Godot can bundle several backends and select one at runtime. The native Vulkan/EGL probe reports the current device's loader capabilities from UltraScale's own process; it does **not** prove which API another game is currently using.
+## Next milestones
+1. Compile and validate the loader prototypes on a real Android 15 device.
+2. Add a sample game module that explicitly opts in and creates both render APIs.
+3. Implement safe frame-boundary render-target acquisition and state/synchronization handling.
+4. Add actual spatial upscaling and CAS to the integrated sample; benchmark GPU time, latency, thermal behavior.
+5. Only then port the proven path into supported game integrations.
 
-## Backend design
-Vulkan and GLES have separate adapter contracts. Technique modules must declare texture formats, target lifecycle, synchronization, scale, temporal inputs and device requirements. SGSR2 is unavailable until the game integration supplies frame history and motion data. AMD CAS is treated as a sharpening pass.
-
-A technique may be marked ACTIVE only after it receives a valid render target from an integrated game, creates its pipeline, processes and presents frames, and passes performance checks.
+No exploit chains, hidden permission bypasses, arbitrary process-memory modification or sandbox escapes are part of this project.
