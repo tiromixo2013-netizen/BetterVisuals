@@ -36,36 +36,6 @@ SGSR 1 and MWSR are separate spatial reconstruction methods. MWSR uses an edge-a
 
 ---
 
-## <c-47f0ff>Integer Scaling</c>
-
-Pixel-perfect nearest-neighbour upscaling with exact integer output ratios:
-
-- Native (1x): original resolution.
-- Performance (2x): render at half width and height, then scale each source pixel to exactly 2x2 output pixels.
-- Ultra Performance (3x): render at one-third width and height, then scale each source pixel to exactly 3x3 output pixels.
-
-If the viewport dimensions are not divisible by the selected factor, the unused remainder is centered as a thin black border rather than stretched. The Integer Scaling preset overrides the general Render Scale slider.
-
-**UltraScale2D (experimental):** uses the same reduced 1x/2x/3x capture sizes, then applies a dedicated four-sample diagonal edge-directed reconstruction shader in one presentation pass. It is independent of FSR Lite. It aims to reduce blockiness and preserve diagonal edges at low processing cost. Actual image quality and GPU savings must be measured on each device; it cannot recover details that were never rendered.
-
----
-
-
-## <c-47f0ff>UltraScale2D Quality Presets</c>
-
-UltraScale2D has its own input-resolution presets. Each percentage is applied to both width and height, then the lightweight hardware-linear presentation pass scales the result back to the full viewport:
-
-- Native: 100% per dimension.
-- Ultra Quality: 77% per dimension.
-- Quality: 67% per dimension.
-- Balanced: 59% per dimension.
-- Performance: 50% per dimension.
-- Ultra Performance: 33% per dimension.
-- Custom: uses the general Render Scale slider.
-
-For example, Performance renders at half width and half height (25% of the original pixel count) before reconstruction. Lower presets can reduce rendering work, but fine details may be lost and actual GPU savings depend on the device and bottleneck. These are initial presets, not verified quality guarantees.
-
-
 ## <c-47f0ff>MWSR Quality Presets</c>
 
 MWSR is an experimental single-frame spatial upscaler with a GLSL ES 3.00 implementation. It reconstructs from the current RGB frame only; it does not use motion vectors, depth, temporal history, or neural inference. The mod preserves the game's premultiplied alpha when compositing the reconstructed frame.
