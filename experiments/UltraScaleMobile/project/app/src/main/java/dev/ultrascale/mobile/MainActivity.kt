@@ -25,6 +25,9 @@ class MainActivity : ComponentActivity() {
                         Text("UltraScale Mobile — API Lab", style = MaterialTheme.typography.headlineSmall)
                         Text("Android 15+ • Vulkan / OpenGL ES • ANGLE not required")
                         Text("Shizuku: ${ShizukuBridge.status()}")
+                        val nativeReport = remember { NativeGraphicsProbe.report() }
+                        Text("Device Vulkan: ${nativeReport.first}", style = MaterialTheme.typography.bodySmall)
+                        Text("Device EGL/GLES loader: ${nativeReport.second}", style = MaterialTheme.typography.bodySmall)
                         Button(onClick = { ShizukuBridge.requestPermission(); refresh++ }) { Text("Request Shizuku permission") }
                     }
                     item { Text("Installed launchable apps (Play Store games are included when installed)", style = MaterialTheme.typography.titleMedium) }
