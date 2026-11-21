@@ -47,7 +47,8 @@ in highp vec2 vUv;
 layout(location = 0) out vec4 oColor;
 
 const vec3 LUMA = vec3(0.25, 0.625, 0.125);
-const bool CHROMA444 = true;
+uniform bool uChroma444;
+
 
 vec3 S(vec2 uv) {
     return textureLod(uTex, uv, 0.0).rgb;
@@ -68,7 +69,7 @@ void main() {
 
     vec2 gM;
     bool isFlat;
-    if (CHROMA444) {
+    if (uChroma444) {
         vec3 dx = dFdx(rM) * uTexelScale.z;
         vec3 dy = -dFdy(rM) * uTexelScale.w;
         vec3 m = abs(dx) + abs(dy);
@@ -212,8 +213,9 @@ namespace bv::render {
         m_dimsAcrossUniform = glGetUniformLocation(m_program, "uDimsAcross");
         m_kernelUniform = glGetUniformLocation(m_program, "uKernel");
         m_boundUniform = glGetUniformLocation(m_program, "uBound");
+        m_chroma444Uniform = glGetUniformLocation(m_program, "uChroma444");
         if (m_textureUniform < 0 || m_texelScaleUniform < 0 || m_dimsAcrossUniform < 0 ||
-            m_kernelUniform < 0 || m_boundUniform < 0) {
+            m_kernelUniform < 0 || m_boundUniform < 0 || m_chroma444Uniform < 0) {
             log::error("[MWSR] Shader is missing required uniforms");
             glDeleteProgram(m_program);
             m_program = 0;
@@ -227,7 +229,7 @@ namespace bv::render {
 
     bool MwsrRenderer::apply(
         GLuint inputTexture, GLsizei inputWidth, GLsizei inputHeight,
-        GLsizei outputWidth, GLsizei outputHeight
+        GLsizei outputWidth, GLsizei outputHeight, bool chroma444
     ) {
         if (!inputTexture || inputWidth <= 0 || inputHeight <= 0 ||
             outputWidth <= 0 || outputHeight <= 0 ||
@@ -272,6 +274,7 @@ namespace bv::render {
         );
         glUniform4f(m_kernelUniform, p[0], p[1], p[2], p[4]);
         glUniform4f(m_boundUniform, p[5], 1.0f, 0.0f, 0.0f);
+        glUniform1i(m_chroma444Uniform, chroma444 ? 1 : 0);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, inputTexture);
         m_quad.bind();
@@ -288,6 +291,7 @@ namespace bv::render {
         m_dimsAcrossUniform = -1;
         m_kernelUniform = -1;
         m_boundUniform = -1;
+        m_chroma444Uniform = -1;
         m_attempted = false;
         m_cachedKernel = {};
         m_cachedInputWidth = 0;
