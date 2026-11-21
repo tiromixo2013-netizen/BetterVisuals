@@ -1,0 +1,51 @@
+name: UltraScale Mobile Android CI
+
+on:
+  push:
+    branches:
+      - feature/ultrascale-mobile-api-injection-lab
+    paths:
+      - "experiments/UltraScaleMobile/**"
+      - ".github/workflows/ultrascale-mobile-android.yml"
+  pull_request:
+    paths:
+      - "experiments/UltraScaleMobile/**"
+      - ".github/workflows/ultrascale-mobile-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ultrascale-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-build:
+    name: Android SDK 35 / JDK 17
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Restore standalone Android project
+        working-directory: experiments/UltraScaleMobile
+        run: |
+          base64 --decode source-v0.3.zip.b64 > source-v0.3.zip
+          unzip -q source-v0.3.zip
+      - name: Verify Android project
+        working-directory: experiments/UltraScaleMobile/UltraScaleMobile-v03
+        run: gradle --no-daemon --stacktrace lintDebug testDebugUnitTest assembleDebug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: UltraScaleMobile-debug-apk
+          path: experiments/UltraScaleMobile/UltraScaleMobile-v03/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
