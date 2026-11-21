@@ -3,7 +3,7 @@
 Standalone Android app experiment in an isolated feature branch. It does not change the default branch or BetterVisuals mod source.
 
 ## Current implementation (0.6.0 layer lab)
-- Kotlin / Jetpack Compose game discovery, filtered using Android's game category metadata.
+- Kotlin / Jetpack Compose discovery of installed games using Android game-category metadata, with an all-launchable-app fallback for games that omit the category.
 - APK native-library scan for engine and possible API candidates. This is heuristic, not runtime API detection.
 - Native device probe for Vulkan loader and EGL vendor/version.
 - Separate NDK shared libraries:
