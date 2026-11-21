@@ -15,6 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
+    private var refreshPermissionUi: (() -> Unit)? = null
+    private val permissionListener = Shizuku.OnRequestPermissionResultListener { _, _ ->
+        runOnUiThread { refreshPermissionUi?.invoke() }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -22,8 +27,14 @@ class MainActivity : ComponentActivity() {
                 var refresh by remember { mutableIntStateOf(0) }
                 var shizukuRefresh by remember { mutableIntStateOf(0) }
                 DisposableEffect(Unit) {
+                    refreshPermissionUi = { shizukuRefresh++ }
                     ShizukuBridge.statusListener = { runOnUiThread { shizukuRefresh++ } }
-                    onDispose { ShizukuBridge.statusListener = null }
+                    Shizuku.addRequestPermissionResultListener(permissionListener)
+                    onDispose {
+                        refreshPermissionUi = null
+                        ShizukuBridge.statusListener = null
+                        Shizuku.removeRequestPermissionResultListener(permissionListener)
+                    }
                 }
                 val shizukuStatus = remember(shizukuRefresh) { ShizukuBridge.status() }
                 val games = remember(refresh) { discoverGames() }
@@ -71,18 +82,11 @@ class MainActivity : ComponentActivity() {
                                                 .fold({ "GLES: $it" }, { "GLES failed: ${it.message}" })
                                         }) { Text("Enable GLES") }
                                 }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(enabled = ShizukuBridge.granted(),
-                                        onClick = {
-                                            feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.VULKAN, false)
-                                                .fold({ "Vulkan disabled: $it" }, { "Disable failed: ${it.message}" })
-                                        }) { Text("Disable Vulkan") }
-                                    OutlinedButton(enabled = ShizukuBridge.granted(),
-                                        onClick = {
-                                            feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.OPENGL_ES, false)
-                                                .fold({ "GLES disabled: $it" }, { "Disable failed: ${it.message}" })
-                                        }) { Text("Disable GLES") }
-                                }
+                                OutlinedButton(enabled = ShizukuBridge.granted(),
+                                    onClick = {
+                                        feedback = ShizukuBridge.configureDebugLayer(app.packageName, packageName, LayerApi.VULKAN, false)
+                                            .fold({ "Debug layers cleared: $it" }, { "Clear failed: ${it.message}" })
+                                    }) { Text("Clear debug layers") }
                                 if (feedback.isNotBlank()) Text(feedback, style = MaterialTheme.typography.bodySmall)
                                 Text("Restart the game after changing layer settings.", style = MaterialTheme.typography.labelSmall)
                             }
