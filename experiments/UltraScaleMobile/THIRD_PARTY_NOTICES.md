@@ -70,3 +70,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 SPDX-License-Identifier: MIT
+
+
+AMD FidelityFX Super Resolution 1 (EASU)
+- Source: https://github.com/GPUOpen-Effects/FidelityFX-FSR
+- Shader: `app/src/main/assets/upscalers/amd_fsr1_easu.frag` and `project/sample-game/src/main/assets/shaders/amd_fsr1_easu.frag`.
+- Copyright (c) 2021 Advanced Micro Devices, Inc.
+- License: MIT. The complete copyright and permission notice is included at the top of each extracted shader asset.
+- The sample-game copy adapts the shader interface from GLSL ES 1.00-style syntax to GLSL ES 3.00 (varying/input, texture sampling and fragment output names); the EASU reconstruction math is retained.
