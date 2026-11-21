@@ -49,7 +49,7 @@ VKAPI_ATTR void VKAPI_CALL LayerGetDeviceQueue2(VkDevice, const VkDeviceQueueInf
 VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresent(VkQueue, const VkPresentInfoKHR*);
 }
 
-extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(uint32_t* count, VkLayerProperties* props) {
+extern "C" __attribute__((visibility("default"))) VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(uint32_t* count, VkLayerProperties* props) {
     if (!count) return VK_ERROR_INITIALIZATION_FAILED;
     if (!props) { *count = 1; return VK_SUCCESS; }
     if (*count == 0) return VK_INCOMPLETE;
@@ -60,15 +60,15 @@ extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(uin
     std::strncpy(p.description, "UltraScale API lab pass-through layer", sizeof(p.description) - 1);
     props[0] = p; *count = 1; return VK_SUCCESS;
 }
-extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice, uint32_t* count, VkLayerProperties* props) {
+extern "C" __attribute__((visibility("default"))) VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceLayerProperties(VkPhysicalDevice, uint32_t* count, VkLayerProperties* props) {
     return vkEnumerateInstanceLayerProperties(count, props);
 }
-extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceExtensionProperties(const char*, uint32_t* count, VkExtensionProperties*) {
+extern "C" __attribute__((visibility("default"))) VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceExtensionProperties(const char*, uint32_t* count, VkExtensionProperties*) {
     if (!count) return VK_ERROR_INITIALIZATION_FAILED;
     *count = 0;
     return VK_SUCCESS;
 }
-extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDevice, const char*, uint32_t* count, VkExtensionProperties*) {
+extern "C" __attribute__((visibility("default"))) VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionProperties(VkPhysicalDevice, const char*, uint32_t* count, VkExtensionProperties*) {
     if (!count) return VK_ERROR_INITIALIZATION_FAILED;
     *count = 0;
     return VK_SUCCESS;
@@ -225,7 +225,7 @@ VKAPI_ATTR VkResult VKAPI_CALL LayerQueuePresent(VkQueue queue, const VkPresentI
     return next(queue, info);
 }
 
-extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance, const char* name) {
+extern "C" __attribute__((visibility("default"))) VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance, const char* name) {
     if (!name) return nullptr;
     if (std::strcmp(name, "vkGetInstanceProcAddr") == 0) return reinterpret_cast<PFN_vkVoidFunction>(vkGetInstanceProcAddr);
     if (std::strcmp(name, "vkCreateInstance") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerCreateInstance);
@@ -243,7 +243,7 @@ extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInst
     { std::lock_guard<std::mutex> lock(gMutex); auto it = gInstances.find(instance); if (it != gInstances.end()) next = it->second; }
     return next ? next(instance, name) : nullptr;
 }
-extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, const char* name) {
+extern "C" __attribute__((visibility("default"))) VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice device, const char* name) {
     if (!name) return nullptr;
     if (std::strcmp(name, "vkGetDeviceProcAddr") == 0) return reinterpret_cast<PFN_vkVoidFunction>(vkGetDeviceProcAddr);
     if (std::strcmp(name, "vkDestroyDevice") == 0) return reinterpret_cast<PFN_vkVoidFunction>(LayerDestroyDevice);
@@ -254,7 +254,7 @@ extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(VkDevice
     { std::lock_guard<std::mutex> lock(gMutex); auto it = gDevices.find(device); if (it != gDevices.end()) next = it->second; }
     return next ? next(device, name) : nullptr;
 }
-extern "C" VKAPI_ATTR VkResult VKAPI_CALL vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface* version) {
+extern "C" __attribute__((visibility("default"))) VKAPI_ATTR VkResult VKAPI_CALL vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface* version) {
     if (!version || version->sType != LAYER_NEGOTIATE_INTERFACE_STRUCT) return VK_ERROR_INITIALIZATION_FAILED;
     if (version->loaderLayerInterfaceVersion > CURRENT_LOADER_LAYER_INTERFACE_VERSION)
         version->loaderLayerInterfaceVersion = CURRENT_LOADER_LAYER_INTERFACE_VERSION;
