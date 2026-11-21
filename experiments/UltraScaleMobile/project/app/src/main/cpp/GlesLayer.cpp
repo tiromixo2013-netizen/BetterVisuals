@@ -24,6 +24,10 @@ using GlTexImage2D = void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLe
 using GlTexStorage2D = void (*)(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
 using GlDeleteTextures = void (*)(GLsizei, const GLuint*);
 using GlDeleteFramebuffers = void (*)(GLsizei, const GLuint*);
+using GlBindRenderbuffer = void (*)(GLenum, GLuint);
+using GlRenderbufferStorage = void (*)(GLenum, GLenum, GLsizei, GLsizei);
+using GlFramebufferRenderbuffer = void (*)(GLenum, GLenum, GLenum, GLuint);
+using GlDeleteRenderbuffers = void (*)(GLsizei, const GLuint*);
 
 namespace {
 struct TextureInfo {
@@ -31,10 +35,12 @@ struct TextureInfo {
     GLsizei width = 0;
     GLsizei height = 0;
     GLenum internalFormat = 0;
+    bool isRenderbuffer = false;
 };
 struct ContextState {
     GLuint boundFramebuffer = 0;
     GLuint boundTexture2D = 0;
+    GLuint boundRenderbuffer = 0;
     GLint viewportX = 0;
     GLint viewportY = 0;
     GLsizei viewportWidth = 0;
@@ -46,6 +52,7 @@ struct ContextState {
     GLuint lastDrawTexture = 0;
     TextureInfo lastDrawTextureInfo{};
     std::unordered_map<GLuint, TextureInfo> textures;
+    std::unordered_map<GLuint, TextureInfo> renderbuffers;
     std::unordered_map<GLuint, std::unordered_map<GLenum, TextureInfo>> framebufferAttachments;
 };
 struct FrameTelemetry {
@@ -83,6 +90,10 @@ GlTexImage2D g_nextTexImage2D = nullptr;
 GlTexStorage2D g_nextTexStorage2D = nullptr;
 GlDeleteTextures g_nextDeleteTextures = nullptr;
 GlDeleteFramebuffers g_nextDeleteFramebuffers = nullptr;
+GlBindRenderbuffer g_nextBindRenderbuffer = nullptr;
+GlRenderbufferStorage g_nextRenderbufferStorage = nullptr;
+GlFramebufferRenderbuffer g_nextFramebufferRenderbuffer = nullptr;
+GlDeleteRenderbuffers g_nextDeleteRenderbuffers = nullptr;
 
 EGLContext CurrentContext() {
     return eglGetCurrentContext();
@@ -166,6 +177,82 @@ void LayerTexStorage2D(GLenum target, GLsizei levels, GLenum internalFormat,
     }
 }
 
+
+void LayerBindRenderbuffer(GLenum target, GLuint renderbuffer) {
+    if (g_nextBindRenderbuffer) g_nextBindRenderbuffer(target, renderbuffer);
+    if (target != GL_RENDERBUFFER) return;
+    const EGLContext context = CurrentContext();
+    if (context == EGL_NO_CONTEXT) return;
+    std::lock_guard<std::mutex> lock(g_contextMutex);
+    StateFor(context).boundRenderbuffer = renderbuffer;
+}
+
+void LayerRenderbufferStorage(GLenum target, GLenum internalFormat, GLsizei width, GLsizei height) {
+    if (g_nextRenderbufferStorage) g_nextRenderbufferStorage(target, internalFormat, width, height);
+    if (target != GL_RENDERBUFFER) return;
+    const EGLContext context = CurrentContext();
+    if (context == EGL_NO_CONTEXT) return;
+    std::lock_guard<std::mutex> lock(g_contextMutex);
+    auto& state = StateFor(context);
+    if (state.boundRenderbuffer) {
+        state.renderbuffers[state.boundRenderbuffer] = {
+            state.boundRenderbuffer, width, height, internalFormat, true
+        };
+        for (auto& framebuffer : state.framebufferAttachments) {
+            for (auto& attachment : framebuffer.second) {
+                if (attachment.second.isRenderbuffer && attachment.second.texture == state.boundRenderbuffer)
+                    attachment.second = state.renderbuffers[state.boundRenderbuffer];
+            }
+        }
+    }
+}
+
+void LayerFramebufferRenderbuffer(GLenum target, GLenum attachment, GLenum renderbufferTarget, GLuint renderbuffer) {
+    if (g_nextFramebufferRenderbuffer)
+        g_nextFramebufferRenderbuffer(target, attachment, renderbufferTarget, renderbuffer);
+    if ((target != GL_FRAMEBUFFER && target != GL_DRAW_FRAMEBUFFER) || renderbufferTarget != GL_RENDERBUFFER) return;
+    const EGLContext context = CurrentContext();
+    if (context == EGL_NO_CONTEXT) return;
+    std::lock_guard<std::mutex> lock(g_contextMutex);
+    auto& state = StateFor(context);
+    ++state.attachmentUpdates;
+    state.lastAttachedTexture = 0;
+    if (renderbuffer == 0) {
+        auto fb = state.framebufferAttachments.find(state.boundFramebuffer);
+        if (fb != state.framebufferAttachments.end()) {
+            fb->second.erase(attachment);
+            if (fb->second.empty()) state.framebufferAttachments.erase(fb);
+        }
+        return;
+    }
+    const auto found = state.renderbuffers.find(renderbuffer);
+    if (found != state.renderbuffers.end())
+        state.framebufferAttachments[state.boundFramebuffer][attachment] = found->second;
+}
+
+void LayerDeleteRenderbuffers(GLsizei count, const GLuint* renderbuffers) {
+    if (g_nextDeleteRenderbuffers) g_nextDeleteRenderbuffers(count, renderbuffers);
+    if (!renderbuffers || count <= 0) return;
+    const EGLContext context = CurrentContext();
+    if (context == EGL_NO_CONTEXT) return;
+    std::lock_guard<std::mutex> lock(g_contextMutex);
+    auto found = g_contexts.find(context);
+    if (found == g_contexts.end()) return;
+    auto& state = found->second;
+    for (GLsizei i = 0; i < count; ++i) {
+        const GLuint id = renderbuffers[i];
+        state.renderbuffers.erase(id);
+        for (auto fb = state.framebufferAttachments.begin(); fb != state.framebufferAttachments.end();) {
+            for (auto attachment = fb->second.begin(); attachment != fb->second.end();) {
+                if (attachment->second.isRenderbuffer && attachment->second.texture == id)
+                    attachment = fb->second.erase(attachment);
+                else ++attachment;
+            }
+            if (fb->second.empty()) fb = state.framebufferAttachments.erase(fb);
+            else ++fb;
+        }
+    }
+}
 
 void LayerDeleteTextures(GLsizei count, const GLuint* textures) {
     if (g_nextDeleteTextures) g_nextDeleteTextures(count, textures);
@@ -390,6 +477,18 @@ void* AndroidGLESLayer_GetProcAddress(
     } else if (std::strcmp(funcName, "glDeleteFramebuffers") == 0) {
         if (next) g_nextDeleteFramebuffers = reinterpret_cast<GlDeleteFramebuffers>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerDeleteFramebuffers));
+    } else if (std::strcmp(funcName, "glBindRenderbuffer") == 0) {
+        if (next) g_nextBindRenderbuffer = reinterpret_cast<GlBindRenderbuffer>(next);
+        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerBindRenderbuffer));
+    } else if (std::strcmp(funcName, "glRenderbufferStorage") == 0) {
+        if (next) g_nextRenderbufferStorage = reinterpret_cast<GlRenderbufferStorage>(next);
+        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerRenderbufferStorage));
+    } else if (std::strcmp(funcName, "glFramebufferRenderbuffer") == 0) {
+        if (next) g_nextFramebufferRenderbuffer = reinterpret_cast<GlFramebufferRenderbuffer>(next);
+        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerFramebufferRenderbuffer));
+    } else if (std::strcmp(funcName, "glDeleteRenderbuffers") == 0) {
+        if (next) g_nextDeleteRenderbuffers = reinterpret_cast<GlDeleteRenderbuffers>(next);
+        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerDeleteRenderbuffers));
     } else if (std::strcmp(funcName, "glViewport") == 0) {
         if (next) g_nextViewport = reinterpret_cast<GlViewport>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerViewport));
