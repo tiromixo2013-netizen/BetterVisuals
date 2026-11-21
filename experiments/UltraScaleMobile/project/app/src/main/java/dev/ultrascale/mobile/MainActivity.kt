@@ -27,6 +27,10 @@ class MainActivity : ComponentActivity() {
                         Text("Android 15+ • Vulkan / OpenGL ES • no ANGLE dependency")
                         Text("Shizuku: ${ShizukuBridge.status()}")
                         Button(onClick = { ShizukuBridge.requestPermission(); refresh++ }) { Text("Request Shizuku permission") }
+                        val deviceApis = remember { NativeGraphicsProbe.report() }
+                        Text("Device graphics APIs", style = MaterialTheme.typography.titleMedium)
+                        Text(deviceApis.first)
+                        Text(deviceApis.second)
                         Text("Installed games: ${games.size}")
                         Text("Layer injection is available only when the target opts in, is debuggable, or runs on a supported userdebug device.")
                     }
