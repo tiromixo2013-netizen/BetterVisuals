@@ -13,7 +13,7 @@ android {
         targetSdk = 35
         versionCode = 6
         versionName = "0.6.0-layer-lab"
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a"); version = "27.2.12479018" }
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         externalNativeBuild {
             cmake { cppFlags += listOf("-std=c++17", "-fvisibility=hidden") }
         }
