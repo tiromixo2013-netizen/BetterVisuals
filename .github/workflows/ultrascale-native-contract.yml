@@ -1,0 +1,27 @@
+name: UltraScale native contract
+
+on:
+  push:
+    branches:
+      - feature/ultrascale-mobile-api-injection-lab
+    paths:
+      - "experiments/UltraScaleMobile/unity-backend/native/**"
+      - "experiments/UltraScaleMobile/unity-backend/include/**"
+      - ".github/workflows/ultrascale-native-contract.yml"
+  pull_request:
+    paths:
+      - "experiments/UltraScaleMobile/unity-backend/native/**"
+      - "experiments/UltraScaleMobile/unity-backend/include/**"
+      - ".github/workflows/ultrascale-native-contract.yml"
+
+jobs:
+  host-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S experiments/UltraScaleMobile/unity-backend/native -B build/ultrascale-native -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build/ultrascale-native --parallel
+      - name: Test ABI and host fallback
+        run: ctest --test-dir build/ultrascale-native --output-on-failure
