@@ -16,6 +16,7 @@ namespace UltraScale.Unity
         private const string MwsrShaderName = "UltraScale/MWSR";
         private const string Fsr1ShaderName = "UltraScale/AMD_FSR1_EASU";
         private const string CasShaderName = "UltraScale/AMD_CAS";
+        private const string Sgsr1ShaderName = "UltraScale/Qualcomm_SGSR1";
 
         [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint ultrascale_unity_bridge_abi();
@@ -43,7 +44,8 @@ namespace UltraScale.Unity
             "UltraScale FSR Lite (custom)",
             "UltraScale 7-tap (experimental)",
             "MWSR (MIT)",
-            "AMD FSR1 EASU"
+            "AMD FSR1 EASU",
+            "Qualcomm SGSR1 (GLES 3.1+)"
         };
         private int selectedScaler = 1;
         private Material spatialMaterial;
@@ -51,6 +53,7 @@ namespace UltraScale.Unity
         private Material mwsrMaterial;
         private Material fsr1Material;
         private Material casMaterial;
+        private Material sgsr1Material;
 
         private void Awake()
         {
@@ -59,11 +62,13 @@ namespace UltraScale.Unity
             Shader mwsrShader = Shader.Find(MwsrShaderName);
             Shader fsr1Shader = Shader.Find(Fsr1ShaderName);
             Shader casShader = Shader.Find(CasShaderName);
+            Shader sgsr1Shader = Shader.Find(Sgsr1ShaderName);
             if (shader == null || !shader.isSupported ||
                 fsrLiteShader == null || !fsrLiteShader.isSupported ||
                 mwsrShader == null || !mwsrShader.isSupported ||
                 fsr1Shader == null || !fsr1Shader.isSupported ||
-                casShader == null || !casShader.isSupported)
+                casShader == null || !casShader.isSupported ||
+                sgsr1Shader == null || !sgsr1Shader.isSupported)
             {
                 RuntimeStatus = "UNSUPPORTED: one or more Unity shaders missing";
                 enabled = false;
@@ -75,6 +80,7 @@ namespace UltraScale.Unity
             mwsrMaterial = new Material(mwsrShader) { hideFlags = HideFlags.HideAndDontSave };
             fsr1Material = new Material(fsr1Shader) { hideFlags = HideFlags.HideAndDontSave };
             casMaterial = new Material(casShader) { hideFlags = HideFlags.HideAndDontSave };
+            sgsr1Material = new Material(sgsr1Shader) { hideFlags = HideFlags.HideAndDontSave };
             RuntimeStatus = "MANAGED_RENDER_READY";
 
             // The native bridge is optional for this managed Unity sample path.
@@ -135,7 +141,7 @@ namespace UltraScale.Unity
             GUILayout.Label("FSR Lite is the project custom six-sample filter, not AMD FSR.");
             GUILayout.Label("7-tap is a separate experimental spatial filter.");
             GUILayout.Label("MWSR is the upstream MIT HLSL spatial upscale port.");
-            GUILayout.Label("SGSR1 remains a separate port.");
+            GUILayout.Label("SGSR1 uses texture gather; requires a supported GLES 3.1+ backend.");
             GUI.DragWindow(new Rect(0, 0, 10000, 28));
         }
 
@@ -217,6 +223,13 @@ namespace UltraScale.Unity
                     fsr1Material.SetFloat("_Sharpness", 1f);
                     Graphics.Blit(reduced, upscaled, fsr1Material, 0);
                 }
+                else if (settings.scaler == "Qualcomm SGSR1 (GLES 3.1+)")
+                {
+                    sgsr1Material.SetVector("_ViewportInfo",
+                        new Vector4(1f / reduced.width, 1f / reduced.height,
+                            reduced.width, reduced.height));
+                    Graphics.Blit(reduced, upscaled, sgsr1Material, 0);
+                }
                 else
                 {
                     spatialMaterial.SetFloat("_Sharpness", 0f);
@@ -275,6 +288,13 @@ namespace UltraScale.Unity
                 if (Application.isPlaying) Destroy(casMaterial);
                 else DestroyImmediate(casMaterial);
                 casMaterial = null;
+            }
+
+            if (sgsr1Material != null)
+            {
+                if (Application.isPlaying) Destroy(sgsr1Material);
+                else DestroyImmediate(sgsr1Material);
+                sgsr1Material = null;
             }
         }
     }
