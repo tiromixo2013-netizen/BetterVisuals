@@ -125,6 +125,34 @@ class RenderScaleHarnessActivity : Activity() {
         root.addView(sharpnessLabel)
         root.addView(sharpness)
 
+        val presetLabel = TextView(this).apply {
+            text = "Preset"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            setPadding(0, 10, 0, 4)
+        }
+        val presetPicker = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@RenderScaleHarnessActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                listOf("Custom", "Performance · 50%", "Balanced · 70%", "Quality · 85%", "Native · 100%")
+            )
+            setSelection(0)
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                    when (position) {
+                        1 -> { scale.progress = 25; upscalerPicker.setSelection(0); sharpness.progress = 0 }
+                        2 -> { scale.progress = 45; upscalerPicker.setSelection(1); sharpness.progress = 25 }
+                        3 -> { scale.progress = 60; upscalerPicker.setSelection(1); sharpness.progress = 45 }
+                        4 -> { scale.progress = 75; upscalerPicker.setSelection(0); sharpness.progress = 0 }
+                    }
+                }
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            }
+        }
+        root.addView(presetLabel)
+        root.addView(presetPicker)
+
         root.addView(surface, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
         ))
