@@ -159,6 +159,10 @@ extern "C" int32_t ultrascale_gles_process_texture(
     old.cull = glIsEnabled(GL_CULL_FACE);
     old.stencil = glIsEnabled(GL_STENCIL_TEST);
 
+    if (!glIsTexture(src_texture) || !glIsTexture(dst_texture)) {
+        restore_state(old);
+        return US_GLES_INVALID_ARGUMENT;
+    }
     GLint actual_width = 0, actual_height = 0;
     glBindTexture(GL_TEXTURE_2D, src_texture);
     glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &actual_width);
@@ -186,6 +190,13 @@ extern "C" int32_t ultrascale_gles_process_texture(
     GLuint fbo = 0, vao = 0;
     glGenFramebuffers(1, &fbo);
     glGenVertexArrays(1, &vao);
+    if (!fbo || !vao) {
+        if (vao) glDeleteVertexArrays(1, &vao);
+        if (fbo) glDeleteFramebuffers(1, &fbo);
+        glDeleteProgram(program);
+        restore_state(old);
+        return US_GLES_GL_ERROR;
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                             GL_TEXTURE_2D, dst_texture, 0);
