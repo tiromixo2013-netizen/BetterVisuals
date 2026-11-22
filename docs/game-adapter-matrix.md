@@ -1,0 +1,56 @@
+# UltraScale Mobile game adapter matrix
+
+This document is the source of truth for game-specific adapter registration. A game name or package match is not proof that a graphics layer can be loaded.
+
+## Supported priority targets
+
+| Priority | Game | Package identity | Version pin | ABI | Adapter state |
+|---|---|---|---|---|---|
+| P0 | Asphalt 8 | `com.gameloft.android.ANMP.GloftA8HM` | `9.1.0i (91009)` observed from the user's selected APK | Not established; the scan reported ABI `none` | Identity observed; no tested adapter |
+| P0 | Geometry Dash | `com.robtopx.geometryjump` (candidate; verify against the selected APK) | Android `2.2081` is the initial research target, not yet verified from a supplied APK | ARM64 is the initial target, not yet verified from a supplied APK | Research target; no tested adapter |
+| P0 | Beach Buggy Racing | `com.vectorunit.purple.googleplay` (candidate; verify against the selected APK) | Not pinned | Not established | Research target; no tested adapter |
+
+Package IDs marked candidate must be confirmed from the APK manifest before registration. Store variants, regional variants, and sequel packages must not be silently treated as equivalent.
+
+## Adapter contract
+
+Each game adapter must declare:
+
+- Exact package name and an explicit list of tested version codes.
+- Supported ABIs and required native library fingerprints.
+- Detected graphics API evidence, distinguishing static APK hints from runtime-confirmed API use.
+- Engine-specific integration route and its validation status.
+- Whether the route can only inspect, can configure a documented Android layer opt-in, or can execute a tested render integration.
+- Known incompatibilities and a safe fallback.
+
+An adapter must fail closed when package, version, ABI, library fingerprint, or required Android layer-loading eligibility does not match. Never select an adapter using only a display name or a loose package prefix.
+
+## Registration states
+
+- `IDENTITY_ONLY`: APK identity was read; no game integration is available.
+- `RESEARCH_ONLY`: candidate package/version is known, but no exact APK and runtime evidence have been validated.
+- `ELIGIBILITY_BLOCKED`: Android's documented layer-loading requirements are not met.
+- `INTEGRATION_TESTED`: exact package/version/ABI and the relevant runtime route were tested.
+- `RENDER_PASS_TESTED`: the game's actual render path was modified and output correctness/performance were validated.
+
+Only `INTEGRATION_TESTED` or `RENDER_PASS_TESTED` may be described as a working adapter. A successful APK scan, successful build, or Shizuku shell permission is not an injection test.
+
+## Android security boundary
+
+Shizuku shell access does not grant root and does not bypass Android's graphics-layer eligibility checks. A manager app cannot grant another app the manifest opt-in by changing its own manifest. Do not patch, re-sign, or claim to inject a target APK unless that operation is actually implemented and validated. Prefer the documented opt-in/debuggable path where the target app itself supports it; otherwise report the limitation and keep the target unchanged.
+
+## Required validation before enabling Inject
+
+1. Parse the selected APK's manifest and record package/version.
+2. Enumerate every APK split and native library; do not infer ABI from a base APK when the native libraries may be in splits or downloaded assets.
+3. Fingerprint relevant engine and graphics libraries.
+4. Resolve runtime API evidence separately from static heuristics.
+5. Check Android layer-loading eligibility for the installed target.
+6. Require an exact adapter match and a tested integration route.
+7. Keep the action disabled with a specific reason when any gate fails.
+
+## Per-game next evidence
+
+- Asphalt 8: obtain the installed app's complete split set (or a complete APK set), then inspect native libraries and engine/API fingerprints for version code 91009.
+- Geometry Dash: verify the exact package, version code, ABI, and native library set from the target APK before developing an engine-specific route.
+- Beach Buggy Racing: verify the exact package and whether the APK is the original game or another Vector Unit title; then pin version and ABI before adapter registration.
