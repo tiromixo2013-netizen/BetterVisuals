@@ -42,9 +42,9 @@ All modes here are single-frame spatial processing. No temporal history, motion 
 
 - Shader support is checked independently; an unavailable selected shader falls back to bilinear.
 - Built-in and URP adapters are separate. HDRP is not implemented.
-- The native GLES/Vulkan C ABI remains a fail-closed scaffold and is not connected to these managed material passes.
+- The legacy generic GLES/Vulkan frame ABI remains fail-closed. A separate GLES3 texture backend is now wired through a Unity render event for the Built-in adapter; it provides only bilinear and project-authored edge/detail sharpening. Vulkan still has no processor.
 - This code must be integrated into an owned Unity project. It does not inject into arbitrary third-party games or modify their native settings.
-- No Unity build, Android runtime, shader compiler, image-quality, frame-time or thermal validation is claimed.
+- A GitHub Actions host contract workflow was added for CMake/CTest. Its host branch tests ABI validation and the non-Android GLES fallback; it does not compile the Android GLES implementation. No Unity build, Android NDK build, shader compiler, device image-quality, frame-time or thermal validation is claimed.
 
 ## Packaging
 
@@ -78,3 +78,7 @@ Important constraints:
 - Driver orientation, texture format, FBO completeness, event ordering and actual image output still require a Unity Android build and device validation.
 - The native GLES API is not currently wired into the URP adapter.
 - Vulkan still has no native processing implementation; its ABI remains fail-closed.
+
+## Automated native contract check
+
+`.github/workflows/ultrascale-native-contract.yml` configures and builds the native CMake target on Ubuntu, then runs CTest for the ABI contract and host-platform GLES fallback. The Android GLES source is conditionally compiled only on Android, so this CI job is not an Android build or GPU validation.
