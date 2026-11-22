@@ -7,6 +7,8 @@ import android.content.pm.ApplicationInfo
 import android.widget.ImageView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import rikka.shizuku.Shizuku
 
 private val Ink = Color(0xFF10111A)
@@ -58,6 +61,20 @@ class MainActivity : ComponentActivity() {
                 var refresh by remember { mutableIntStateOf(0) }
                 var showAllApps by remember { mutableStateOf(false) }
                 var query by remember { mutableStateOf("") }
+                var apkRecon by remember { mutableStateOf<GameRecon.Report?>(null) }
+                var apkReconError by remember { mutableStateOf("") }
+                val scope = rememberCoroutineScope()
+                val apkPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                    if (uri != null) scope.launch {
+                        apkReconError = ""
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                GameRecon.inspectSelectedApk(this@MainActivity, uri, uri.lastPathSegment?.substringAfterLast('/') ?: "Selected APK")
+                            }
+                        }.onSuccess { apkRecon = it }
+                            .onFailure { apkReconError = "APK scan failed: ${it.message}" }
+                    }
+                }
                 var shizukuRefresh by remember { mutableIntStateOf(0) }
                 DisposableEffect(Unit) {
                     refreshPermissionUi = { shizukuRefresh++ }
@@ -141,6 +158,24 @@ class MainActivity : ComponentActivity() {
                     }
                     item { UpscalerLibraryCard() }
                     item {
+                        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                                Text("APK FILE INSPECTOR", color = Violet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                Text("Choose an APK file to fingerprint its engine, native ABI libraries and public asset/config hints.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                OutlinedButton(onClick = { apkPicker.launch(arrayOf("application/vnd.android.package-archive", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Inspect selected APK")
+                                }
+                                if (apkReconError.isNotBlank()) Text(apkReconError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                apkRecon?.let { r ->
+                                    Text("${r.label} · ${r.engine}", fontWeight = FontWeight.SemiBold)
+                                    Text("ABI: ${r.nativeAbis.joinToString().ifBlank { "Not found" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                    Text("Graphics libraries: ${r.graphicsLibraries.joinToString().ifBlank { "No obvious signature" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                    Text("Config/asset hints: ${r.assetHints.size} entries", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                    item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("Installed games", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -175,8 +210,11 @@ class MainActivity : ComponentActivity() {
                                 GraphicsApiScanner.inspect(this@MainActivity, app)
                             }
                         }
+                        val recon by produceState<GameRecon.Report?>(initialValue = null, app.packageName) {
+                            value = withContext(Dispatchers.IO) { GameRecon.inspectInstalled(this@MainActivity, app, label) }
+                        }
                         if (report != null) {
-                            GameCard(app, label, report!!)
+                            GameCard(app, label, report!!, recon)
                         } else {
                             Card(
                                 colors = CardDefaults.cardColors(containerColor = Panel),
@@ -282,7 +320,7 @@ private fun UpscalerLibraryCard() {
 }
 
 @Composable
-private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport) {
+private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport, recon: GameRecon.Report?) {
     var expanded by remember(app.packageName) { mutableStateOf(app.packageName == "com.gameloft.android.ANMP.GloftA8HM") }
     var feedback by remember(app.packageName) { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -320,6 +358,12 @@ private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport) {
             Text("Version: ${report.versionName} (${report.versionCode}) · Target SDK ${report.targetSdk}", color = Muted, style = MaterialTheme.typography.bodySmall)
             Text("Native ABI: ${report.nativeAbis.joinToString().ifBlank { "No packaged native libraries" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
             Text("Native libraries: ${report.nativeLibraryCount}", color = Muted, style = MaterialTheme.typography.bodySmall)
+            if (recon != null) {
+                Text("Install source: ${recon.installKind}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Text("APK fingerprint: ${recon.engine} · ${recon.nativeAbis.joinToString().ifBlank { "ABI not found" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                Text("Graphics libraries: ${recon.graphicsLibraries.joinToString().ifBlank { "No clear native signature" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                if (recon.assetHints.isNotEmpty()) Text("Public config/asset hints: ${recon.assetHints.size}", color = Muted, style = MaterialTheme.typography.bodySmall)
+            }
             Text("Candidate APIs: ${report.candidateApis.joinToString().ifBlank { "Not detected" }}", style = MaterialTheme.typography.bodyMedium)
             Text(
                 "Runtime API is not confirmed by APK signature scanning.",
