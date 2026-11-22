@@ -102,7 +102,7 @@ void accumulateTap(
     weight += w;
 }
 
-fixed4 frag(v2f_img input) {
+float4 frag(v2f_img input) {
     float2 inputSize = 1.0 / _InvResolution;
 
     // Output pixel centers {0 to output-1} map to input texel space with a
@@ -205,7 +205,7 @@ fixed4 frag(v2f_img input) {
         min(max4, max(min4, accumulation * (1.0 / weight))),
         clamp(_Sharpness, 0.0, 1.0)
     );
-    return fixed4(pixel, f.a);
+    return float4(pixel, f.a);
 }
 
             ENDCG
