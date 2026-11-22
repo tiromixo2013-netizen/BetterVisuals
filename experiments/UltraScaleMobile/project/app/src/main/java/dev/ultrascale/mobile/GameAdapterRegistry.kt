@@ -30,6 +30,9 @@ object GameAdapterRegistry {
     )
 
     fun resolve(result: ApkInjectionPipeline.Preflight): Match {
+        if (result.decision != "ADAPTER_REQUIRED" || !result.validZip || !result.hasManifest || result.dexFiles.isEmpty()) {
+            return Match(null, "APK preflight did not pass; adapter routing is blocked.")
+        }
         if (result.packageName.isNullOrBlank()) {
             return Match(null, "The APK package identity could not be read.")
         }
