@@ -297,27 +297,29 @@ class MainActivity : ComponentActivity() {
                                                 enabled = selectedTargetVersionMatches && (vulkanReady || glesReady) &&
                                                     ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
                                                 onClick = {
-                                                    val packageName = selectedTargetPackage ?: return@Button
-                                                    val results = mutableListOf<String>()
-                                                    if (vulkanReady) {
-                                                        ShizukuBridge.configureDebugLayer(packageName, this@MainActivity.packageName, LayerApi.VULKAN, true)
-                                                            .onSuccess { results += "Vulkan configured" }
-                                                            .onFailure { results += "Vulkan failed: ${it.message}" }
-                                                    }
-                                                    if (glesReady) {
-                                                        ShizukuBridge.configureDebugLayer(packageName, this@MainActivity.packageName, LayerApi.OPENGL_ES, true)
-                                                            .onSuccess { results += "GLES configured" }
-                                                            .onFailure { results += "GLES failed: ${it.message}" }
-                                                    }
-                                                    selectedLayerFeedback = results.joinToString(" · ")
-                                                    if (results.isNotEmpty() && results.all { it.endsWith("configured") }) {
-                                                        val launch = packageManager.getLaunchIntentForPackage(packageName)
-                                                        if (launch != null) {
-                                                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                            startActivity(launch)
-                                                            selectedLayerFeedback += " · Game launched; restart fully if it was already running."
-                                                        } else {
-                                                            selectedLayerFeedback += " · Settings saved; launch the game manually."
+                                                    val packageName = selectedTargetPackage.orEmpty()
+                                                    if (packageName.isNotBlank()) {
+                                                        val results = mutableListOf<String>()
+                                                        if (vulkanReady) {
+                                                            ShizukuBridge.configureDebugLayer(packageName, this@MainActivity.packageName, LayerApi.VULKAN, true)
+                                                                .onSuccess { results += "Vulkan configured" }
+                                                                .onFailure { results += "Vulkan failed: ${it.message}" }
+                                                        }
+                                                        if (glesReady) {
+                                                            ShizukuBridge.configureDebugLayer(packageName, this@MainActivity.packageName, LayerApi.OPENGL_ES, true)
+                                                                .onSuccess { results += "GLES configured" }
+                                                                .onFailure { results += "GLES failed: ${it.message}" }
+                                                        }
+                                                        selectedLayerFeedback = results.joinToString(" · ")
+                                                        if (results.isNotEmpty() && results.all { it.endsWith("configured") }) {
+                                                            val launch = packageManager.getLaunchIntentForPackage(packageName)
+                                                            if (launch != null) {
+                                                                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                                startActivity(launch)
+                                                                selectedLayerFeedback += " · Game launched; restart fully if it was already running."
+                                                            } else {
+                                                                selectedLayerFeedback += " · Settings saved; launch the game manually."
+                                                            }
                                                         }
                                                     }
                                                 },
