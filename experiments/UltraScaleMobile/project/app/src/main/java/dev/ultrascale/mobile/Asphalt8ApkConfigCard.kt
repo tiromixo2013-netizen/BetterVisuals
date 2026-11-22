@@ -19,6 +19,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -296,6 +297,8 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
     var selectedSection by remember { mutableStateOf("GPU") }
     var selectedTarget by remember { mutableStateOf(DEFAULT_CONFIG_TARGET) }
     var editStatus by remember { mutableStateOf("") }
+    var deployStatus by remember { mutableStateOf("") }
+    var deploying by remember { mutableStateOf(false) }
 
     val exportPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -442,6 +445,57 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                     enabled = editedJson.isNotBlank(),
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Export edited gameoptions.json") }
+
+                Text(
+                    "Game-native path: edit Specific → your device profile → scaleDisplay, then write the JSON into Asphalt 8's files folder. Connect Shizuku in the device card first.",
+                    color = AsphaltMuted,
+                    style = MaterialTheme.typography.labelSmall
+                )
+                Button(
+                    onClick = {
+                        val jsonToInstall = editedJson
+                        deploying = true
+                        deployStatus = "Writing the game config and making a backup…"
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                ShizukuBridge.deployAsphalt8Config(jsonToInstall)
+                            }
+                            deployStatus = result.fold(
+                                onSuccess = { it },
+                                onFailure = { "Install failed: ${it.message}" }
+                            )
+                            deploying = false
+                        }
+                    },
+                    enabled = editedJson.isNotBlank() && !deploying &&
+                        ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (deploying) "Applying…" else "Apply game-native scale config to Asphalt 8") }
+                OutlinedButton(
+                    onClick = {
+                        deploying = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                ShizukuBridge.restoreAsphalt8Config()
+                            }
+                            deployStatus = result.fold(
+                                onSuccess = { it },
+                                onFailure = { "Restore failed: ${it.message}" }
+                            )
+                            deploying = false
+                        }
+                    },
+                    enabled = !deploying && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Restore previous gameoptions.json backup") }
+                if (deployStatus.isNotBlank()) {
+                    Text(
+                        deployStatus,
+                        color = if (deployStatus.contains("failed", true) || deployStatus.contains("cannot", true) || deployStatus.contains("not found", true))
+                            MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
             Text(
                 status,
@@ -455,6 +509,15 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
             )
         }
     }
+}
+
+
+private fun parseScaleDisplayBounds(range: String): Pair<Float, Float> {
+    val match = Regex("""^\[\s*(-?\d+(?:\.\d+)?)?\s*;\s*(-?\d+(?:\.\d+)?)?\s*\]$""")
+        .matchEntire(range.trim())
+    val minimum = match?.groupValues?.getOrNull(1)?.toFloatOrNull() ?: 50f
+    val maximum = match?.groupValues?.getOrNull(2)?.toFloatOrNull() ?: 100f
+    return if (minimum < maximum) minimum to maximum else 50f to 100f
 }
 
 @Composable
@@ -516,7 +579,28 @@ private fun AsphaltSettingRow(
                 )
             }
         }
-        if (setting.value !is Boolean) {
+        val numericValue = setting.value as? Number
+        if (setting.key == "scaleDisplay" && numericValue != null) {
+            val bounds = parseScaleDisplayBounds(setting.range)
+            var scaleDraft by remember(setting.key, setting.value) {
+                mutableStateOf(numericValue.toFloat().coerceIn(bounds.first, bounds.second))
+            }
+            Text(
+                "Game-native scaleDisplay: ${scaleDraft.toInt()}",
+                color = AsphaltViolet,
+                style = MaterialTheme.typography.labelMedium
+            )
+            Slider(
+                value = scaleDraft,
+                onValueChange = { scaleDraft = it },
+                valueRange = bounds.first..bounds.second,
+                steps = 9
+            )
+            Button(
+                onClick = { onSet(scaleDraft.toInt().toString()) },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Set scaleDisplay") }
+        } else if (setting.value !is Boolean) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
