@@ -2,6 +2,7 @@
 package dev.ultrascale.mobile
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.content.pm.ApplicationInfo
 import android.widget.ImageView
@@ -64,9 +65,11 @@ class MainActivity : ComponentActivity() {
                 var apkRecon by remember { mutableStateOf<GameRecon.Report?>(null) }
                 var apkReconError by remember { mutableStateOf("") }
                 var apkInjectionStatus by remember { mutableStateOf("") }
+                var selectedApkUri by remember { mutableStateOf<Uri?>(null) }
                 val scope = rememberCoroutineScope()
                 val apkPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     if (uri != null) scope.launch {
+                        selectedApkUri = uri
                         apkReconError = ""
                         apkInjectionStatus = ""
                         runCatching {
@@ -181,7 +184,25 @@ class MainActivity : ComponentActivity() {
                                     Text("Config/asset hints: ${r.assetHints.size}", color = Muted, style = MaterialTheme.typography.bodySmall)
                                     if (!r.apkReadable) Text("The selected document could not be confirmed as a readable APK. Try selecting base.apk again from the file manager, or select the matching split APKs too.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                                     Text("Note: scanning base.apk alone may miss resources and libraries stored in split APKs or downloaded game data. This scan does not inject or change the game.", color = Muted, style = MaterialTheme.typography.bodySmall)
-                                    Button(enabled = r.apkReadable, onClick = { apkInjectionStatus = "Preflight complete. No tested game-specific adapter is registered for this APK. No files were changed; a verified adapter for this exact game, version and ABI is required before patching and signing." }, modifier = Modifier.fillMaxWidth()) { Text("Inject UltraScale") }
+                                    Button(
+                                        enabled = r.apkReadable && selectedApkUri != null,
+                                        onClick = {
+                                            val uri = selectedApkUri
+                                            if (uri != null) scope.launch {
+                                                apkInjectionStatus = "Checking APK archive and fingerprint…"
+                                                runCatching {
+                                                    withContext(Dispatchers.IO) {
+                                                        ApkInjectionPipeline.inspect(this@MainActivity, uri)
+                                                    }
+                                                }.onSuccess { result ->
+                                                    apkInjectionStatus = "${result.decision} · ${result.detail}\nEntries: ${result.entryCount} · DEX: ${result.dexFiles.joinToString()} · ABI: ${result.nativeAbis.joinToString().ifBlank { "none" }} · Existing signature metadata: ${result.hasV1SignatureMetadata}"
+                                                }.onFailure {
+                                                    apkInjectionStatus = "Preflight failed: ${it.message}"
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text("Inject UltraScale") }
                                     if (apkInjectionStatus.isNotBlank()) Text(apkInjectionStatus, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
