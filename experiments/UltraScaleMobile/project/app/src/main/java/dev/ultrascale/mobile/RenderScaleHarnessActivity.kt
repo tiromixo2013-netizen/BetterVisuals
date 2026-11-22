@@ -45,6 +45,7 @@ class RenderScaleHarnessActivity : Activity() {
         )
         renderer.setReconstructionSharpness(savedProfile.upscaleSharpnessPercent / 100f)
         renderer.setCasSharpness(savedProfile.casSharpnessPercent / 100f)
+        renderer.setIntegerScaling(savedProfile.integerScaling)
         surface = GLSurfaceView(this).apply {
             setEGLContextClientVersion(2)
             setRenderer(renderer)
@@ -216,6 +217,7 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
     @Volatile private var requestedUpscaler = 0
     @Volatile private var requestedReconstructionSharpness = 0f
     @Volatile private var requestedCasSharpness = 0f
+    @Volatile private var requestedIntegerScaling = false
     private var appliedScale = -1f
     private var surfaceWidth = 1
     private var surfaceHeight = 1
@@ -253,6 +255,11 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
 
     fun setCasSharpness(value: Float) {
         requestedCasSharpness = value.coerceIn(0f, 1f)
+    }
+
+    fun setIntegerScaling(enabled: Boolean) {
+        requestedIntegerScaling = enabled
+        if (enabled) requestedUpscaler = 2
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -318,7 +325,7 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
         // Apply sampling changes immediately when the picker changes.
-        val sampling = if (requestedUpscaler == 2) GLES20.GL_NEAREST else GLES20.GL_LINEAR
+        val sampling = if (requestedUpscaler == 2 || requestedIntegerScaling) GLES20.GL_NEAREST else GLES20.GL_LINEAR
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, sampling)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, sampling)
         GLES20.glUniform1i(compositeSampler, 0)
@@ -334,13 +341,15 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
 
     private fun createTarget(scale: Float): Boolean {
         releaseTarget()
-        targetWidth = max(1, (surfaceWidth * scale).roundToInt())
-        targetHeight = max(1, (surfaceHeight * scale).roundToInt())
+        targetWidth = if (requestedIntegerScaling) max(1, surfaceWidth / 2)
+            else max(1, (surfaceWidth * scale).roundToInt())
+        targetHeight = if (requestedIntegerScaling) max(1, surfaceHeight / 2)
+            else max(1, (surfaceHeight * scale).roundToInt())
         val names = IntArray(1)
         GLES20.glGenTextures(1, names, 0)
         texture = names[0]
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
-        val sampling = if (requestedUpscaler == 2) GLES20.GL_NEAREST else GLES20.GL_LINEAR
+        val sampling = if (requestedUpscaler == 2 || requestedIntegerScaling) GLES20.GL_NEAREST else GLES20.GL_LINEAR
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, sampling)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, sampling)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
