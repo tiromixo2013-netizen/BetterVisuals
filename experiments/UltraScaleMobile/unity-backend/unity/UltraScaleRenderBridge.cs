@@ -12,6 +12,7 @@ namespace UltraScale.Unity
     {
         private const string NativeLibrary = "ultrascale_unity_bridge";
         private const string ShaderName = "UltraScale/Spatial7Tap";
+        private const string FsrLiteShaderName = "UltraScale/FSRLiteCustom";
 
         [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint ultrascale_unity_bridge_abi();
@@ -25,7 +26,7 @@ namespace UltraScale.Unity
             [Range(0.5f, 1f)] public float renderScale = 0.75f;
             [Range(0f, 1f)] public float sharpness = 0.2f;
             public bool sharpeningEnabled;
-            public string scaler = "UltraScale 7-tap (experimental)";
+            public string scaler = "UltraScale FSR Lite (custom)";
         }
 
         public Settings settings = new Settings();
@@ -40,18 +41,22 @@ namespace UltraScale.Unity
         };
         private int selectedScaler = 1;
         private Material spatialMaterial;
+        private Material fsrLiteMaterial;
 
         private void Awake()
         {
             Shader shader = Shader.Find(ShaderName);
-            if (shader == null || !shader.isSupported)
+            Shader fsrLiteShader = Shader.Find(FsrLiteShaderName);
+            if (shader == null || !shader.isSupported ||
+                fsrLiteShader == null || !fsrLiteShader.isSupported)
             {
-                RuntimeStatus = "UNSUPPORTED: spatial shader missing";
+                RuntimeStatus = "UNSUPPORTED: one or more Unity shaders missing";
                 enabled = false;
                 return;
             }
 
             spatialMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            fsrLiteMaterial = new Material(fsrLiteShader) { hideFlags = HideFlags.HideAndDontSave };
             RuntimeStatus = "MANAGED_RENDER_READY";
 
             // The native bridge is optional for this managed Unity sample path.
@@ -105,8 +110,9 @@ namespace UltraScale.Unity
             GUI.enabled = true;
 
             GUILayout.Space(8);
-            GUILayout.Label("7-tap is a project-authored spatial filter, not AMD FSR/SGSR.");
-            GUILayout.Label("MWSR, SGSR1 and FSR1 EASU need separate Unity shader ports.");
+            GUILayout.Label("FSR Lite is the project custom six-sample filter, not AMD FSR.");
+            GUILayout.Label("7-tap is a separate experimental spatial filter.");
+            GUILayout.Label("MWSR, SGSR1 and AMD FSR1 EASU need separate Unity ports.");
             GUI.DragWindow(new Rect(0, 0, 10000, 28));
         }
 
@@ -136,9 +142,16 @@ namespace UltraScale.Unity
                 }
                 else
                 {
-                    spatialMaterial.SetFloat("_Sharpness",
-                        settings.sharpeningEnabled ? settings.sharpness : 0f);
-                    Graphics.Blit(reduced, destination, spatialMaterial, 0);
+                    if (settings.scaler == "UltraScale FSR Lite (custom)")
+                    {
+                        Graphics.Blit(reduced, destination, fsrLiteMaterial, 0);
+                    }
+                    else
+                    {
+                        spatialMaterial.SetFloat("_Sharpness",
+                            settings.sharpeningEnabled ? settings.sharpness : 0f);
+                        Graphics.Blit(reduced, destination, spatialMaterial, 0);
+                    }
                 }
             }
             finally
@@ -154,6 +167,13 @@ namespace UltraScale.Unity
                 if (Application.isPlaying) Destroy(spatialMaterial);
                 else DestroyImmediate(spatialMaterial);
                 spatialMaterial = null;
+            }
+
+            if (fsrLiteMaterial != null)
+            {
+                if (Application.isPlaying) Destroy(fsrLiteMaterial);
+                else DestroyImmediate(fsrLiteMaterial);
+                fsrLiteMaterial = null;
             }
         }
     }
