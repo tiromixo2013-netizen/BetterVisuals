@@ -117,8 +117,11 @@ class RenderScaleHarnessActivity : Activity() {
         root.addView(label("4 · Upscaling Preset"))
         val casSharpness = SeekBar(this).apply { max = 100; progress = 0 }
         val presetPicker = picker(listOf("Custom", "Performance", "Balanced", "Quality", "Ultra Quality")) { index ->
-            val presetScale = listOf(70, 50, 70, 85, 90)[index]
-            scalePicker.setSelection(listOf(50, 60, 70, 75, 85, 90, 100).indexOf(presetScale).coerceAtLeast(0))
+            // Custom preserves manually selected controls; named presets apply their tested defaults.
+            if (index != 0) {
+                val presetScale = listOf(50, 70, 85, 90)[index - 1]
+                scalePicker.setSelection(listOf(50, 60, 70, 75, 85, 90, 100).indexOf(presetScale))
+            }
             when (index) {
                 1 -> { upscalerPicker.setSelection(6); upscaleSharpness.progress = 10; casSharpness.progress = 10 }
                 2 -> { upscalerPicker.setSelection(6); upscaleSharpness.progress = 25; casSharpness.progress = 20 }
