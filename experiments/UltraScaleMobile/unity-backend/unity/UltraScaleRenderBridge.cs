@@ -11,7 +11,7 @@ namespace UltraScale.Unity
     public sealed class UltraScaleRenderBridge : MonoBehaviour
     {
         private const string NativeLibrary = "ultrascale_unity_bridge";
-        private const string ShaderName = "UltraScale/Spatial6Tap";
+        private const string ShaderName = "UltraScale/Spatial7Tap";
 
         [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint ultrascale_unity_bridge_abi();
@@ -25,7 +25,7 @@ namespace UltraScale.Unity
             [Range(0.5f, 1f)] public float renderScale = 0.75f;
             [Range(0f, 1f)] public float sharpness = 0.2f;
             public bool sharpeningEnabled;
-            public string scaler = "UltraScale 6-tap (experimental)";
+            public string scaler = "UltraScale 7-tap (experimental)";
         }
 
         public Settings settings = new Settings();
@@ -105,7 +105,7 @@ namespace UltraScale.Unity
             GUI.enabled = true;
 
             GUILayout.Space(8);
-            GUILayout.Label("6-tap is a project-authored spatial filter, not AMD FSR/SGSR.");
+            GUILayout.Label("7-tap is a project-authored spatial filter, not AMD FSR/SGSR.");
             GUILayout.Label("MWSR, SGSR1 and FSR1 EASU need separate Unity shader ports.");
             GUI.DragWindow(new Rect(0, 0, 10000, 28));
         }
