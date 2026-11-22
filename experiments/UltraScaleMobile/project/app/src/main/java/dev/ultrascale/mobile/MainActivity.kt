@@ -275,7 +275,7 @@ class MainActivity : ComponentActivity() {
                                         val vulkanReady = RenderApi.VULKAN in target.candidateApis &&
                                             target.vulkanLayer in setOf(LayerReadiness.ELIGIBLE_OPT_IN, LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
                                         val glesReady = RenderApi.OPENGL_ES in target.candidateApis &&
-                                            target.glesLayer in setOf(LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
+                                            target.glesLayer in setOf(LayerReadiness.ELIGIBLE_OPT_IN, LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
                                         HorizontalDivider(color = Color.White.copy(alpha = .08f))
                                         Text("INSTALLED TARGET · ${selectedTargetPackage}", fontWeight = FontWeight.SemiBold)
                                         if (!selectedTargetVersionMatches) {
