@@ -20,6 +20,7 @@ using GlViewport = void (*)(GLint, GLint, GLsizei, GLsizei);
 using GlDrawArrays = void (*)(GLenum, GLint, GLsizei);
 using GlDrawElements = void (*)(GLenum, GLsizei, GLenum, const void*);
 using GlFramebufferTexture2D = void (*)(GLenum, GLenum, GLenum, GLuint, GLint);
+using GlCheckFramebufferStatus = GLenum (*)(GLenum);
 using GlTexImage2D = void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*);
 using GlTexStorage2D = void (*)(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
 using GlDeleteTextures = void (*)(GLsizei, const GLuint*);
@@ -52,6 +53,7 @@ struct ContextState {
     GLsizei viewportHeight = 0;
     uint64_t drawCalls = 0;
     uint64_t attachmentUpdates = 0;
+    GLenum lastFramebufferStatus = 0;
     GLuint lastAttachedTexture = 0;
     GLuint lastDrawFramebuffer = 0;
     GLuint lastDrawTexture = 0;
@@ -68,6 +70,7 @@ struct FrameTelemetry {
     GLsizei viewportHeight = 0;
     uint64_t drawCalls = 0;
     uint64_t attachmentUpdates = 0;
+    GLenum lastFramebufferStatus = 0;
     GLuint lastAttachedTexture = 0;
     GLuint lastDrawFramebuffer = 0;
     GLuint lastDrawTexture = 0;
@@ -91,6 +94,7 @@ GlViewport g_nextViewport = nullptr;
 GlDrawArrays g_nextDrawArrays = nullptr;
 GlDrawElements g_nextDrawElements = nullptr;
 GlFramebufferTexture2D g_nextFramebufferTexture2D = nullptr;
+GlCheckFramebufferStatus g_nextCheckFramebufferStatus = nullptr;
 GlTexImage2D g_nextTexImage2D = nullptr;
 GlTexStorage2D g_nextTexStorage2D = nullptr;
 GlDeleteTextures g_nextDeleteTextures = nullptr;
@@ -410,6 +414,19 @@ void LayerFramebufferTexture2D(
     }
 }
 
+GLenum LayerCheckFramebufferStatus(GLenum target) {
+    if (!g_nextCheckFramebufferStatus) return 0;
+    const GLenum status = g_nextCheckFramebufferStatus(target);
+    if (target == GL_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER) {
+        const EGLContext context = CurrentContext();
+        if (context != EGL_NO_CONTEXT) {
+            std::lock_guard<std::mutex> lock(g_contextMutex);
+            StateFor(context).lastFramebufferStatus = status;
+        }
+    }
+    return status;
+}
+
 EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
     const uint64_t frame = ++g_frames;
     if (!g_nextSwapBuffers) return EGL_FALSE;
@@ -437,6 +454,7 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
             snapshot.drawCalls = state.drawCalls;
             state.drawCalls = 0;
             snapshot.attachmentUpdates = state.attachmentUpdates;
+            snapshot.lastFramebufferStatus = state.lastFramebufferStatus;
             snapshot.lastAttachedTexture = state.lastAttachedTexture;
             snapshot.lastDrawFramebuffer = state.lastDrawFramebuffer;
             snapshot.lastDrawTexture = state.lastDrawTexture;
@@ -450,7 +468,7 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
         const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - start).count();
         __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
-            "Layer telemetry frame=%llu surface=%dx%d context=%p bound_fbo=%u last_draw_fbo=%u last_draw_texture=%u viewport=%d,%d %dx%d draws=%llu attachments=%llu last_attached=%u texture_size=%dx%d internal_format=0x%x samples=%d swap_call=%lldus result=%d",
+            "Layer telemetry frame=%llu surface=%dx%d context=%p bound_fbo=%u last_draw_fbo=%u last_draw_texture=%u viewport=%d,%d %dx%d draws=%llu attachments=%llu fbo_status=0x%x last_attached=%u texture_size=%dx%d internal_format=0x%x samples=%d swap_call=%lldus result=%d",
             static_cast<unsigned long long>(frame), width, height,
             reinterpret_cast<void*>(context), snapshot.boundFramebuffer,
             snapshot.lastDrawFramebuffer, snapshot.lastDrawTexture,
@@ -458,6 +476,7 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
             snapshot.viewportWidth, snapshot.viewportHeight,
             static_cast<unsigned long long>(snapshot.drawCalls),
             static_cast<unsigned long long>(snapshot.attachmentUpdates),
+            snapshot.lastFramebufferStatus,
             snapshot.lastAttachedTexture,
             snapshot.targetTextureInfo.width,
             snapshot.targetTextureInfo.height,
@@ -552,6 +571,9 @@ void* AndroidGLESLayer_GetProcAddress(
     } else if (std::strcmp(funcName, "glFramebufferTexture2D") == 0) {
         if (next) g_nextFramebufferTexture2D = reinterpret_cast<GlFramebufferTexture2D>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerFramebufferTexture2D));
+    } else if (std::strcmp(funcName, "glCheckFramebufferStatus") == 0) {
+        if (next) g_nextCheckFramebufferStatus = reinterpret_cast<GlCheckFramebufferStatus>(next);
+        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerCheckFramebufferStatus));
     }
     return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(next));
 }
