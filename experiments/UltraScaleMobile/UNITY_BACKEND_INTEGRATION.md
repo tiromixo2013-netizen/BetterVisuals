@@ -90,3 +90,18 @@ The adapter now contains a working managed render-path implementation for an own
 - The native C ABI is still a separate scaffold and is not called to process frame textures. The managed shader path does not require the native bridge library to be packaged.
 
 This is a real render operation only when the script and shader are added to an owned Unity Built-in RP project and attached to its camera. It does not inject into third-party games. URP/SRP support and device-side validation remain outstanding.
+
+
+## Expanded managed Unity scaler chain
+
+The Built-in Render Pipeline adapter now has separate Unity shader assets and mode wiring for:
+- Bilinear and the project's custom FSR Lite spatial filter.
+- The project-authored seven-tap spatial filter.
+- **MWSR**: adapted from the upstream MoonlightWeb HLSL upscale shader, with its per-scale parameter law (`kc`, `kg`, `kr`, `kl`) calculated from the input/output dimensions. The upstream MIT notice is retained.
+- **AMD FSR1 EASU-derived**: the bundled EASU fragment algorithm is adapted to Unity HLSL and receives the reduced input dimensions. The AMD MIT notice is retained.
+- **Qualcomm SGSR1**: an HLSL port using green-channel texture gathers, with input viewport dimensions passed by the camera adapter. It requires texture-gather support and a supported shader target/backend; do not assume it runs on every Android GPU. The Qualcomm BSD-3-Clause notice is retained.
+- **AMD CAS**: a separate optional sharpen-only pass after the selected scaler, with adjustable strength. It does not upscale by itself; the AMD MIT notice is retained.
+
+The render callback now uses a full-resolution intermediate RenderTexture so CAS can be applied after the selected spatial scaler without reading and writing the same target. Both temporary targets are released in a `finally` block. Optional shader materials are loaded independently; an unsupported optional shader does not disable the remaining modes and falls back to Bilinear when selected.
+
+These are managed shader paths in an owner-integrated Unity Built-in RP sample. The native GLES/Vulkan bridge is still not connected, and this does not provide a general-purpose injector or modify third-party game UI. URP/SRP and device-side validation remain outstanding. No build or device test has been claimed.
