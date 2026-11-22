@@ -15,7 +15,7 @@ object GeodeModInstaller {
     data class Validation(val valid: Boolean, val modId: String?, val detail: String)
     data class InstallResult(val success: Boolean, val fileName: String, val detail: String)
 
-    fun validate(context: Context, uri: Uri, requiredAbi: String = "arm64-v8a"): Validation {
+    fun validate(context: Context, uri: Uri, requiredAbi: String = "arm64-v8a", requiredGameVersion: String = "2.2081"): Validation {
         return runCatching {
             var manifestText: String? = null
             var hasRequiredAndroidBinary = false
@@ -44,6 +44,11 @@ object GeodeModInstaller {
             if (modId != "imes.bettervisuals") {
                 return Validation(false, modId, "Expected imes.bettervisuals, found $modId.")
             }
+            val gdVersions = json.optJSONObject("gd")
+            val androidGameVersion = gdVersions?.optString("android")
+            if (androidGameVersion != requiredGameVersion) {
+                return Validation(false, modId, "This module targets Geometry Dash Android ${androidGameVersion ?: "unknown"}; the selected APK route requires $requiredGameVersion.")
+            }
             if (!hasRequiredAndroidBinary) {
                 val expectedSuffix = if (requiredAbi == "arm64-v8a") ".android64.so" else ".android32.so"
                 return Validation(false, modId, "No $expectedSuffix module was found. Choose the Geode artifact built for $requiredAbi.")
@@ -54,8 +59,8 @@ object GeodeModInstaller {
         }
     }
 
-    fun install(context: Context, moduleUri: Uri, modsTreeUri: Uri, requiredAbi: String = "arm64-v8a"): InstallResult {
-        val validation = validate(context, moduleUri, requiredAbi)
+    fun install(context: Context, moduleUri: Uri, modsTreeUri: Uri, requiredAbi: String = "arm64-v8a", requiredGameVersion: String = "2.2081"): InstallResult {
+        val validation = validate(context, moduleUri, requiredAbi, requiredGameVersion)
         if (!validation.valid) return InstallResult(false, "", validation.detail)
         return runCatching {
             val resolver = context.contentResolver
@@ -68,7 +73,26 @@ object GeodeModInstaller {
             val targetName = (displayName ?: "imes.bettervisuals.geode")
                 .substringAfterLast('/').takeIf { it.endsWith(".geode", true) }
                 ?: "imes.bettervisuals.geode"
-            val targetUri = DocumentsContract.createDocument(
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(modsTreeUri, folderId)
+            val existingDocumentId = resolver.query(
+                childrenUri,
+                arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                null, null, null
+            )?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameColumn = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                var found: String? = null
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameColumn) == targetName) {
+                        found = cursor.getString(idColumn)
+                        break
+                    }
+                }
+                found
+            }
+            val targetUri = existingDocumentId?.let {
+                DocumentsContract.buildDocumentUriUsingTree(modsTreeUri, it)
+            } ?: DocumentsContract.createDocument(
                 resolver, folderUri, "application/octet-stream", targetName
             ) ?: return InstallResult(false, targetName, "Could not create the module in the selected folder. Check that this is the Geode mods directory and that it is writable.")
             resolver.openInputStream(moduleUri)?.use { input ->
