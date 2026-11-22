@@ -277,7 +277,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         val vendor = GLES30.glGetString(GLES30.GL_VENDOR) ?: "unknown"
         val renderer = GLES30.glGetString(GLES30.GL_RENDERER) ?: "unknown"
         val version = GLES30.glGetString(GLES30.GL_VERSION) ?: "unknown"
-        val method = listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR", "AMD FSR1 EASU")[upscaleMethod]
+        val method = listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR", "AMD FSR1 EASU", "Native GLES3 (bilinear + edge sharpen)")[upscaleMethod]
         val majorMinor = IntArray(2)
         GLES30.glGetIntegerv(0x821B, majorMinor, 0) // GL_MAJOR_VERSION
         GLES30.glGetIntegerv(0x821C, majorMinor, 1) // GL_MINOR_VERSION
