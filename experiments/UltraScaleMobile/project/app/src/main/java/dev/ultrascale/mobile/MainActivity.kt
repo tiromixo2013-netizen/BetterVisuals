@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity() {
                 var selectedApkUri by remember { mutableStateOf<Uri?>(null) }
                 var geodeRoute by remember { mutableStateOf<GameAdapterRegistry.Route?>(null) }
                 var selectedGeodeUri by remember { mutableStateOf<Uri?>(null) }
+                var geodeModuleValidation by remember { mutableStateOf<GeodeModInstaller.Validation?>(null) }
                 var geodeModsFolderUri by remember { mutableStateOf<Uri?>(null) }
                 var geodeImportStatus by remember { mutableStateOf("") }
                 val scope = rememberCoroutineScope()
@@ -78,6 +79,7 @@ class MainActivity : ComponentActivity() {
                         apkInjectionStatus = ""
                         geodeRoute = null
                         selectedGeodeUri = null
+                        geodeModuleValidation = null
                         geodeModsFolderUri = null
                         geodeImportStatus = ""
                         runCatching {
@@ -90,7 +92,13 @@ class MainActivity : ComponentActivity() {
                 }
                 val geodeModulePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     selectedGeodeUri = uri
+                    geodeModuleValidation = null
                     geodeImportStatus = ""
+                    if (uri != null) scope.launch {
+                        geodeModuleValidation = withContext(Dispatchers.IO) {
+                            GeodeModInstaller.validate(this@MainActivity, uri)
+                        }
+                    }
                 }
                 val geodeFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
                     if (uri != null) {
@@ -242,11 +250,9 @@ class MainActivity : ComponentActivity() {
                                             onClick = { geodeModulePicker.launch(arrayOf("application/octet-stream", "*/*")) },
                                             modifier = Modifier.fillMaxWidth()
                                         ) { Text(if (selectedGeodeUri == null) "Choose BetterVisuals .geode module" else "Change .geode module") }
-                                        selectedGeodeUri?.let { moduleUri ->
-                                            val validation = remember(moduleUri) {
-                                                runCatching { GeodeModInstaller.validate(this@MainActivity, moduleUri) }.getOrNull()
-                                            }
-                                            Text(validation?.detail ?: "Selected module could not be validated.", color = if (validation?.valid == true) Color(0xFF8BD8C7) else Muted, style = MaterialTheme.typography.bodySmall)
+                                        if (selectedGeodeUri != null) {
+                                            val validation = geodeModuleValidation
+                                            Text(validation?.detail ?: "Validating selected Geode module…", color = if (validation?.valid == true) Color(0xFF8BD8C7) else Muted, style = MaterialTheme.typography.bodySmall)
                                         }
                                         OutlinedButton(
                                             onClick = { geodeFolderPicker.launch(null) },
@@ -254,7 +260,7 @@ class MainActivity : ComponentActivity() {
                                         ) { Text(if (geodeModsFolderUri == null) "Choose Geode mods folder" else "Change Geode mods folder") }
                                         if (geodeModsFolderUri != null) Text("Destination folder selected.", color = Muted, style = MaterialTheme.typography.bodySmall)
                                         Button(
-                                            enabled = selectedGeodeUri != null && geodeModsFolderUri != null,
+                                            enabled = selectedGeodeUri != null && geodeModuleValidation?.valid == true && geodeModsFolderUri != null,
                                             onClick = {
                                                 val module = selectedGeodeUri
                                                 val folder = geodeModsFolderUri
