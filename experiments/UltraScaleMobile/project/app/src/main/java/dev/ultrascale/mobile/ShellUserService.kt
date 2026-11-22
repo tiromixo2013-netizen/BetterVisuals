@@ -2,7 +2,13 @@ package dev.ultrascale.mobile
 
 import android.os.Parcel
 import android.os.RemoteException
+import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.regex.Pattern
+import org.json.JSONObject
 
 class ShellUserService : ICommandService.Stub() {
     override fun readLayerTelemetry(targetPackage: String): String {
@@ -99,6 +105,111 @@ class ShellUserService : ICommandService.Stub() {
         }
         return "Verified UltraScale $api layer disabled for $targetPackage; unrelated layer names and package search entries were preserved. Restart the game."
 
+    }
+
+    override fun deployAsphalt8Config(json: String): String {
+        val bytes = json.toByteArray(Charsets.UTF_8)
+        require(bytes.isNotEmpty() && bytes.size <= 512 * 1024) {
+            "The config must be between 1 byte and 512 KiB."
+        }
+        val root = JSONObject(json)
+        require(root.optJSONObject("header") != null &&
+            root.optJSONObject("profiles")?.has("GPU") == true &&
+            root.optJSONObject("profiles")?.has("Specific") == true) {
+            "The selected JSON is not a supported Asphalt 8 gameoptions.json file."
+        }
+
+        val directory = File(
+            "/storage/emulated/0/Android/data/com.gameloft.android.ANMP.GloftA8HM/files"
+        ).canonicalFile
+        require(directory.isDirectory) {
+            "Asphalt 8 files folder was not found. Install the game and open it once before deploying."
+        }
+        require(directory.canWrite()) {
+            "Shizuku shell cannot write to Android/data on this device. No file was changed."
+        }
+
+        val destination = File(directory, "gameoptions.json").canonicalFile
+        require(destination.parentFile == directory) { "Invalid Asphalt 8 config destination." }
+        val temporary = File(directory, ".gameoptions.json.ultrascale.tmp")
+        val backup = if (destination.isFile) {
+            File(directory, "gameoptions.json.ultrascale-${System.currentTimeMillis()}.bak").also {
+                Files.copy(destination.toPath(), it.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
+            }
+        } else null
+
+        try {
+            FileOutputStream(temporary, false).use { output ->
+                output.write(bytes)
+                output.flush()
+                output.fd.sync()
+            }
+            try {
+                Files.move(
+                    temporary.toPath(),
+                    destination.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(
+                    temporary.toPath(),
+                    destination.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            }
+            check(destination.isFile && destination.length() == bytes.size.toLong()) {
+                "The written config failed its size verification."
+            }
+        } finally {
+            temporary.delete()
+        }
+
+        return "Wrote gameoptions.json to the Asphalt 8 files folder and verified its size." +
+            (backup?.let { " Previous file backed up as ${it.name}." } ?: " No previous gameoptions.json existed to back up.") +
+            " Fully close and relaunch the game. The game accepting this external override is not yet runtime-verified."
+    }
+
+    override fun restoreAsphalt8Config(): String {
+        val directory = File(
+            "/storage/emulated/0/Android/data/com.gameloft.android.ANMP.GloftA8HM/files"
+        ).canonicalFile
+        require(directory.isDirectory && directory.canWrite()) {
+            "Asphalt 8 files folder is unavailable or not writable through Shizuku."
+        }
+        val backup = directory.listFiles()
+            ?.filter {
+                it.isFile && it.name.startsWith("gameoptions.json.ultrascale-") &&
+                    it.name.endsWith(".bak")
+            }
+            ?.maxByOrNull { it.lastModified() }
+            ?: error("No UltraScale backup was found; nothing to restore.")
+
+        val destination = File(directory, "gameoptions.json")
+        val temporary = File(directory, ".gameoptions.json.restore.tmp")
+        try {
+            Files.copy(backup.toPath(), temporary.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            try {
+                Files.move(
+                    temporary.toPath(),
+                    destination.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(
+                    temporary.toPath(),
+                    destination.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            }
+        } finally {
+            temporary.delete()
+        }
+        check(destination.isFile && destination.length() == backup.length()) {
+            "Restored file failed verification."
+        }
+        return "Restored gameoptions.json from ${backup.name}."
     }
 
     /**
