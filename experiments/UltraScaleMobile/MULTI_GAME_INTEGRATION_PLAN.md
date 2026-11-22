@@ -84,3 +84,20 @@ The existing Android app already has:
 - APK metadata inspection and a shader source catalog.
 
 The external layers are diagnostic/pass-through only. The sample renderer's upscaling is not proof that any third-party game is being upscaled. The next implementation milestone is the Geometry Dash 2.2081 Geode vertical slice, followed by read-only fingerprints for the exact Asphalt 8 and Beach Buggy Racing installs.
+
+
+## GameRecon implementation status (2026-11-22)
+
+A first read-only Kotlin scanner has been added at
+`project/app/src/main/java/dev/ultrascale/mobile/GameRecon.kt`.
+
+It supports two discovery paths:
+
+- **Installed APKs:** enumerates installed game-flagged apps and the known target titles, reads package/version/installer metadata, enumerates base and split APK paths, and fingerprints native libraries and public APK entries.
+- **User-selected APK:** inspects an APK selected through the Storage Access Framework, without requiring broad filesystem access. Split APKs must be selected/analysed as a set for complete coverage.
+
+The report distinguishes Google Play installer metadata (`com.android.vending`) from sideloaded/unknown installers. This is evidence about the installer recorded by Android, not proof of the APK's provenance or integrity.
+
+Engine and asset findings are heuristic fingerprints, not definitive engine/API detection. Presence of a Vulkan/GLES-related library does not prove that the running game uses that API. The scanner does not inspect private app data, OBB contents, process memory, or protected runtime state.
+
+**Not yet complete:** this scanner is a source-level module and is not yet wired into the Compose screen; no APK build or on-device test is claimed. Next step is to connect its report model to the installed-games UI, add an APK picker, then build and validate on the target Android device.
