@@ -355,6 +355,19 @@ class MainActivity : ComponentActivity() {
                                                 },
                                                 modifier = Modifier.fillMaxWidth()
                                             ) { Text("Apply compatible layer & launch game") }
+                                            OutlinedButton(
+                                                enabled = ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                                                onClick = {
+                                                    val packageName = selectedTargetPackage.orEmpty()
+                                                    if (packageName.isNotBlank()) {
+                                                        selectedLayerFeedback = "Checking runtime layer telemetry…"
+                                                        ShizukuBridge.readLayerTelemetry(packageName)
+                                                            .onSuccess { selectedLayerFeedback = it }
+                                                            .onFailure { selectedLayerFeedback = "Runtime check failed: ${it.message}" }
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) { Text("Verify layer loaded in running game") }
                                             if (selectedLayerFeedback.isNotBlank()) {
                                                 Text(selectedLayerFeedback, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
                                             }
