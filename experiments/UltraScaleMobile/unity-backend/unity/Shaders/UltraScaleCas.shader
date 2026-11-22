@@ -47,7 +47,7 @@ Shader "UltraScale/AMD_CAS"
                 return tex2D(_MainTex, uv + offset * _MainTex_TexelSize.xy).rgb;
             }
 
-            fixed4 frag(v2f_img input) : SV_Target
+            float4 frag(v2f_img input) : SV_Target
             {
                 float2 uv = input.uv;
                 float3 a = loadCAS(uv, float2(-1.0, -1.0));
@@ -68,7 +68,7 @@ Shader "UltraScale/AMD_CAS"
                 float w = ampG * peak;
                 float rcpWeight = 1.0 / (1.0 + 4.0 * w);
                 float3 result = saturate((b * w + d * w + f * w + h * w + e) * rcpWeight);
-                return fixed4(result, tex2D(_MainTex, uv).a);
+                return float4(result, tex2D(_MainTex, uv).a);
             }
             ENDCG
         }
