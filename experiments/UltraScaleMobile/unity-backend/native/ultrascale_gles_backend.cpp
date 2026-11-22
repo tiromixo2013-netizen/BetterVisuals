@@ -5,6 +5,7 @@
 #include <deque>
 #include <mutex>
 
+#if defined(__ANDROID__)
 namespace {
 struct GlesJob { uint32_t src, dst, in_w, in_h, out_w, out_h; USGlesMode mode; float sharpness; };
 std::mutex g_job_mutex;
@@ -12,6 +13,7 @@ std::deque<GlesJob> g_jobs;
 std::atomic<int32_t> g_last_result{US_GLES_UNSUPPORTED_PLATFORM};
 constexpr size_t kMaxQueuedJobs = 4;
 }
+#endif
 
 #if defined(__ANDROID__)
 #include <GLES3/gl3.h>
