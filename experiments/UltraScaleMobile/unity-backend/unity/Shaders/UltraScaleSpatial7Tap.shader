@@ -24,7 +24,7 @@ Shader "UltraScale/Spatial7Tap"
             float4 _MainTex_TexelSize;
             float _Sharpness;
 
-            fixed4 frag(v2f_img input) : SV_Target
+            float4 frag(v2f_img input) : SV_Target
             {
                 float2 uv = input.uv;
                 float2 t = _MainTex_TexelSize.xy;
@@ -41,7 +41,7 @@ Shader "UltraScale/Spatial7Tap"
                 float4 neighbours = (a + b + d + e + f + g) * (1.0 / 6.0);
                 float4 result = c * 0.55 + neighbours * 0.45;
                 result += (c - neighbours) * saturate(_Sharpness) * 0.65;
-                return fixed4(saturate(result.rgb), c.a);
+                return float4(saturate(result.rgb), c.a);
             }
             ENDCG
         }
