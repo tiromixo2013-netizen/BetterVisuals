@@ -5,6 +5,40 @@ import android.os.RemoteException
 import java.util.regex.Pattern
 
 class ShellUserService : ICommandService.Stub() {
+    override fun readLayerTelemetry(targetPackage: String): String {
+        val packagePattern = Pattern.compile("[A-Za-z0-9_.]+")
+        require(packagePattern.matcher(targetPackage).matches()) { "Invalid target package" }
+
+        val pidProcess = ProcessBuilder("pidof", targetPackage).redirectErrorStream(true).start()
+        val pidOutput = pidProcess.inputStream.bufferedReader().readText().trim()
+        val pidExit = pidProcess.waitFor()
+        if (pidExit != 0 || pidOutput.isBlank()) {
+            return "Target process is not running. Launch the game, enter gameplay, then check again."
+        }
+        val pid = pidOutput.split(Regex("\\s+")).firstOrNull { it.matches(Regex("\\d+")) }
+            ?: return "Could not resolve the target process ID."
+
+        val logProcess = ProcessBuilder(
+            "logcat", "-d", "--pid", pid, "-s",
+            "UltraScaleGLES:I", "UltraScaleVK:I"
+        ).redirectErrorStream(true).start()
+        val output = logProcess.inputStream.bufferedReader().use { it.readText() }
+        val exit = logProcess.waitFor()
+        check(exit == 0) { output.takeLast(3000).ifBlank { "Unable to read target process logcat." } }
+        val relevant = output.lineSequence()
+            .filter { it.contains("UltraScaleGLES") || it.contains("UltraScaleVK") }
+            .toList()
+        if (relevant.isEmpty()) {
+            return "No UltraScale layer telemetry found for PID $pid. This does not prove failure: the target may not be layer-eligible, may use another graphics API, or may not have reached a logged frame yet."
+        }
+        val loaded = relevant.any {
+            it.contains("LayerLoader attached", ignoreCase = true) ||
+                it.contains("Vulkan layer attached", ignoreCase = true)
+        }
+        return (if (loaded) "LAYER LOAD CONFIRMED for PID $pid. " else "Layer log activity found for PID $pid, but loader attachment is not confirmed. ") +
+            relevant.takeLast(20).joinToString("\\n").takeLast(10000)
+    }
+
     override fun configureLayer(targetPackage: String, layerPackage: String, api: String, enable: Boolean): String {
         val packagePattern = Pattern.compile("[A-Za-z0-9_.]+")
         require(packagePattern.matcher(targetPackage).matches()) { "Invalid target package" }
