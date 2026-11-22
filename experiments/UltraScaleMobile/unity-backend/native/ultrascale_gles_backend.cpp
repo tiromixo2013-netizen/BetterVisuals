@@ -163,24 +163,9 @@ extern "C" int32_t ultrascale_gles_process_texture(
         restore_state(old);
         return US_GLES_INVALID_ARGUMENT;
     }
-    GLint actual_width = 0, actual_height = 0;
-    glBindTexture(GL_TEXTURE_2D, src_texture);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &actual_width);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &actual_height);
-    if (actual_width != static_cast<GLint>(input_width) ||
-        actual_height != static_cast<GLint>(input_height)) {
-        restore_state(old);
-        return US_GLES_INVALID_ARGUMENT;
-    }
-    glBindTexture(GL_TEXTURE_2D, dst_texture);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &actual_width);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &actual_height);
-    if (actual_width != static_cast<GLint>(output_width) ||
-        actual_height != static_cast<GLint>(output_height)) {
-        restore_state(old);
-        return US_GLES_INVALID_ARGUMENT;
-    }
-
+    // GLES 3.0 has no core texture-level dimension query. The owner supplies
+    // dimensions from the Unity RenderTexture descriptors; FBO completeness
+    // below validates that the destination can be rendered to.
     GLuint program = create_program();
     if (!program) {
         restore_state(old);
