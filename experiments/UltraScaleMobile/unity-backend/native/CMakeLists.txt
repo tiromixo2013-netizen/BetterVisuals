@@ -16,7 +16,8 @@ set_target_properties(ultrascale_unity_bridge PROPERTIES
 
 if(ANDROID)
     find_library(GLESV3_LIBRARY GLESv3 REQUIRED)
-    target_link_libraries(ultrascale_unity_bridge PRIVATE ${GLESV3_LIBRARY})
+    find_library(EGL_LIBRARY EGL REQUIRED)
+    target_link_libraries(ultrascale_unity_bridge PRIVATE ${GLESV3_LIBRARY} ${EGL_LIBRARY})
 endif()
 
 if(ULTRASCALE_BUILD_TESTS)
