@@ -125,3 +125,12 @@ The existing Built-in Render Pipeline adapter is unchanged and remains separatel
 The native bridge header and implementation now define explicit pixel formats, frame ownership/order flags, maximum dimensions and distinct error codes. It rejects unknown scaler modes, non-boolean CAS flags, invalid dimensions, unowned targets, reserved flags, unsupported formats and unsupported graphics APIs. Even a valid GLES/Vulkan frame remains `INTEGRATION_REQUIRED / NO_SCALER_ATTACHED`; no frame is marked processed until a real GPU implementation exists.
 
 A CTest executable at `unity-backend/native/tests/ultrascale_unity_bridge_tests.cpp` exercises these cases. Its C++17 source was compiled with warnings-as-errors and all assertions passed using a host compiler. This validates the ABI contract only; it does not validate Android NDK packaging, Unity shader compilation or actual GPU work.
+
+
+## Native GLES3 texture pass and Built-in render event path
+
+A new experimental GLES3 module lives in `unity-backend/native/ultrascale_gles_backend.cpp`. It accepts two owner-supplied GL_TEXTURE_2D names, validates texture dimensions and FBO completeness, draws a fullscreen triangle, and restores the GL state it changes. Modes are plain bilinear sampling and a project-authored cross-neighbour detail/sharpen pass. It is not an implementation of FSR1, MWSR, SGSR1 or temporal upscaling.
+
+The module exposes a bounded job queue and a Unity render-event callback. The Built-in adapter adds a **Native GLES Edge-aware** selection on Android/OpenGLES3. It places a bilinear fallback first, then schedules the native pass through `GL.IssuePluginEvent` so GL work is issued on Unity's render thread rather than from an arbitrary managed callback. It is not enabled on Vulkan or other graphics APIs. The URP adapter does not yet call this native event path.
+
+The Android CMake target links `GLESv3`. A host CMake/CTest workflow was added at `.github/workflows/ultrascale-native-contract.yml`; it tests the ABI and non-Android fallback only. Android GLES compilation, Unity render-event ordering, texture orientation/format and device rendering still require an Android Unity build and runtime validation. Vulkan processing remains unimplemented.
