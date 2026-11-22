@@ -238,6 +238,21 @@ namespace {
         g_antiAliasingMethod.store(AntiAliasingMethod::Off, std::memory_order_relaxed);
     }
 
+    void updateUpscalePreset(std::string_view value) {
+        // Presets map to internal render resolution ratios. Custom keeps the manual slider untouched.
+        double scale = 1.0;
+        if (value == "Ultra Performance") scale = 0.33;
+        else if (value == "Performance") scale = 0.50;
+        else if (value == "Balanced") scale = 0.67;
+        else if (value == "Quality") scale = 0.77;
+        else if (value == "Ultra Quality") scale = 0.88;
+        else if (value == "Custom") return;
+        else {
+            log::warn("Unknown upscale preset '{}'; keeping current render scale", value);
+            return;
+        }
+        g_renderScale.store(static_cast<float>(scale), std::memory_order_relaxed);
+    }
     void updateUpscaleMethod(std::string_view value) {
         if (value == "Bilinear") {
             g_upscaleMethod.store(UpscaleMethod::Bilinear, std::memory_order_relaxed);
@@ -627,6 +642,7 @@ $on_mod(Loaded) {
     listenForSettingChanges<bool>("full-scene-effects", applyFullScene);
     bindDoubleSetting("render-scale", g_renderScale);
     bindStringSetting("upscale-method", updateUpscaleMethod);
+    bindStringSetting("upscale-preset", updateUpscalePreset);
     updateAntiAliasingMethod(Mod::get()->getSettingValue<std::string>("aa-method"));
     listenForSettingChanges<std::string>("aa-method", [](std::string value) {
         auto const wasSsaa = ssaaFactor(g_antiAliasingMethod.load(std::memory_order_relaxed)) > 1.f;
