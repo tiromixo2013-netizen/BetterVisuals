@@ -118,3 +118,10 @@ It is intended for Unity 2022.3 + URP 14 projects. Add the feature to the active
 This is an isolated compatibility-mode pass, not a RenderGraph-native Unity 6 implementation. It has not yet been compiled against a concrete URP package, and the shader ports have not been compiled by Unity or tested on Android. A missing/unsupported material falls back to a bilinear pass; this is not proof that the requested algorithm is active. HDRP remains unsupported.
 
 The existing Built-in Render Pipeline adapter is unchanged and remains separately usable. Neither adapter attaches to or injects into arbitrary installed games; the feature must be integrated into an owned Unity project or an explicitly supported plugin environment.
+
+
+## Native bridge contract validation update
+
+The native bridge header and implementation now define explicit pixel formats, frame ownership/order flags, maximum dimensions and distinct error codes. It rejects unknown scaler modes, non-boolean CAS flags, invalid dimensions, unowned targets, reserved flags, unsupported formats and unsupported graphics APIs. Even a valid GLES/Vulkan frame remains `INTEGRATION_REQUIRED / NO_SCALER_ATTACHED`; no frame is marked processed until a real GPU implementation exists.
+
+A CTest executable at `unity-backend/native/tests/ultrascale_unity_bridge_tests.cpp` exercises these cases. Its C++17 source was compiled with warnings-as-errors and all assertions passed using a host compiler. This validates the ABI contract only; it does not validate Android NDK packaging, Unity shader compilation or actual GPU work.
