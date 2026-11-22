@@ -2,6 +2,7 @@
 #include "../../include/ultrascale_gles_backend.h"
 #include <cassert>
 #include <cstdint>
+#include <limits>
 
 namespace {
 USUnityRenderFrame frame() {
@@ -91,7 +92,7 @@ int main() {
            US_UNITY_ERROR_INVALID_ARGUMENT);
 
     s = settings();
-    s.render_scale = 0.0f / 0.0f;
+    s.render_scale = std::numeric_limits<float>::quiet_NaN();
     r = result();
     assert(ultrascale_unity_process_frame(&f, &s, &r) ==
            US_UNITY_ERROR_INVALID_ARGUMENT);
