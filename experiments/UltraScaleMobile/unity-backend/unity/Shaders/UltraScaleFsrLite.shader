@@ -24,7 +24,7 @@ Shader "UltraScale/FSRLiteCustom"
                 return dot(c, float3(0.2126, 0.7152, 0.0722));
             }
 
-            fixed4 frag(v2f_img input) : SV_Target
+            float4 frag(v2f_img input) : SV_Target
             {
                 float2 uv = input.uv;
                 float2 t = _MainTex_TexelSize.xy;
@@ -50,7 +50,7 @@ Shader "UltraScale/FSRLiteCustom"
                 float outLuma = clamp(Luma(reconstructed), localMin - 0.02, localMax + 0.02);
                 reconstructed *= outLuma / max(Luma(reconstructed), 0.0001);
 
-                return fixed4(saturate(reconstructed), 1.0);
+                return float4(saturate(reconstructed), 1.0);
             }
             ENDCG
         }
