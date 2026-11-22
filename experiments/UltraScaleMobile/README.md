@@ -72,3 +72,7 @@ Research references and community implementation notes are in [RESEARCH_NOTES.md
 6. Add per-engine native settings integration for games that can be supported through an explicit in-process integration.
 
 No exploit chains, hidden permission bypasses, arbitrary process-memory modification or sandbox escapes are part of this project.
+
+
+## Optional Unity IL2CPP backend
+An isolated Unity IL2CPP integration scaffold now documents the selected upstream launcher/runtime and mod-UI projects, licensing boundaries, device constraints and the plugin-to-native render-frame contract. It does not alter the current APK build or claim arbitrary game injection. See [UNITY_BACKEND_INTEGRATION.md](UNITY_BACKEND_INTEGRATION.md).
