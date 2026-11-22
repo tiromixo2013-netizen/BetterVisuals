@@ -162,15 +162,23 @@ class MainActivity : ComponentActivity() {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                                 Text("APK FILE INSPECTOR", color = Violet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                                 Text("Choose an APK file to fingerprint its engine, native ABI libraries and public asset/config hints.", color = Muted, style = MaterialTheme.typography.bodySmall)
-                                OutlinedButton(onClick = { apkPicker.launch(arrayOf("application/vnd.android.package-archive", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) {
+                                OutlinedButton(onClick = { apkPicker.launch(arrayOf("application/vnd.android.package-archive", "application/octet-stream", "*/*")) }, modifier = Modifier.fillMaxWidth()) {
                                     Text("Inspect selected APK")
                                 }
                                 if (apkReconError.isNotBlank()) Text(apkReconError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                                 apkRecon?.let { r ->
-                                    Text("${r.label} · ${r.engine}", fontWeight = FontWeight.SemiBold)
-                                    Text("ABI: ${r.nativeAbis.joinToString().ifBlank { "Not found" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
-                                    Text("Graphics libraries: ${r.graphicsLibraries.joinToString().ifBlank { "No obvious signature" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
-                                    Text("Config/asset hints: ${r.assetHints.size} entries", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                    HorizontalDivider(color = Color.White.copy(alpha = .08f))
+                                    Text("SCAN RESULT · ${r.label}", fontWeight = FontWeight.SemiBold)
+                                    StatusPill(if (r.apkReadable) "APK READABLE" else "INCOMPLETE / NOT A VALID APK", positive = r.apkReadable)
+                                    Text("Engine: ${r.engine}", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                    Text("ZIP entries: ${r.entryCount} · AndroidManifest: ${if (r.hasManifest) "found" else "not found"}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                    Text("DEX: ${r.dexFiles.joinToString().ifBlank { "No DEX found" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                    Text("Native ABI: ${r.nativeAbis.joinToString().ifBlank { "No native libraries in this APK" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                    Text("Graphics/engine libraries: ${r.graphicsLibraries.joinToString().ifBlank { "No obvious native signature" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                    Text("Top-level entries: ${r.topLevelFolders.joinToString().ifBlank { "None" }}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                    Text("Config/asset hints: ${r.assetHints.size}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                    if (!r.apkReadable) Text("The selected document could not be confirmed as a readable APK. Try selecting base.apk again from the file manager, or select the matching split APKs too.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                    Text("Note: scanning base.apk alone may miss resources and libraries stored in split APKs or downloaded game data. This scan does not inject or change the game.", color = Muted, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
