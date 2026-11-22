@@ -34,28 +34,61 @@ object ApkInjectionPipeline {
         val detail: String
     )
 
+    private const val MAX_ARCHIVE_BYTES = 1_500L * 1024L * 1024L
+    private const val MAX_EXPANDED_BYTES = 2_000L * 1024L * 1024L
+    private const val MAX_ENTRY_BYTES = 512L * 1024L * 1024L
+    private const val MAX_ENTRIES = 100_000
+
     suspend fun inspect(context: Context, uri: Uri): Preflight {
         val digest = MessageDigest.getInstance("SHA-256")
         val temp = File(context.cacheDir, "ultrascale-preflight-${UUID.randomUUID()}.apk")
         try {
             val input = context.contentResolver.openInputStream(uri)
                 ?: return rejected("The selected document could not be opened.")
+            var copiedBytes = 0L
             input.use { source ->
                 DigestInputStream(source, digest).use { hashed ->
-                    FileOutputStream(temp).use { output -> hashed.copyTo(output) }
+                    FileOutputStream(temp).use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val count = hashed.read(buffer)
+                            if (count < 0) break
+                            copiedBytes += count
+                            require(copiedBytes <= MAX_ARCHIVE_BYTES) {
+                                "APK exceeds the safe inspection limit of 1.5 GiB."
+                            }
+                            output.write(buffer, 0, count)
+                        }
+                    }
                 }
             }
             val hash = digest.digest().joinToString("") { "%02x".format(it) }
             val entries = linkedSetOf<String>()
+            var expandedBytes = 0L
             ZipFile(temp).use { zip ->
                 val enumeration = zip.entries()
+                var entryCount = 0
                 while (enumeration.hasMoreElements()) {
                     val entry = enumeration.nextElement()
+                    entryCount++
+                    require(entryCount <= MAX_ENTRIES) { "APK contains too many ZIP entries to inspect safely." }
                     if (!entry.isDirectory) {
                         entries += entry.name
+                        var entryBytes = 0L
                         zip.getInputStream(entry).use { stream ->
-                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                            while (stream.read(buffer) != -1) Unit
+                            val buffer = ByteArray(64 * 1024)
+                            while (true) {
+                                val count = stream.read(buffer)
+                                if (count < 0) break
+                                entryBytes += count
+                                expandedBytes += count
+                                require(entryBytes <= MAX_ENTRY_BYTES) {
+                                    "APK entry ${entry.name} exceeds the safe inspection limit."
+                                }
+                                require(expandedBytes <= MAX_EXPANDED_BYTES) {
+                                    "APK expands beyond the safe inspection limit of 2 GiB."
+                                }
+                            }
                         }
                     }
                 }
