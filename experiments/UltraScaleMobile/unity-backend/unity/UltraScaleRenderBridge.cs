@@ -4,6 +4,7 @@
 using System;
 using System.Runtime.InteropServices;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace UltraScale.Unity
 {
@@ -23,6 +24,16 @@ namespace UltraScale.Unity
 
         [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
         private static extern int ultrascale_unity_backend_status();
+
+        [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int ultrascale_gles_queue_texture_job(
+            uint sourceTexture, uint destinationTexture,
+            uint inputWidth, uint inputHeight,
+            uint outputWidth, uint outputHeight,
+            int mode, float sharpness);
+
+        [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr ultrascale_gles_get_render_event_func();
 
         [Serializable]
         public sealed class Settings
@@ -45,7 +56,8 @@ namespace UltraScale.Unity
             "UltraScale 7-tap (experimental)",
             "MWSR (MIT)",
             "AMD FSR1 EASU",
-            "Qualcomm SGSR1 (GLES 3.1+)"
+            "Qualcomm SGSR1 (GLES 3.1+)",
+            "Native GLES Edge-aware"
         };
         private int selectedScaler = 1;
         private Material spatialMaterial;
@@ -192,6 +204,37 @@ namespace UltraScale.Unity
             mwsrMaterial.SetFloat("zref", 1f);
         }
 
+        private bool TryNativeGles(RenderTexture source, RenderTexture destination)
+        {
+            if (Application.platform != RuntimePlatform.Android ||
+                SystemInfo.graphicsDeviceType != GraphicsDeviceType.OpenGLES3 ||
+                source == null || destination == null)
+                return false;
+
+            try
+            {
+                IntPtr callback = ultrascale_gles_get_render_event_func();
+                if (callback == IntPtr.Zero)
+                    return false;
+
+                uint sourceId = unchecked((uint)source.GetNativeTexturePtr().ToInt64());
+                uint destinationId = unchecked((uint)destination.GetNativeTexturePtr().ToInt64());
+                int queued = ultrascale_gles_queue_texture_job(
+                    sourceId, destinationId,
+                    (uint)source.width, (uint)source.height,
+                    (uint)destination.width, (uint)destination.height,
+                    1, settings.sharpness);
+                if (queued != 0)
+                    return false;
+
+                GL.IssuePluginEvent(callback, 1);
+                return true;
+            }
+            catch (DllNotFoundException) { return false; }
+            catch (EntryPointNotFoundException) { return false; }
+            catch (BadImageFormatException) { return false; }
+        }
+
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
             if (source == null || destination == null)
@@ -214,7 +257,16 @@ namespace UltraScale.Unity
                 reduced.filterMode = FilterMode.Bilinear;
                 Graphics.Blit(source, reduced);
 
-                if (settings.scaler == "Bilinear")
+                if (settings.scaler == "Native GLES Edge-aware" &&
+                    !TryNativeGles(reduced, upscaled))
+                {
+                    Graphics.Blit(reduced, upscaled);
+                }
+                else if (settings.scaler == "Native GLES Edge-aware")
+                {
+                    // Native render event writes to upscaled before subsequent queued blits.
+                }
+                else if (settings.scaler == "Bilinear")
                 {
                     Graphics.Blit(reduced, upscaled);
                 }
