@@ -1,15 +1,17 @@
 package dev.ultrascale.mobile
 
 /**
- * Research profiles for the three priority games.
+ * Research and integration state for the three priority games.
  *
- * These profiles are deliberately separate from GameAdapterRegistry's executable
- * routes: a fingerprint candidate is not an enabled injection adapter.
+ * SOURCE_RENDER_PASS_IMPLEMENTED means the repository contains an in-process render
+ * pass for the pinned game version. It is not a claim of successful runtime testing
+ * on every device or game build.
  */
 enum class GameProfileState {
     IDENTITY_OBSERVED,
     RESEARCH_ONLY,
     BLOCKED_BY_PLATFORM,
+    SOURCE_RENDER_PASS_IMPLEMENTED,
     RUNTIME_LAYER_TESTED,
     GAME_RENDER_PASS_TESTED
 }
@@ -23,12 +25,16 @@ data class GameResearchProfile(
     val apiCandidates: Set<String>,
     val state: GameProfileState,
     val sharedSettingsUiAcrossVersions: Boolean = false,
+    val renderPassVersions: Set<String> = emptySet(),
     val integrationNotes: String
 ) {
     fun matches(packageId: String?, version: String?, abis: Set<String>): Boolean {
         if (packageId != packageName || abis.isEmpty() || abis.intersect(candidateAbis).isEmpty()) return false
         return versionPrefixes.isEmpty() || versionPrefixes.any { version?.startsWith(it) == true }
     }
+
+    fun hasSourceRenderPass(version: String?): Boolean =
+        version != null && renderPassVersions.any { version.startsWith(it) }
 }
 
 object PriorityGameProfiles {
@@ -43,7 +49,7 @@ object PriorityGameProfiles {
             candidateAbis = arm32And64,
             apiCandidates = setOf("OpenGL ES", "Vulkan"),
             state = GameProfileState.BLOCKED_BY_PLATFORM,
-            integrationNotes = "User-selected APK identity was read as 9.1.0i (91009), but scanner reported ABI none and layer eligibility blocked. Inspect every split before ABI matching; no game render adapter is implemented."
+            integrationNotes = "The inspected 9.1.0i (91009) base APK had no native ABI entries and the installed target was not eligible for external graphics layers. Inspect the complete installed split set and determine the active renderer before designing an engine adapter. No Asphalt render-pass adapter exists."
         ),
         GameResearchProfile(
             id = "geometry-dash-2081-2091",
@@ -52,9 +58,10 @@ object PriorityGameProfiles {
             versionPrefixes = setOf("2.2081", "2.2091"),
             candidateAbis = setOf("arm64-v8a"),
             apiCandidates = setOf("OpenGL ES"),
-            state = GameProfileState.RESEARCH_ONLY,
+            state = GameProfileState.SOURCE_RENDER_PASS_IMPLEMENTED,
             sharedSettingsUiAcrossVersions = true,
-            integrationNotes = "Keep one shared settings-integration design, but fingerprint 2.2081 and 2.2091 independently. The existing Geode route is a mod-import route, not proof of external API-layer injection or a completed UltraScale render pass."
+            renderPassVersions = setOf("2.2081"),
+            integrationNotes = "The repository already contains an in-process Geode/Cocos2d OpenGL ES render pass with off-screen scene capture, Render Scale, FSR1 upscaling and CAS. The Geode manifest and current adapter route are pinned to Android 2.2081 ARM64. Version 2.2091 is recognized for shared settings design only; it is not covered by this binary adapter until rebuilt and compatibility-tested. Source implementation is not device runtime proof."
         ),
         GameResearchProfile(
             id = "beach-buggy-racing",
@@ -64,7 +71,7 @@ object PriorityGameProfiles {
             candidateAbis = arm32And64,
             apiCandidates = setOf("OpenGL ES", "Vulkan"),
             state = GameProfileState.RESEARCH_ONLY,
-            integrationNotes = "Original Beach Buggy Racing package candidate only. Inspect the complete base/split set and native engine libraries; do not match Beach Buggy Racing 2 or other store variants by display name."
+            integrationNotes = "Original Beach Buggy Racing package candidate only. Inspect installed base and split APKs to identify native engine libraries and the active renderer. No game-specific render-pass adapter exists; do not match Beach Buggy Racing 2 or other store variants by display name."
         )
     )
 
