@@ -55,3 +55,16 @@ The output pass now has an adjustable **CAS sharpening** control (0–100%, defa
 - Applies the CAS sharpen-only weighted result after the selected reconstruction mode.
 
 The pass is fused with the output composite to avoid allocating another full-resolution intermediate target. This means Catmull-Rom plus CAS repeats the 4×4 reconstruction for neighboring output samples and can be substantially more expensive; start with Linear when measuring cost. This is an app-owned harness adaptation of the bundled CAS-derived math, not evidence of CAS being injected into any game. The original bundled shader and its MIT notice remain unchanged.
+
+## Presets
+
+The harness includes four starting profiles plus **Custom**:
+
+| Profile | Render scale | Reconstruction | CAS sharpness |
+|---|---:|---|---:|
+| Performance | 50% | Linear | Off |
+| Balanced | 70% | Catmull-Rom 4×4 | 25% |
+| Quality | 85% | Catmull-Rom 4×4 | 45% |
+| Native | 100% | Linear | Off |
+
+These are convenient starting points, not device-benchmarked recommendations. The user can still adjust each control independently. Catmull-Rom combined with CAS has a higher shader sample cost and should be profiled on the target device.
