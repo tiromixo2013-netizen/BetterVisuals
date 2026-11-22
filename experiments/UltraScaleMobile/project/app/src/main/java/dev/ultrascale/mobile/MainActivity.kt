@@ -96,7 +96,7 @@ class MainActivity : ComponentActivity() {
                     geodeImportStatus = ""
                     if (uri != null) scope.launch {
                         geodeModuleValidation = withContext(Dispatchers.IO) {
-                            GeodeModInstaller.validate(this@MainActivity, uri, geodeRoute?.requiredAbi ?: "arm64-v8a")
+                            GeodeModInstaller.validate(this@MainActivity, uri, geodeRoute?.requiredAbi ?: "arm64-v8a", geodeRoute?.gameVersion ?: "2.2081")
                         }
                     }
                 }
@@ -267,7 +267,7 @@ class MainActivity : ComponentActivity() {
                                                 if (module != null && folder != null) scope.launch {
                                                     geodeImportStatus = "Validating and copying Geode module…"
                                                     val installResult = withContext(Dispatchers.IO) {
-                                                        GeodeModInstaller.install(this@MainActivity, module, folder, route.requiredAbi)
+                                                        GeodeModInstaller.install(this@MainActivity, module, folder, route.requiredAbi, route.gameVersion)
                                                     }
                                                     geodeImportStatus = installResult.detail
                                                 }
