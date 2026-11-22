@@ -15,6 +15,7 @@ namespace UltraScale.Unity
         private const string FsrLiteShaderName = "UltraScale/FSRLiteCustom";
         private const string MwsrShaderName = "UltraScale/MWSR";
         private const string Fsr1ShaderName = "UltraScale/AMD_FSR1_EASU";
+        private const string CasShaderName = "UltraScale/AMD_CAS";
 
         [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint ultrascale_unity_bridge_abi();
@@ -49,6 +50,7 @@ namespace UltraScale.Unity
         private Material fsrLiteMaterial;
         private Material mwsrMaterial;
         private Material fsr1Material;
+        private Material casMaterial;
 
         private void Awake()
         {
@@ -56,10 +58,12 @@ namespace UltraScale.Unity
             Shader fsrLiteShader = Shader.Find(FsrLiteShaderName);
             Shader mwsrShader = Shader.Find(MwsrShaderName);
             Shader fsr1Shader = Shader.Find(Fsr1ShaderName);
+            Shader casShader = Shader.Find(CasShaderName);
             if (shader == null || !shader.isSupported ||
                 fsrLiteShader == null || !fsrLiteShader.isSupported ||
                 mwsrShader == null || !mwsrShader.isSupported ||
-                fsr1Shader == null || !fsr1Shader.isSupported)
+                fsr1Shader == null || !fsr1Shader.isSupported ||
+                casShader == null || !casShader.isSupported)
             {
                 RuntimeStatus = "UNSUPPORTED: one or more Unity shaders missing";
                 enabled = false;
@@ -70,6 +74,7 @@ namespace UltraScale.Unity
             fsrLiteMaterial = new Material(fsrLiteShader) { hideFlags = HideFlags.HideAndDontSave };
             mwsrMaterial = new Material(mwsrShader) { hideFlags = HideFlags.HideAndDontSave };
             fsr1Material = new Material(fsr1Shader) { hideFlags = HideFlags.HideAndDontSave };
+            casMaterial = new Material(casShader) { hideFlags = HideFlags.HideAndDontSave };
             RuntimeStatus = "MANAGED_RENDER_READY";
 
             // The native bridge is optional for this managed Unity sample path.
@@ -119,7 +124,7 @@ namespace UltraScale.Unity
             settings.renderScale = GUILayout.HorizontalSlider(settings.renderScale, 0.5f, 1f);
 
             settings.sharpeningEnabled = GUILayout.Toggle(
-                settings.sharpeningEnabled, "Experimental edge sharpening");
+                settings.sharpeningEnabled, "AMD CAS post-sharpen");
             GUI.enabled = settings.sharpeningEnabled;
             GUILayout.Label("Strength: " +
                 Mathf.RoundToInt(settings.sharpness * 100f) + "%");
@@ -182,46 +187,55 @@ namespace UltraScale.Unity
             int height = Mathf.Max(1, Mathf.RoundToInt(source.height * settings.renderScale));
             RenderTexture reduced = RenderTexture.GetTemporary(
                 width, height, 0, source.format, RenderTextureReadWrite.Default);
+            RenderTexture upscaled = RenderTexture.GetTemporary(
+                destination.width, destination.height, 0,
+                destination.format, RenderTextureReadWrite.Default);
             reduced.filterMode = FilterMode.Bilinear;
 
             try
             {
-                // First pass renders the camera image into the selected internal size.
                 Graphics.Blit(source, reduced);
 
                 if (settings.scaler == "Bilinear")
                 {
-                    Graphics.Blit(reduced, destination);
+                    Graphics.Blit(reduced, upscaled);
+                }
+                else if (settings.scaler == "UltraScale FSR Lite (custom)")
+                {
+                    Graphics.Blit(reduced, upscaled, fsrLiteMaterial, 0);
+                }
+                else if (settings.scaler == "MWSR (MIT)")
+                {
+                    ConfigureMwsr(reduced.width, reduced.height,
+                        upscaled.width, upscaled.height);
+                    Graphics.Blit(reduced, upscaled, mwsrMaterial, 0);
+                }
+                else if (settings.scaler == "AMD FSR1 EASU")
+                {
+                    fsr1Material.SetVector("_InvResolution",
+                        new Vector4(1f / reduced.width, 1f / reduced.height, 0f, 0f));
+                    fsr1Material.SetFloat("_Sharpness", 1f);
+                    Graphics.Blit(reduced, upscaled, fsr1Material, 0);
                 }
                 else
                 {
-                    if (settings.scaler == "UltraScale FSR Lite (custom)")
-                    {
-                        Graphics.Blit(reduced, destination, fsrLiteMaterial, 0);
-                    }
-                    else if (settings.scaler == "MWSR (MIT)")
-                    {
-                        ConfigureMwsr(reduced.width, reduced.height,
-                            destination.width, destination.height);
-                        Graphics.Blit(reduced, destination, mwsrMaterial, 0);
-                    }
-                    else if (settings.scaler == "AMD FSR1 EASU")
-                    {
-                        fsr1Material.SetVector("_InvResolution",
-                            new Vector4(1f / reduced.width, 1f / reduced.height, 0f, 0f));
-                        fsr1Material.SetFloat("_Sharpness", 1f);
-                        Graphics.Blit(reduced, destination, fsr1Material, 0);
-                    }
-                    else
-                    {
-                        spatialMaterial.SetFloat("_Sharpness",
-                            settings.sharpeningEnabled ? settings.sharpness : 0f);
-                        Graphics.Blit(reduced, destination, spatialMaterial, 0);
-                    }
+                    spatialMaterial.SetFloat("_Sharpness", 0f);
+                    Graphics.Blit(reduced, upscaled, spatialMaterial, 0);
+                }
+
+                if (settings.sharpeningEnabled)
+                {
+                    casMaterial.SetFloat("_Sharpness", settings.sharpness);
+                    Graphics.Blit(upscaled, destination, casMaterial, 0);
+                }
+                else
+                {
+                    Graphics.Blit(upscaled, destination);
                 }
             }
             finally
             {
+                RenderTexture.ReleaseTemporary(upscaled);
                 RenderTexture.ReleaseTemporary(reduced);
             }
         }
@@ -254,6 +268,13 @@ namespace UltraScale.Unity
                 if (Application.isPlaying) Destroy(fsr1Material);
                 else DestroyImmediate(fsr1Material);
                 fsr1Material = null;
+            }
+
+            if (casMaterial != null)
+            {
+                if (Application.isPlaying) Destroy(casMaterial);
+                else DestroyImmediate(casMaterial);
+                casMaterial = null;
             }
         }
     }
