@@ -63,25 +63,26 @@ namespace UltraScale.Unity
             Shader fsr1Shader = Shader.Find(Fsr1ShaderName);
             Shader casShader = Shader.Find(CasShaderName);
             Shader sgsr1Shader = Shader.Find(Sgsr1ShaderName);
-            if (shader == null || !shader.isSupported ||
-                fsrLiteShader == null || !fsrLiteShader.isSupported ||
-                mwsrShader == null || !mwsrShader.isSupported ||
-                fsr1Shader == null || !fsr1Shader.isSupported ||
-                casShader == null || !casShader.isSupported ||
-                sgsr1Shader == null || !sgsr1Shader.isSupported)
-            {
-                RuntimeStatus = "UNSUPPORTED: one or more Unity shaders missing";
-                enabled = false;
-                return;
-            }
 
-            spatialMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
-            fsrLiteMaterial = new Material(fsrLiteShader) { hideFlags = HideFlags.HideAndDontSave };
-            mwsrMaterial = new Material(mwsrShader) { hideFlags = HideFlags.HideAndDontSave };
-            fsr1Material = new Material(fsr1Shader) { hideFlags = HideFlags.HideAndDontSave };
-            casMaterial = new Material(casShader) { hideFlags = HideFlags.HideAndDontSave };
-            sgsr1Material = new Material(sgsr1Shader) { hideFlags = HideFlags.HideAndDontSave };
-            RuntimeStatus = "MANAGED_RENDER_READY";
+            // Optional shaders are loaded independently: an unsupported gather
+            // instruction must not disable the other rendering modes.
+            if (shader != null && shader.isSupported)
+                spatialMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            if (fsrLiteShader != null && fsrLiteShader.isSupported)
+                fsrLiteMaterial = new Material(fsrLiteShader) { hideFlags = HideFlags.HideAndDontSave };
+            if (mwsrShader != null && mwsrShader.isSupported)
+                mwsrMaterial = new Material(mwsrShader) { hideFlags = HideFlags.HideAndDontSave };
+            if (fsr1Shader != null && fsr1Shader.isSupported)
+                fsr1Material = new Material(fsr1Shader) { hideFlags = HideFlags.HideAndDontSave };
+            if (casShader != null && casShader.isSupported)
+                casMaterial = new Material(casShader) { hideFlags = HideFlags.HideAndDontSave };
+            if (sgsr1Shader != null && sgsr1Shader.isSupported)
+                sgsr1Material = new Material(sgsr1Shader) { hideFlags = HideFlags.HideAndDontSave };
+
+            RuntimeStatus = spatialMaterial != null || fsrLiteMaterial != null ||
+                mwsrMaterial != null || fsr1Material != null
+                ? "MANAGED_RENDER_READY"
+                : "BILINEAR_FALLBACK_ONLY";
 
             // The native bridge is optional for this managed Unity sample path.
             // Its status is reported separately and never gates the shader pass.
@@ -129,9 +130,10 @@ namespace UltraScale.Unity
                 Mathf.RoundToInt(settings.renderScale * 100f) + "%");
             settings.renderScale = GUILayout.HorizontalSlider(settings.renderScale, 0.5f, 1f);
 
+            GUI.enabled = casMaterial != null;
             settings.sharpeningEnabled = GUILayout.Toggle(
                 settings.sharpeningEnabled, "AMD CAS post-sharpen");
-            GUI.enabled = settings.sharpeningEnabled;
+            GUI.enabled = casMaterial != null && settings.sharpeningEnabled;
             GUILayout.Label("Strength: " +
                 Mathf.RoundToInt(settings.sharpness * 100f) + "%");
             settings.sharpness = GUILayout.HorizontalSlider(settings.sharpness, 0f, 1f);
@@ -182,7 +184,7 @@ namespace UltraScale.Unity
 
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
-            if (source == null || destination == null || spatialMaterial == null)
+            if (source == null || destination == null)
             {
                 if (source != null && destination != null)
                     Graphics.Blit(source, destination);
@@ -206,37 +208,42 @@ namespace UltraScale.Unity
                 {
                     Graphics.Blit(reduced, upscaled);
                 }
-                else if (settings.scaler == "UltraScale FSR Lite (custom)")
+                else if (settings.scaler == "UltraScale FSR Lite (custom)" && fsrLiteMaterial != null)
                 {
                     Graphics.Blit(reduced, upscaled, fsrLiteMaterial, 0);
                 }
-                else if (settings.scaler == "MWSR (MIT)")
+                else if (settings.scaler == "MWSR (MIT)" && mwsrMaterial != null)
                 {
                     ConfigureMwsr(reduced.width, reduced.height,
                         upscaled.width, upscaled.height);
                     Graphics.Blit(reduced, upscaled, mwsrMaterial, 0);
                 }
-                else if (settings.scaler == "AMD FSR1 EASU")
+                else if (settings.scaler == "AMD FSR1 EASU" && fsr1Material != null)
                 {
                     fsr1Material.SetVector("_InvResolution",
                         new Vector4(1f / reduced.width, 1f / reduced.height, 0f, 0f));
                     fsr1Material.SetFloat("_Sharpness", 1f);
                     Graphics.Blit(reduced, upscaled, fsr1Material, 0);
                 }
-                else if (settings.scaler == "Qualcomm SGSR1 (GLES 3.1+)")
+                else if (settings.scaler == "Qualcomm SGSR1 (GLES 3.1+)" && sgsr1Material != null)
                 {
                     sgsr1Material.SetVector("_ViewportInfo",
                         new Vector4(1f / reduced.width, 1f / reduced.height,
                             reduced.width, reduced.height));
                     Graphics.Blit(reduced, upscaled, sgsr1Material, 0);
                 }
-                else
+                else if (spatialMaterial != null)
                 {
                     spatialMaterial.SetFloat("_Sharpness", 0f);
                     Graphics.Blit(reduced, upscaled, spatialMaterial, 0);
                 }
+                else
+                {
+                    // Unsupported optional mode: fail back to a valid bilinear pass.
+                    Graphics.Blit(reduced, upscaled);
+                }
 
-                if (settings.sharpeningEnabled)
+                if (settings.sharpeningEnabled && casMaterial != null)
                 {
                     casMaterial.SetFloat("_Sharpness", settings.sharpness);
                     Graphics.Blit(upscaled, destination, casMaterial, 0);
