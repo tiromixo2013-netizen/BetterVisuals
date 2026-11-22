@@ -470,13 +470,13 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                 Text("GPU override profiles: ${data.gpuOverrideCount}", style = MaterialTheme.typography.bodySmall)
 
                 Text(
-                    "GAME-NATIVE RESOLUTION SCALE",
+                    "EXPERIMENTAL EXISTING FIELD · scaleDisplay",
                     color = AsphaltViolet,
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.labelMedium
                 )
                 Text(
-                    "Set the existing scaleDisplay value across all RES_ profiles so the game's chosen resolution profile receives the same value.",
+                    "Change only existing scaleDisplay values in RES_ profiles. The game's interpretation of this field and whether this build reads the external file are not yet confirmed.",
                     color = AsphaltMuted,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -498,7 +498,7 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                     },
                     enabled = editedJson.isNotBlank() && data.resolutionScales.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Set scaleDisplay in all RES profiles") }
+                ) { Text("Set existing scaleDisplay values") }
                 Text(
                     if (editedJson != data.rawJson) "Edited copy · original extracted data remains unchanged" else "Original extracted values loaded",
                     color = if (editedJson != data.rawJson) AsphaltViolet else AsphaltMuted,
@@ -581,7 +581,7 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                 ) { Text("Export edited gameoptions.json") }
 
                 Text(
-                    "Game-native path: edit Specific → your device profile → scaleDisplay, then write the JSON into Asphalt 8's files folder. Connect Shizuku in the device card first.",
+                    "Experimental path: edit Specific → the matching device profile → existing scaleDisplay field. Connect Shizuku first; the game may ignore this external file.",
                     color = AsphaltMuted,
                     style = MaterialTheme.typography.labelSmall
                 )
@@ -604,7 +604,7 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                     enabled = editedJson.isNotBlank() && !deploying &&
                         ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
                     modifier = Modifier.fillMaxWidth()
-                ) { Text(if (deploying) "Applying…" else "Apply game-native scale config to Asphalt 8") }
+                ) { Text(if (deploying) "Applying…" else "Apply edited gameoptions.json to Asphalt 8") }
                 OutlinedButton(
                     onClick = {
                         deploying = true
