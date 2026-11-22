@@ -63,3 +63,16 @@ Shizuku shell access does not grant root and does not bypass Android's graphics-
 - Beach Buggy Racing is reported as using Vector Unit's custom C++ engine in a third-party compatibility inventory. Treat this only as a hypothesis until the selected APK's libraries and runtime are inspected. Reference: https://digitalisx64.github.io/apps/android17/
 
 These public references guide investigation only. They do not replace inspection of the exact APK installed on the device and do not upgrade any adapter's registration state.
+
+
+## Public APK acquisition leads (checked 2026-11-22)
+
+These are leads for obtaining test inputs, not files downloaded or verified by this repository.
+
+| Game | Public source lead | Reported package/version/ABI | Integrity note |
+|---|---|---|---|
+| Asphalt 8 | APKFab 9.1.0i XAPK listing: https://apkfab.com/asphalt-8-airborne-fun-real-car-racing-game/com.gameloft.android.ANMP.GloftA8HM | Package matches; version 9.1.0i (91009); ARM64 variant listed with split_config.arm64_v8a and config.hdpi | Listing reports SHA-1 8ddd8006c7487040163a6a0edfe3004d85d2f2ee. The user's scan screenshot showed a different SHA-256, so this is not established as the same binary. |
+| Geometry Dash | Official Google Play listing: https://play.google.com/store/apps/details?id=com.robtopx.geometryjump ; third-party 2.2081 listing: https://batur-does-gaming.itch.io/gd-22081 | Official package com.robtopx.geometryjump; Google Play page reports a newer 2.209 line. The 2.2081 itch.io file is reported as 171 MB but is user-uploaded. | Do not use the user-uploaded 2.2081 binary as a trusted test fixture without signature and hash verification. Prefer a user-provided copy obtained from their legitimate purchase or a trusted archival source. |
+| Beach Buggy Racing | APKMirror 2026.11.02 bundle: https://www.apkmirror.com/apk/vector-unit/beach-buggy-racing/beach-buggy-racing-2026-11-02-release/beach-buggy-racing-2026-11-02-android-apk-download/ | Package com.vectorunit.purple.googleplay; version 2026.11.02 (220); bundle reports Base APK + 37 splits and arm64-v8a among supported ABIs | Bundle metadata is a useful ARM64 investigation lead; actual downloaded files and signatures still need local verification. |
+
+No APK/XAPK/APKS binary was downloaded or inspected in this update. Do not register any game adapter based solely on these listing pages.
