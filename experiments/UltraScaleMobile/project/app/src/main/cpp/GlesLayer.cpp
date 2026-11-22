@@ -38,7 +38,10 @@ struct TextureInfo {
     bool isRenderbuffer = false;
 };
 struct ContextState {
-    GLuint boundFramebuffer = 0;
+    // Keep draw/read bindings separate: GL_FRAMEBUFFER updates both, while
+    // GL_DRAW_FRAMEBUFFER and GL_READ_FRAMEBUFFER update only their own slot.
+    GLuint boundFramebuffer = 0; // draw framebuffer (legacy field name)
+    GLuint boundReadFramebuffer = 0;
     GLuint boundTexture2D = 0;
     GLuint boundRenderbuffer = 0;
     GLint viewportX = 0;
@@ -126,11 +129,16 @@ EGLBoolean LayerDestroyContext(EGLDisplay display, EGLContext context) {
 
 void LayerBindFramebuffer(GLenum target, GLuint framebuffer) {
     if (g_nextBindFramebuffer) g_nextBindFramebuffer(target, framebuffer);
-    if (target != GL_FRAMEBUFFER && target != GL_DRAW_FRAMEBUFFER) return;
+    if (target != GL_FRAMEBUFFER && target != GL_DRAW_FRAMEBUFFER &&
+        target != GL_READ_FRAMEBUFFER) return;
     const EGLContext context = CurrentContext();
     if (context == EGL_NO_CONTEXT) return;
     std::lock_guard<std::mutex> lock(g_contextMutex);
-    StateFor(context).boundFramebuffer = framebuffer;
+    auto& state = StateFor(context);
+    if (target == GL_FRAMEBUFFER || target == GL_DRAW_FRAMEBUFFER)
+        state.boundFramebuffer = framebuffer;
+    if (target == GL_FRAMEBUFFER || target == GL_READ_FRAMEBUFFER)
+        state.boundReadFramebuffer = framebuffer;
 }
 
 void LayerBindTexture(GLenum target, GLuint texture) {
@@ -292,6 +300,7 @@ void LayerDeleteFramebuffers(GLsizei count, const GLuint* framebuffers) {
     for (GLsizei i = 0; i < count; ++i) {
         state.framebufferAttachments.erase(framebuffers[i]);
         if (state.boundFramebuffer == framebuffers[i]) state.boundFramebuffer = 0;
+        if (state.boundReadFramebuffer == framebuffers[i]) state.boundReadFramebuffer = 0;
     }
 }
 
