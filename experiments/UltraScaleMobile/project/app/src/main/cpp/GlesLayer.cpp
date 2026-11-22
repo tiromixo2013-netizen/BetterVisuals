@@ -111,9 +111,13 @@ void RefreshFramebufferTextureInfo(ContextState& state, GLuint texture) {
     if (found == state.textures.end()) return;
     for (auto& framebuffer : state.framebufferAttachments) {
         for (auto& attachment : framebuffer.second) {
-            if (!attachment.second.isRenderbuffer && attachment.second.texture == texture) attachment.second = found->second;
+            if (!attachment.second.isRenderbuffer && attachment.second.texture == texture)
+                attachment.second = found->second;
         }
     }
+    // A storage redefinition after the last draw must not leave stale dimensions
+    // in the next periodic telemetry snapshot.
+    if (state.lastDrawTexture == texture) state.lastDrawTextureInfo = found->second;
 }
 
 
@@ -212,6 +216,9 @@ void LayerRenderbufferStorage(GLenum target, GLenum internalFormat, GLsizei widt
                     attachment.second = state.renderbuffers[state.boundRenderbuffer];
             }
         }
+        if (state.lastDrawTextureInfo.isRenderbuffer &&
+            state.lastDrawTextureInfo.texture == state.boundRenderbuffer)
+            state.lastDrawTextureInfo = state.renderbuffers[state.boundRenderbuffer];
     }
 }
 
