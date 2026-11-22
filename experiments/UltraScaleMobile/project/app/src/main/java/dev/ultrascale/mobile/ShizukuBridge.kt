@@ -60,6 +60,12 @@ object ShizukuBridge {
         service.readLayerTelemetry(targetPackage)
     }
 
+    fun readAsphalt8Config(): Result<String> = runCatching {
+        check(granted()) { "Shizuku permission is not granted" }
+        val service = remote ?: error("Shell service is not connected. Tap Connect Shizuku service first.")
+        service.readAsphalt8Config()
+    }
+
     fun deployAsphalt8Config(json: String): Result<String> = runCatching {
         check(granted()) { "Shizuku permission is not granted" }
         val service = remote ?: error("Shell service is not connected. Tap Connect Shizuku service first.")
