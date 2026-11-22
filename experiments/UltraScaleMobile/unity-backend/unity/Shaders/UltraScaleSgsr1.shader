@@ -61,7 +61,7 @@ Shader "UltraScale/Qualcomm_SGSR1"
                 return float2(w, w * c);
             }
 
-            fixed4 frag(v2f_img input) : SV_Target
+            float4 frag(v2f_img input) : SV_Target
             {
                 float4 color = _MainTex.SampleLevel(sampler_MainTex, input.uv, 0.0);
                 float2 imgCoord = (input.uv * _ViewportInfo.zw) + float2(-0.5, 0.5);
@@ -113,7 +113,7 @@ Shader "UltraScale/Qualcomm_SGSR1"
                     float deltaY = clamp(finalY - centerY, -23.0/255.0, 23.0/255.0);
                     color.rgb = saturate(color.rgb + deltaY.xxx);
                 }
-                return fixed4(color.rgb, 1.0);
+                return float4(color.rgb, 1.0);
             }
             ENDCG
         }
