@@ -124,7 +124,7 @@ fixed4 frag(v2f_img i) : SV_Target {
         isFlat = max(m.r, max(m.g, m.b)) < vote;
     } else {
         float lM = dot(rM, LUMA);
-        gM = float2(ddx_coarse(lM), ddy_coarse(lM)) * scale;
+        gM = float2(ddx(lM), ddy(lM)) * scale;
         isFlat = abs(gM.x) + abs(gM.y) < vote;
     }
     if (SHOW == 1u) {
