@@ -14,9 +14,10 @@ enum class UpscaleMode(
     val implementedInHarness: Boolean
 ) {
     OFF("Off", 2, 0, true),
-    NEAREST("Nearest Neighbor", 2, 0, false),
+    NEAREST("Nearest Neighbor", 2, 0, true),
     BILINEAR("Bilinear", 2, 0, true),
-    FSR_LITE("FSR Lite · 6-tap", 3, 0, false),
+    CATMULL_ROM("Catmull-Rom · experimental", 2, 0, true),
+    FSR_LITE("UltraScale FSR Lite · custom 6-tap", 2, 0, true),
     AMD_FSR1_EASU("AMD FSR1 · EASU", 2, 0, false),
     MWSR("MWSR", 3, 0, false),
     SGSR1("Qualcomm SGSR1 Mobile", 3, 1, false)
@@ -43,7 +44,7 @@ data class UltraScaleSettings(
     /** Reconstruction-stage sharpness; separate from CAS. */
     val upscaleSharpnessPercent: Int = 20,
     val preset: UpscalePreset = UpscalePreset.CUSTOM,
-    /** Independent post-upscale AMD CAS strength. Zero disables CAS. */
+    /** Independent post-upscale CAS-style sharpening strength. Zero disables it; official AMD CAS requires a separately validated backend. */
     val casSharpnessPercent: Int = 0,
     val lowLatency: LowLatencyMode = LowLatencyMode.OFF
 ) {
@@ -65,21 +66,21 @@ data class UltraScaleSettings(
             )
             UpscalePreset.BALANCED -> UltraScaleSettings(
                 renderScalePercent = 70,
-                upscaler = UpscaleMode.FSR_LITE,
+                upscaler = UpscaleMode.BILINEAR,
                 upscaleSharpnessPercent = 25,
                 preset = preset,
                 casSharpnessPercent = 20
             )
             UpscalePreset.QUALITY -> UltraScaleSettings(
                 renderScalePercent = 85,
-                upscaler = UpscaleMode.AMD_FSR1_EASU,
+                upscaler = UpscaleMode.CATMULL_ROM,
                 upscaleSharpnessPercent = 35,
                 preset = preset,
                 casSharpnessPercent = 25
             )
             UpscalePreset.ULTRA_QUALITY -> UltraScaleSettings(
-                renderScalePercent = 95,
-                upscaler = UpscaleMode.SGSR1,
+                renderScalePercent = 90,
+                upscaler = UpscaleMode.FSR_LITE,
                 upscaleSharpnessPercent = 25,
                 preset = preset,
                 casSharpnessPercent = 15
