@@ -59,3 +59,22 @@ The native library is optional for both managed paths. Do not package it as an a
 The native ABI now validates the scaler enum, CAS boolean, finite/ranged settings, frame dimension ceiling, explicitly owned render-target flag, reserved frame flags, graphics API and pixel format. It distinguishes invalid arguments, unsupported API/format and the expected `NO_SCALER_ATTACHED` state. A valid call still returns `INTEGRATION_REQUIRED` with processed frame index zero because no GLES/Vulkan processor is attached.
 
 A CTest contract suite is included at `native/tests/ultrascale_unity_bridge_tests.cpp`. It covers the fail-closed valid-frame case and invalid mode, oversized dimensions, missing ownership declaration, unsupported format/API and invalid CAS flag. The test source was compiled with a host C++17 compiler using `-Wall -Wextra -Werror` and all assertions passed in this development session. This is a native ABI contract test only, not an Android NDK, Unity shader or device test.
+
+## Native OpenGL ES 3 backend (new, experimental)
+
+The native library now includes `include/ultrascale_gles_backend.h` and `native/ultrascale_gles_backend.cpp`. On Android builds it links `GLESv3` and provides an actual texture-to-texture GLES 3 fragment pass. The pass:
+- accepts caller-owned source and destination `GL_TEXTURE_2D` names;
+- renders a fullscreen triangle into the destination texture through an FBO;
+- offers bilinear sampling and a project-authored cross-neighbour edge/detail sharpening mode;
+- saves/restores the GL state it changes;
+- is scheduled through a bounded queue and Unity `GL.IssuePluginEvent`, so GLES calls run on the Unity render thread with its context current.
+
+The Built-in adapter exposes **Native GLES Edge-aware** as a selectable mode on Android devices using OpenGL ES 3.0. It first writes a bilinear fallback, then queues the native pass to overwrite the intermediate if the render event succeeds. If the library, callback or queue is unavailable, the bilinear result remains. This native mode is **not** AMD FSR1, MWSR or Qualcomm SGSR1; it is a small native spatial/sharpen pass. It does not implement temporal upscaling or frame generation.
+
+Important constraints:
+- Use an Android Unity build configured for **OpenGLES3**, not Vulkan, for this path.
+- Integrate the native shared library into an owned Unity app and preserve the plugin event ordering.
+- The native texture path assumes 2D, non-multisampled RGBA render textures with distinct source and destination texture names.
+- Driver orientation, texture format, FBO completeness, event ordering and actual image output still require a Unity Android build and device validation.
+- The native GLES API is not currently wired into the URP adapter.
+- Vulkan still has no native processing implementation; its ABI remains fail-closed.
