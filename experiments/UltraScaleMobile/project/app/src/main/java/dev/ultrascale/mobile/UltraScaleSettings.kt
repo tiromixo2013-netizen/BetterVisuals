@@ -49,7 +49,7 @@ data class UltraScaleSettings(
     val lowLatency: LowLatencyMode = LowLatencyMode.OFF
 ) {
     fun normalized(): UltraScaleSettings = copy(
-        renderScalePercent = renderScalePercent.coerceIn(25, 100),
+        renderScalePercent = renderScalePercent.coerceIn(50, 100),
         upscaleSharpnessPercent = upscaleSharpnessPercent.coerceIn(0, 100),
         casSharpnessPercent = casSharpnessPercent.coerceIn(0, 100)
     )
