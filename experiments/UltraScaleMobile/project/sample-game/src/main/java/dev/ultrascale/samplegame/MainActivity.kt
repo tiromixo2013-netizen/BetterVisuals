@@ -23,6 +23,15 @@ import javax.microedition.khronos.egl.EGLContext
 import javax.microedition.khronos.egl.EGLDisplay
 import javax.microedition.khronos.opengles.GL10
 
+private object NativeGlesBridge {
+    external fun process(
+        sourceTexture: Int, destinationTexture: Int,
+        inputWidth: Int, inputHeight: Int,
+        outputWidth: Int, outputHeight: Int,
+        sharpness: Float
+    ): Int
+}
+
 class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var glView: GLSurfaceView
@@ -140,7 +149,7 @@ class MainActivity : Activity() {
         val methodLabel = TextView(this).apply { text = "Upscale method" }
         val method = Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR (upstream lightweight)", "AMD FSR1 EASU"))
+                listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR (upstream lightweight)", "AMD FSR1 EASU", "Native GLES3 (bilinear + edge sharpen)"))
             setSelection(renderer.upscaleMethod)
         }
         val scaleLabel = TextView(this).apply {
@@ -243,7 +252,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
 
     fun configure(enabled: Boolean, method: Int, sharpen: Boolean, scale: Float, cas: Boolean, casAmount: Float) {
         upscalingEnabled = enabled
-        val requestedMethod = method.coerceIn(0, 5)
+        val requestedMethod = method.coerceIn(0, 6)
         val available = when (requestedMethod) {
             2 -> sgsr1Program != 0
             3 -> fsrLiteProgram != 0
@@ -258,7 +267,7 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
         renderScale = scale.coerceIn(0.5f, 1f)
         statusMessage = buildString {
             append("Sample GLES: ")
-            append(listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR", "AMD FSR1 EASU")[upscaleMethod])
+            append(listOf("Bilinear", "Nearest", "SGSR1", "FSR Lite (6-tap)", "MWSR", "AMD FSR1 EASU", "Native GLES3")[upscaleMethod])
             if (!available) append(" (shader unavailable; Bilinear fallback)")
             if (cas) append(if (casEnabled) " + AMD CAS" else " (CAS shader unavailable)")
         }
@@ -463,6 +472,11 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, framebuffer)
             GLES30.glViewport(0, 0, sceneWidth, sceneHeight)
             drawScene()
+            if (upscaleMethod == 6 && drawNativeGlesUpscale()) return
+            if (upscaleMethod == 6) {
+                upscaleMethod = 0
+                statusMessage = "Native GLES pass failed; using managed Bilinear fallback."
+            }
             val useCas = prepareCasTarget()
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, if (useCas) postFramebuffer else 0)
             GLES30.glViewport(0, 0, outputWidth, outputHeight)
@@ -517,6 +531,46 @@ private class UpscaleTestRenderer(private val assets: AssetManager) : GLSurfaceV
             drawScene()
             if (useCas) drawCasPass()
         }
+    }
+
+    private fun drawNativeGlesUpscale(): Boolean {
+        if (!ensurePostTarget()) {
+            statusMessage = "Native GLES output target unavailable; using managed fallback."
+            return false
+        }
+        val result = runCatching {
+            NativeGlesBridge.process(
+                sceneTexture, postTexture, sceneWidth, sceneHeight,
+                outputWidth, outputHeight,
+                if (sharpeningEnabled) 0.65f else 0f
+            )
+        }.getOrElse { -100 }
+        if (result != 0) {
+            statusMessage = "Native GLES backend returned $result; using managed fallback."
+            return false
+        }
+        if (casEnabled && casProgram != 0) {
+            drawCasPass()
+        } else {
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, outputWidth, outputHeight)
+            GLES30.glUseProgram(upscaleProgram)
+            bindQuad(upscaleProgram, quadBuffer)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, postTexture)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(upscaleProgram, "uScene"), 0)
+            GLES30.glUniform2f(GLES30.glGetUniformLocation(upscaleProgram, "uTexel"),
+                1f / outputWidth.coerceAtLeast(1), 1f / outputHeight.coerceAtLeast(1))
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(upscaleProgram, "uSharpen"), 0f)
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(upscaleProgram, "uNearest"), 0f)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+            GLES30.glDisableVertexAttribArray(0)
+            GLES30.glDisableVertexAttribArray(1)
+        }
+        if (!statusMessage.startsWith("Native GLES3 active"))
+            statusMessage = "Native GLES3 active: bilinear upscale + edge-aware detail sharpen" +
+                if (casEnabled && casProgram != 0) " + AMD CAS" else ""
+        return true
     }
 
     private fun ensureSceneTarget(): Boolean {
