@@ -77,3 +77,16 @@ The isolated `unity-backend/` folder now contains:
 This is an owner-integrated plugin scaffold, not a BepInEx runtime import and not an external injector. The BepInEx/NextBep and StArray projects remain upstream integration candidates because importing their complete launcher/framework source into the controller APK would add unrelated runtime bootstraps and license/build obligations. The plugin adapter is designed to be packaged into an owned Unity test project after its native processor is implemented.
 
 The Unity sample currently targets the Built-in Render Pipeline only. URP/SRP require a separate supported renderer feature / RenderGraph integration. No scaler is marked active by this scaffold.
+
+
+## Managed Unity render path implemented
+
+The adapter now contains a working managed render-path implementation for an owned Unity **Built-in Render Pipeline** project:
+- `UltraScaleRenderBridge.cs` receives the camera's source/destination RenderTextures through `OnRenderImage`.
+- A temporary RenderTexture is allocated at the selected 50–100% internal resolution, then the source is downsampled into it.
+- Bilinear mode scales that reduced target to the destination. Experimental mode runs `UltraScaleSpatial7Tap.shader`, a project-authored seven-sample spatial reconstruction filter with optional edge sharpening.
+- The in-game panel exposes only the two modes that are actually implemented in this Unity adapter. MWSR, SGSR1 and AMD FSR1 EASU are not mislabeled as active Unity modes; their Unity shader ports remain separate work.
+- The seven-tap filter is not AMD FidelityFX, Qualcomm SGSR, temporal upscaling or frame generation.
+- The native C ABI is still a separate scaffold and is not called to process frame textures. The managed shader path does not require the native bridge library to be packaged.
+
+This is a real render operation only when the script and shader are added to an owned Unity Built-in RP project and attached to its camera. It does not inject into third-party games. URP/SRP support and device-side validation remain outstanding.
