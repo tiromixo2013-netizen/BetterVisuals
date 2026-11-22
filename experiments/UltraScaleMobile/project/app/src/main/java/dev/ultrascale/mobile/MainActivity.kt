@@ -1,3 +1,4 @@
+@file:Suppress("ProduceStateDoesNotAssignValue")
 package dev.ultrascale.mobile
 
 import android.content.Intent
