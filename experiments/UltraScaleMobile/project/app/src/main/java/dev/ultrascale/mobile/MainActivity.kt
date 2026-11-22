@@ -245,7 +245,7 @@ class MainActivity : ComponentActivity() {
                                     geodeRoute?.let { route ->
                                         HorizontalDivider(color = Color.White.copy(alpha = .08f))
                                         Text("SUPPORTED GAME ROUTE · ${route.displayName}", color = Color(0xFF8BD8C7), fontWeight = FontWeight.SemiBold)
-                                        Text("This route installs the repository's Geode mod into a folder you choose. It does not rewrite the APK. Download the Android .geode build artifact from the repository's Build Geode Mod workflow first.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                        Text("This route installs the repository's Geode mod into a folder you choose. It does not rewrite the APK. Download the BetterVisuals-GeometryDash-Android64 artifact from the repository's UltraScale Geometry Dash Android64 Geode Module workflow, then select the .geode file inside it.", color = Muted, style = MaterialTheme.typography.bodySmall)
                                         OutlinedButton(
                                             onClick = { geodeModulePicker.launch(arrayOf("application/octet-stream", "*/*")) },
                                             modifier = Modifier.fillMaxWidth()
