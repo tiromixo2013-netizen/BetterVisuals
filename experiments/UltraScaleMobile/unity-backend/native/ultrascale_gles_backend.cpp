@@ -48,7 +48,7 @@ void main() {
         float edge = clamp(length(detail) * 2.0, 0.0, 1.0);
         c.rgb += detail * clamp(u_sharpness, 0.0, 1.0) * edge;
     }
-    out_color = vec4(clamp(c.rgb, 0.0, 1.0), c.a);
+    out_color = vec4(c.rgb, c.a);
 })";
 
 GLuint compile_shader(GLenum type, const char* source) {
