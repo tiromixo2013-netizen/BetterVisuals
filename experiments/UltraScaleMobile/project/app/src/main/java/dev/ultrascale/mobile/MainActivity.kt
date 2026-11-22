@@ -373,8 +373,39 @@ private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport) {
                             modifier = Modifier.weight(1f)
                         ) { Text("Disable GLES", maxLines = 1) }
                     }
+                    Button(
+                        enabled = (vulkanReady || glesReady) && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                        onClick = {
+                            val results = mutableListOf<String>()
+                            if (vulkanReady) {
+                                ShizukuBridge.configureDebugLayer(app.packageName, context.packageName, LayerApi.VULKAN, true)
+                                    .onSuccess { results += "Vulkan: configured" }
+                                    .onFailure { results += "Vulkan: ${it.message}" }
+                            }
+                            if (glesReady) {
+                                ShizukuBridge.configureDebugLayer(app.packageName, context.packageName, LayerApi.OPENGL_ES, true)
+                                    .onSuccess { results += "GLES: configured" }
+                                    .onFailure { results += "GLES: ${it.message}" }
+                            }
+                            feedback = results.joinToString(" · ") +
+                                " — Android debug-layer settings only; this is not forced injection."
+                            val launch = context.packageManager.getLaunchIntentForPackage(app.packageName)
+                            if (results.any { it.endsWith("configured") } && launch != null) {
+                                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(launch)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Apply compatible layer & launch game", maxLines = 1)
+                    }
                     if (feedback.isNotBlank()) Text(feedback, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
-                    Text("Restart the game after changing layer settings.", color = Muted, style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        "This button configures Android's documented GPU debug-layer settings for eligible targets, then launches the game. The game must permit layer loading; it cannot force-load into protected production apps.",
+                        color = Muted,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    Text("If settings change, fully stop and relaunch the game.", color = Muted, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
