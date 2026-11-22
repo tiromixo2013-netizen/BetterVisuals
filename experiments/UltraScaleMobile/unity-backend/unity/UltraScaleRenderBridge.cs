@@ -13,6 +13,7 @@ namespace UltraScale.Unity
         private const string NativeLibrary = "ultrascale_unity_bridge";
         private const string ShaderName = "UltraScale/Spatial7Tap";
         private const string FsrLiteShaderName = "UltraScale/FSRLiteCustom";
+        private const string MwsrShaderName = "UltraScale/MWSR";
 
         [DllImport(NativeLibrary, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint ultrascale_unity_bridge_abi();
@@ -38,18 +39,22 @@ namespace UltraScale.Unity
         {
             "Bilinear",
             "UltraScale FSR Lite (custom)",
-            "UltraScale 7-tap (experimental)"
+            "UltraScale 7-tap (experimental)",
+            "MWSR (MIT)"
         };
         private int selectedScaler = 1;
         private Material spatialMaterial;
         private Material fsrLiteMaterial;
+        private Material mwsrMaterial;
 
         private void Awake()
         {
             Shader shader = Shader.Find(ShaderName);
             Shader fsrLiteShader = Shader.Find(FsrLiteShaderName);
+            Shader mwsrShader = Shader.Find(MwsrShaderName);
             if (shader == null || !shader.isSupported ||
-                fsrLiteShader == null || !fsrLiteShader.isSupported)
+                fsrLiteShader == null || !fsrLiteShader.isSupported ||
+                mwsrShader == null || !mwsrShader.isSupported)
             {
                 RuntimeStatus = "UNSUPPORTED: one or more Unity shaders missing";
                 enabled = false;
@@ -58,6 +63,7 @@ namespace UltraScale.Unity
 
             spatialMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
             fsrLiteMaterial = new Material(fsrLiteShader) { hideFlags = HideFlags.HideAndDontSave };
+            mwsrMaterial = new Material(mwsrShader) { hideFlags = HideFlags.HideAndDontSave };
             RuntimeStatus = "MANAGED_RENDER_READY";
 
             // The native bridge is optional for this managed Unity sample path.
@@ -117,8 +123,44 @@ namespace UltraScale.Unity
             GUILayout.Space(8);
             GUILayout.Label("FSR Lite is the project custom six-sample filter, not AMD FSR.");
             GUILayout.Label("7-tap is a separate experimental spatial filter.");
-            GUILayout.Label("MWSR, SGSR1 and AMD FSR1 EASU need separate Unity ports.");
+            GUILayout.Label("MWSR is the upstream MIT HLSL spatial upscale port.");
+            GUILayout.Label("SGSR1 and AMD FSR1 EASU remain separate ports.");
             GUI.DragWindow(new Rect(0, 0, 10000, 28));
+        }
+
+
+        private void ConfigureMwsr(int inputWidth, int inputHeight,
+            int outputWidth, int outputHeight)
+        {
+            float sx = (float)outputWidth / inputWidth;
+            float sy = (float)outputHeight / inputHeight;
+            float scale = Mathf.Min(sx, sy);
+            float x = Mathf.Log(Mathf.Max(scale, 1.0001f));
+            float force = 1f + 0.35f * Mathf.Clamp01(
+                Mathf.Log(Mathf.Max(scale / 1.3333f, 0.0001f)) /
+                Mathf.Log(2f / 1.3333f));
+
+            float kc = 0.63536f + 0.02185f * x + 0.12781f * x * x;
+            float kg = (-0.12884f + 2.58447f * x - 1.26009f * x * x) * force;
+            float kr = 1.00715f - 1.02091f * x + 0.56996f * x * x;
+            float kl = (0.33417f - 0.29620f * x + 0.08628f * x * x) * force;
+
+            mwsrMaterial.SetVector("texel", new Vector4(1f / inputWidth, 1f / inputHeight, 0f, 0f));
+            mwsrMaterial.SetVector("scale", new Vector4(sx, sy, 0f, 0f));
+            mwsrMaterial.SetVector("dims", new Vector4(inputWidth, inputHeight, 0f, 0f));
+            mwsrMaterial.SetVector("across", new Vector4(kr / inputWidth, kr / inputHeight, 0f, 0f));
+            mwsrMaterial.SetFloat("kc", kc);
+            mwsrMaterial.SetFloat("ft", 0.005f);
+            mwsrMaterial.SetFloat("kg", kg);
+            mwsrMaterial.SetFloat("kwc", 0.1f);
+            mwsrMaterial.SetVector("zc", new Vector4(0.5f, 0.5f, 0f, 0f));
+            mwsrMaterial.SetVector("zr", new Vector4(0.2f, 0.2f, 0f, 0f));
+            mwsrMaterial.SetFloat("zring", 0.45f);
+            mwsrMaterial.SetFloat("zft", 0.005f);
+            mwsrMaterial.SetFloat("zkg", kg);
+            mwsrMaterial.SetFloat("gaze", 0f);
+            mwsrMaterial.SetFloat("kl", kl);
+            mwsrMaterial.SetFloat("zref", 1f);
         }
 
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
@@ -151,6 +193,12 @@ namespace UltraScale.Unity
                     {
                         Graphics.Blit(reduced, destination, fsrLiteMaterial, 0);
                     }
+                    else if (settings.scaler == "MWSR (MIT)")
+                    {
+                        ConfigureMwsr(reduced.width, reduced.height,
+                            destination.width, destination.height);
+                        Graphics.Blit(reduced, destination, mwsrMaterial, 0);
+                    }
                     else
                     {
                         spatialMaterial.SetFloat("_Sharpness",
@@ -179,6 +227,13 @@ namespace UltraScale.Unity
                 if (Application.isPlaying) Destroy(fsrLiteMaterial);
                 else DestroyImmediate(fsrLiteMaterial);
                 fsrLiteMaterial = null;
+            }
+
+            if (mwsrMaterial != null)
+            {
+                if (Application.isPlaying) Destroy(mwsrMaterial);
+                else DestroyImmediate(mwsrMaterial);
+                mwsrMaterial = null;
             }
         }
     }
