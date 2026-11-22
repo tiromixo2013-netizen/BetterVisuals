@@ -102,9 +102,6 @@ object ApkInjectionPipeline {
         }
     }
 
-    /** Exact adapter matching is mandatory; engine and filename heuristics never authorize patching. */
-    fun adapterAvailable(packageName: String?, versionCode: Long?, abi: String?): Boolean = false
-
     private fun rejected(detail: String) = Preflight(
         false, false, emptyList(), emptyList(), 0, "", false,
         null, null, null, "REJECTED", detail
