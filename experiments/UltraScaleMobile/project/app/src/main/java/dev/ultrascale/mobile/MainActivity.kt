@@ -66,18 +66,42 @@ class MainActivity : ComponentActivity() {
                 var apkReconError by remember { mutableStateOf("") }
                 var apkInjectionStatus by remember { mutableStateOf("") }
                 var selectedApkUri by remember { mutableStateOf<Uri?>(null) }
+                var geodeRoute by remember { mutableStateOf<GameAdapterRegistry.Route?>(null) }
+                var selectedGeodeUri by remember { mutableStateOf<Uri?>(null) }
+                var geodeModsFolderUri by remember { mutableStateOf<Uri?>(null) }
+                var geodeImportStatus by remember { mutableStateOf("") }
                 val scope = rememberCoroutineScope()
                 val apkPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     if (uri != null) scope.launch {
                         selectedApkUri = uri
                         apkReconError = ""
                         apkInjectionStatus = ""
+                        geodeRoute = null
+                        selectedGeodeUri = null
+                        geodeModsFolderUri = null
+                        geodeImportStatus = ""
                         runCatching {
                             withContext(Dispatchers.IO) {
                                 GameRecon.inspectSelectedApk(this@MainActivity, uri, uri.lastPathSegment?.substringAfterLast('/') ?: "Selected APK")
                             }
                         }.onSuccess { apkRecon = it }
                             .onFailure { apkReconError = "APK scan failed: ${it.message}" }
+                    }
+                }
+                val geodeModulePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                    selectedGeodeUri = uri
+                    geodeImportStatus = ""
+                }
+                val geodeFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+                    if (uri != null) {
+                        runCatching {
+                            contentResolver.takePersistableUriPermission(
+                                uri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            )
+                        }
+                        geodeModsFolderUri = uri
+                        geodeImportStatus = ""
                     }
                 }
                 var shizukuRefresh by remember { mutableIntStateOf(0) }
@@ -195,7 +219,13 @@ class MainActivity : ComponentActivity() {
                                                         ApkInjectionPipeline.inspect(this@MainActivity, uri)
                                                     }
                                                 }.onSuccess { result ->
-                                                    apkInjectionStatus = "${result.decision} · ${result.detail}\nPackage: ${result.packageName ?: "unknown"} · Version: ${result.versionName ?: "?"} (${result.versionCode ?: "?"})\nEntries: ${result.entryCount} · DEX: ${result.dexFiles.joinToString()} · ABI: ${result.nativeAbis.joinToString().ifBlank { "none" }} · Existing signature metadata: ${result.hasV1SignatureMetadata}"
+                                                    val adapterMatch = GameAdapterRegistry.resolve(result)
+                                                    geodeRoute = adapterMatch.route
+                                                    apkInjectionStatus = if (adapterMatch.route != null) {
+                                                        "GEODE ADAPTER MATCH · ${adapterMatch.route.displayName}\n${adapterMatch.reason}\nAPK identity: ${result.packageName} ${result.versionName} · ABI: ${result.nativeAbis.joinToString()}"
+                                                    } else {
+                                                        "${result.decision} · ${result.detail}\nAdapter: ${adapterMatch.reason}\nPackage: ${result.packageName ?: "unknown"} · Version: ${result.versionName ?: "?"} (${result.versionCode ?: "?"})\nEntries: ${result.entryCount} · DEX: ${result.dexFiles.joinToString()} · ABI: ${result.nativeAbis.joinToString().ifBlank { "none" }} · Existing signature metadata: ${result.hasV1SignatureMetadata}"
+                                                    }
                                                 }.onFailure {
                                                     apkInjectionStatus = "Preflight failed: ${it.message}"
                                                 }
@@ -204,6 +234,42 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.fillMaxWidth()
                                     ) { Text("Inject UltraScale") }
                                     if (apkInjectionStatus.isNotBlank()) Text(apkInjectionStatus, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+                                    geodeRoute?.let { route ->
+                                        HorizontalDivider(color = Color.White.copy(alpha = .08f))
+                                        Text("SUPPORTED GAME ROUTE · ${route.displayName}", color = Color(0xFF8BD8C7), fontWeight = FontWeight.SemiBold)
+                                        Text("This route installs the repository's Geode mod into a folder you choose. It does not rewrite the APK. Download the Android .geode build artifact from the repository's Build Geode Mod workflow first.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                        OutlinedButton(
+                                            onClick = { geodeModulePicker.launch(arrayOf("application/octet-stream", "*/*")) },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text(if (selectedGeodeUri == null) "Choose BetterVisuals .geode module" else "Change .geode module") }
+                                        selectedGeodeUri?.let { moduleUri ->
+                                            val validation = remember(moduleUri) {
+                                                runCatching { GeodeModInstaller.validate(this@MainActivity, moduleUri) }.getOrNull()
+                                            }
+                                            Text(validation?.detail ?: "Selected module could not be validated.", color = if (validation?.valid == true) Color(0xFF8BD8C7) else Muted, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { geodeFolderPicker.launch(null) },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text(if (geodeModsFolderUri == null) "Choose Geode mods folder" else "Change Geode mods folder") }
+                                        if (geodeModsFolderUri != null) Text("Destination folder selected.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                        Button(
+                                            enabled = selectedGeodeUri != null && geodeModsFolderUri != null,
+                                            onClick = {
+                                                val module = selectedGeodeUri
+                                                val folder = geodeModsFolderUri
+                                                if (module != null && folder != null) scope.launch {
+                                                    geodeImportStatus = "Validating and copying Geode module…"
+                                                    val installResult = withContext(Dispatchers.IO) {
+                                                        GeodeModInstaller.install(this@MainActivity, module, folder)
+                                                    }
+                                                    geodeImportStatus = installResult.detail
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text("Install Geometry Dash adapter") }
+                                        if (geodeImportStatus.isNotBlank()) Text(geodeImportStatus, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+                                    }
                                 }
                             }
                         }
