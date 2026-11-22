@@ -63,10 +63,12 @@ class MainActivity : ComponentActivity() {
                 var query by remember { mutableStateOf("") }
                 var apkRecon by remember { mutableStateOf<GameRecon.Report?>(null) }
                 var apkReconError by remember { mutableStateOf("") }
+                var apkInjectionStatus by remember { mutableStateOf("") }
                 val scope = rememberCoroutineScope()
                 val apkPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                     if (uri != null) scope.launch {
                         apkReconError = ""
+                        apkInjectionStatus = ""
                         runCatching {
                             withContext(Dispatchers.IO) {
                                 GameRecon.inspectSelectedApk(this@MainActivity, uri, uri.lastPathSegment?.substringAfterLast('/') ?: "Selected APK")
@@ -179,6 +181,8 @@ class MainActivity : ComponentActivity() {
                                     Text("Config/asset hints: ${r.assetHints.size}", color = Muted, style = MaterialTheme.typography.bodySmall)
                                     if (!r.apkReadable) Text("The selected document could not be confirmed as a readable APK. Try selecting base.apk again from the file manager, or select the matching split APKs too.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                                     Text("Note: scanning base.apk alone may miss resources and libraries stored in split APKs or downloaded game data. This scan does not inject or change the game.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                    Button(enabled = r.apkReadable, onClick = { apkInjectionStatus = "Preflight complete. No tested game-specific adapter is registered for this APK. No files were changed; a verified adapter for this exact game, version and ABI is required before patching and signing." }, modifier = Modifier.fillMaxWidth()) { Text("Inject UltraScale") }
+                                    if (apkInjectionStatus.isNotBlank()) Text(apkInjectionStatus, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
