@@ -37,7 +37,8 @@ namespace UltraScale.Unity
         private readonly string[] scalerNames =
         {
             "Bilinear",
-            "UltraScale 6-tap (experimental)"
+            "UltraScale FSR Lite (custom)",
+            "UltraScale 7-tap (experimental)"
         };
         private int selectedScaler = 1;
         private Material spatialMaterial;
