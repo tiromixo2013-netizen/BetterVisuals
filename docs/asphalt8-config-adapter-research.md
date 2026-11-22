@@ -57,3 +57,12 @@ The UltraScale Mobile card now has an opt-in Shizuku deployment path for the edi
 ## Current decision
 
 This is a promising additional route for Asphalt 8's **native game settings**, and is worth implementing as a profile/config adapter after the exact installed version's config is collected. It is not yet a proven injection path for UltraScale's custom shaders. For the previously inspected 9.1.0i build, do not assume the v5.x community `gamesettings.json` reports apply.
+
+
+## Installed-config-first safety update
+
+The editor now offers **Load installed Asphalt 8 config (recommended)** through the Shizuku service before the APK-extraction fallback. The live read is permitted only while the game is stopped, is limited to 512 KiB, and validates the expected header plus GPU/Specific profile objects before exposing the JSON to the editor. This prevents treating an APK's embedded defaults as if they were the user's current settings.
+
+Backup handling validates that a previously recorded original backup still exists before another deployment, and restore uses the exact backup named by the marker rather than silently selecting an unrelated newest backup. Legacy restores without a marker may still select the newest matching UltraScale backup.
+
+The app UI remains separate from Asphalt 8's own UI. It does not inherit the game's selected language, and no new game-language strings or in-game menu entries are inserted. The app can be localized independently in a later UI-resource pass. The live file read and deploy are code paths only; no on-device result or game acceptance is asserted.
