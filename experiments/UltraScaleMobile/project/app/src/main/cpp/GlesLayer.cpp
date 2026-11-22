@@ -111,7 +111,7 @@ void RefreshFramebufferTextureInfo(ContextState& state, GLuint texture) {
     if (found == state.textures.end()) return;
     for (auto& framebuffer : state.framebufferAttachments) {
         for (auto& attachment : framebuffer.second) {
-            if (attachment.second.texture == texture) attachment.second = found->second;
+            if (!attachment.second.isRenderbuffer && attachment.second.texture == texture) attachment.second = found->second;
         }
     }
 }
@@ -250,6 +250,7 @@ void LayerDeleteRenderbuffers(GLsizei count, const GLuint* renderbuffers) {
     for (GLsizei i = 0; i < count; ++i) {
         const GLuint id = renderbuffers[i];
         state.renderbuffers.erase(id);
+        if (state.boundRenderbuffer == id) state.boundRenderbuffer = 0;
         for (auto fb = state.framebufferAttachments.begin(); fb != state.framebufferAttachments.end();) {
             for (auto attachment = fb->second.begin(); attachment != fb->second.end();) {
                 if (attachment->second.isRenderbuffer && attachment->second.texture == id)
@@ -274,11 +275,12 @@ void LayerDeleteTextures(GLsizei count, const GLuint* textures) {
     for (GLsizei i = 0; i < count; ++i) {
         const GLuint texture = textures[i];
         state.textures.erase(texture);
+        if (state.boundTexture2D == texture) state.boundTexture2D = 0;
         for (auto framebuffer = state.framebufferAttachments.begin();
              framebuffer != state.framebufferAttachments.end();) {
             for (auto attachment = framebuffer->second.begin();
                  attachment != framebuffer->second.end();) {
-                if (attachment->second.texture == texture) {
+                if (!attachment->second.isRenderbuffer && attachment->second.texture == texture) {
                     attachment = framebuffer->second.erase(attachment);
                 } else {
                     ++attachment;
