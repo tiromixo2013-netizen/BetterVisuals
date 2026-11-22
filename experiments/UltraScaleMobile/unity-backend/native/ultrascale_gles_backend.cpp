@@ -1,0 +1,197 @@
+#include "ultrascale_gles_backend.h"
+#include <cmath>
+#include <cstdint>
+
+#if defined(__ANDROID__)
+#include <GLES3/gl3.h>
+
+namespace {
+const char* kVertexShader = R"(#version 300 es
+precision highp float;
+out vec2 v_uv;
+void main() {
+    vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+    v_uv = p * 0.5;
+    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+})";
+
+const char* kFragmentShader = R"(#version 300 es
+precision highp float;
+in vec2 v_uv;
+uniform sampler2D u_source;
+uniform vec2 u_texel;
+uniform int u_mode;
+uniform float u_sharpness;
+out vec4 out_color;
+void main() {
+    vec4 c = texture(u_source, v_uv);
+    if (u_mode == 1) {
+        vec4 n = texture(u_source, v_uv + vec2(0.0, -u_texel.y));
+        vec4 s = texture(u_source, v_uv + vec2(0.0,  u_texel.y));
+        vec4 e = texture(u_source, v_uv + vec2( u_texel.x, 0.0));
+        vec4 w = texture(u_source, v_uv + vec2(-u_texel.x, 0.0));
+        vec3 cross_avg = (n.rgb + s.rgb + e.rgb + w.rgb) * 0.25;
+        vec3 detail = c.rgb - cross_avg;
+        float edge = clamp(length(detail) * 2.0, 0.0, 1.0);
+        c.rgb += detail * clamp(u_sharpness, 0.0, 1.0) * edge;
+    }
+    out_color = vec4(clamp(c.rgb, 0.0, 1.0), c.a);
+})";
+
+GLuint compile_shader(GLenum type, const char* source) {
+    GLuint shader = glCreateShader(type);
+    if (!shader) return 0;
+    glShaderSource(shader, 1, &source, nullptr);
+    glCompileShader(shader);
+    GLint ok = GL_FALSE;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (ok != GL_TRUE) {
+        glDeleteShader(shader);
+        return 0;
+    }
+    return shader;
+}
+
+GLuint create_program() {
+    GLuint vs = compile_shader(GL_VERTEX_SHADER, kVertexShader);
+    if (!vs) return 0;
+    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, kFragmentShader);
+    if (!fs) {
+        glDeleteShader(vs);
+        return 0;
+    }
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    GLint ok = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if (ok != GL_TRUE) {
+        glDeleteProgram(program);
+        return 0;
+    }
+    return program;
+}
+
+bool has_current_context() {
+    return glGetString(GL_VERSION) != nullptr;
+}
+
+struct GlState {
+    GLint framebuffer = 0;
+    GLint viewport[4] = {};
+    GLint program = 0;
+    GLint active_texture = 0;
+    GLint texture0 = 0;
+    GLint vao = 0;
+    GLint array_buffer = 0;
+    GLint blend = 0, depth = 0, scissor = 0, cull = 0;
+};
+
+void restore_state(const GlState& s) {
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(s.framebuffer));
+    glViewport(s.viewport[0], s.viewport[1], s.viewport[2], s.viewport[3]);
+    glUseProgram(static_cast<GLuint>(s.program));
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(s.texture0));
+    glBindVertexArray(static_cast<GLuint>(s.vao));
+    glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(s.array_buffer));
+    if (s.blend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+    if (s.depth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (s.scissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    if (s.cull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    glActiveTexture(static_cast<GLenum>(s.active_texture));
+}
+}
+
+extern "C" int32_t ultrascale_gles_process_texture(
+    uint32_t src_texture, uint32_t dst_texture,
+    uint32_t input_width, uint32_t input_height,
+    uint32_t output_width, uint32_t output_height,
+    USGlesMode mode, float sharpness) {
+    if (!src_texture || !dst_texture || src_texture == dst_texture ||
+        !input_width || !input_height || !output_width || !output_height ||
+        input_width > 16384 || input_height > 16384 ||
+        output_width > 16384 || output_height > 16384 ||
+        (mode != US_GLES_MODE_BILINEAR && mode != US_GLES_MODE_EDGE_AWARE) ||
+        !std::isfinite(sharpness) || sharpness < 0.0f || sharpness > 1.0f)
+        return US_GLES_INVALID_ARGUMENT;
+    if (!has_current_context()) return US_GLES_NO_CONTEXT;
+
+    while (glGetError() != GL_NO_ERROR) {}
+    GlState old;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old.framebuffer);
+    glGetIntegerv(GL_VIEWPORT, old.viewport);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &old.program);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &old.active_texture);
+    glActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &old.texture0);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &old.vao);
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &old.array_buffer);
+    old.blend = glIsEnabled(GL_BLEND);
+    old.depth = glIsEnabled(GL_DEPTH_TEST);
+    old.scissor = glIsEnabled(GL_SCISSOR_TEST);
+    old.cull = glIsEnabled(GL_CULL_FACE);
+
+    GLuint program = create_program();
+    if (!program) {
+        restore_state(old);
+        return US_GLES_SHADER_ERROR;
+    }
+
+    GLuint fbo = 0, vao = 0;
+    glGenFramebuffers(1, &fbo);
+    glGenVertexArrays(1, &vao);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                            GL_TEXTURE_2D, dst_texture, 0);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        glDeleteVertexArrays(1, &vao);
+        glDeleteFramebuffers(1, &fbo);
+        glDeleteProgram(program);
+        restore_state(old);
+        return US_GLES_FRAMEBUFFER_ERROR;
+    }
+
+    glViewport(0, 0, static_cast<GLsizei>(output_width),
+               static_cast<GLsizei>(output_height));
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_CULL_FACE);
+    glBindVertexArray(vao);
+    glUseProgram(program);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, src_texture);
+    glUniform1i(glGetUniformLocation(program, "u_source"), 0);
+    glUniform2f(glGetUniformLocation(program, "u_texel"),
+                1.0f / static_cast<float>(input_width),
+                1.0f / static_cast<float>(input_height));
+    glUniform1i(glGetUniformLocation(program, "u_mode"), static_cast<GLint>(mode));
+    glUniform1f(glGetUniformLocation(program, "u_sharpness"), sharpness);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    GLenum error = glGetError();
+
+    glDeleteVertexArrays(1, &vao);
+    glDeleteFramebuffers(1, &fbo);
+    glDeleteProgram(program);
+    restore_state(old);
+    return error == GL_NO_ERROR ? US_GLES_OK : US_GLES_GL_ERROR;
+}
+
+extern "C" const char* ultrascale_gles_backend_name(void) {
+    return "UltraScale GLES3 spatial backend (bilinear + edge-aware sharpen)";
+}
+
+#else
+extern "C" int32_t ultrascale_gles_process_texture(
+    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
+    USGlesMode, float) {
+    return US_GLES_UNSUPPORTED_PLATFORM;
+}
+extern "C" const char* ultrascale_gles_backend_name(void) {
+    return "UltraScale GLES backend unavailable on this platform";
+}
+#endif
