@@ -50,7 +50,7 @@ Shader "UltraScale/AMD_CAS"
                 float w = ampG * peak;
                 float rcpWeight = 1.0 / (1.0 + 4.0 * w);
                 float3 result = saturate((b * w + d * w + f * w + h * w + e) * rcpWeight);
-                return fixed4(result, e.r);
+                return fixed4(result, tex2D(_MainTex, uv).a);
             }
             ENDCG
         }
