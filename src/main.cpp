@@ -246,7 +246,13 @@ namespace {
         else if (value == "Balanced") scale = 0.67;
         else if (value == "Quality") scale = 0.77;
         else if (value == "Ultra Quality") scale = 0.88;
-        else if (value == "Custom") return;
+        else if (value == "Custom") {
+            g_renderScale.store(
+                static_cast<float>(Mod::get()->getSettingValue<double>("render-scale")),
+                std::memory_order_relaxed
+            );
+            return;
+        }
         else {
             log::warn("Unknown upscale preset '{}'; keeping current render scale", value);
             return;
