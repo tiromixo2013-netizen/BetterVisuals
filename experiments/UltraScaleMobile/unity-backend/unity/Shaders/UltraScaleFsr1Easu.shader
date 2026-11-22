@@ -202,7 +202,7 @@ float4 frag(v2f_img input) {
 
     float3 pixel = lerp(
         bilinear,
-        min(max4, max(min4, accumulation * (1.0 / weight))),
+        min(max4, max(min4, accumulation * (1.0 / max(abs(weight), FSR_EPSILON)))),
         clamp(_Sharpness, 0.0, 1.0)
     );
     return float4(pixel, f.a);
