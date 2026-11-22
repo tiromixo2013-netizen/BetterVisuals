@@ -26,6 +26,7 @@ using GlDeleteTextures = void (*)(GLsizei, const GLuint*);
 using GlDeleteFramebuffers = void (*)(GLsizei, const GLuint*);
 using GlBindRenderbuffer = void (*)(GLenum, GLuint);
 using GlRenderbufferStorage = void (*)(GLenum, GLenum, GLsizei, GLsizei);
+using GlRenderbufferStorageMultisample = void (*)(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
 using GlFramebufferRenderbuffer = void (*)(GLenum, GLenum, GLenum, GLuint);
 using GlDeleteRenderbuffers = void (*)(GLsizei, const GLuint*);
 
@@ -95,6 +96,7 @@ GlDeleteTextures g_nextDeleteTextures = nullptr;
 GlDeleteFramebuffers g_nextDeleteFramebuffers = nullptr;
 GlBindRenderbuffer g_nextBindRenderbuffer = nullptr;
 GlRenderbufferStorage g_nextRenderbufferStorage = nullptr;
+GlRenderbufferStorageMultisample g_nextRenderbufferStorageMultisample = nullptr;
 GlFramebufferRenderbuffer g_nextFramebufferRenderbuffer = nullptr;
 GlDeleteRenderbuffers g_nextDeleteRenderbuffers = nullptr;
 
@@ -220,6 +222,32 @@ void LayerRenderbufferStorage(GLenum target, GLenum internalFormat, GLsizei widt
             state.lastDrawTextureInfo.texture == state.boundRenderbuffer)
             state.lastDrawTextureInfo = state.renderbuffers[state.boundRenderbuffer];
     }
+}
+
+void LayerRenderbufferStorageMultisample(GLenum target, GLsizei samples, GLenum internalFormat,
+                                         GLsizei width, GLsizei height) {
+    if (g_nextRenderbufferStorageMultisample)
+        g_nextRenderbufferStorageMultisample(target, samples, internalFormat, width, height);
+    if (target != GL_RENDERBUFFER) return;
+    const EGLContext context = CurrentContext();
+    if (context == EGL_NO_CONTEXT) return;
+    std::lock_guard<std::mutex> lock(g_contextMutex);
+    auto& state = StateFor(context);
+    if (!state.boundRenderbuffer) return;
+    state.renderbuffers[state.boundRenderbuffer] = {
+        state.boundRenderbuffer, width, height, internalFormat, true
+    };
+    // The sample count is diagnostic metadata; this probe still does not resolve
+    // or read a multisampled renderbuffer.
+    for (auto& framebuffer : state.framebufferAttachments) {
+        for (auto& attachment : framebuffer.second) {
+            if (attachment.second.isRenderbuffer && attachment.second.texture == state.boundRenderbuffer)
+                attachment.second = state.renderbuffers[state.boundRenderbuffer];
+        }
+    }
+    if (state.lastDrawTextureInfo.isRenderbuffer &&
+        state.lastDrawTextureInfo.texture == state.boundRenderbuffer)
+        state.lastDrawTextureInfo = state.renderbuffers[state.boundRenderbuffer];
 }
 
 void LayerFramebufferRenderbuffer(GLenum target, GLenum attachment, GLenum renderbufferTarget, GLuint renderbuffer) {
@@ -501,6 +529,9 @@ void* AndroidGLESLayer_GetProcAddress(
     } else if (std::strcmp(funcName, "glRenderbufferStorage") == 0) {
         if (next) g_nextRenderbufferStorage = reinterpret_cast<GlRenderbufferStorage>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerRenderbufferStorage));
+    } else if (std::strcmp(funcName, "glRenderbufferStorageMultisample") == 0) {
+        if (next) g_nextRenderbufferStorageMultisample = reinterpret_cast<GlRenderbufferStorageMultisample>(next);
+        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerRenderbufferStorageMultisample));
     } else if (std::strcmp(funcName, "glFramebufferRenderbuffer") == 0) {
         if (next) g_nextFramebufferRenderbuffer = reinterpret_cast<GlFramebufferRenderbuffer>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerFramebufferRenderbuffer));
