@@ -195,7 +195,7 @@ class MainActivity : ComponentActivity() {
                                                         ApkInjectionPipeline.inspect(this@MainActivity, uri)
                                                     }
                                                 }.onSuccess { result ->
-                                                    apkInjectionStatus = "${result.decision} · ${result.detail}\nEntries: ${result.entryCount} · DEX: ${result.dexFiles.joinToString()} · ABI: ${result.nativeAbis.joinToString().ifBlank { "none" }} · Existing signature metadata: ${result.hasV1SignatureMetadata}"
+                                                    apkInjectionStatus = "${result.decision} · ${result.detail}\nPackage: ${result.packageName ?: "unknown"} · Version: ${result.versionName ?: "?"} (${result.versionCode ?: "?"})\nEntries: ${result.entryCount} · DEX: ${result.dexFiles.joinToString()} · ABI: ${result.nativeAbis.joinToString().ifBlank { "none" }} · Existing signature metadata: ${result.hasV1SignatureMetadata}"
                                                 }.onFailure {
                                                     apkInjectionStatus = "Preflight failed: ${it.message}"
                                                 }
