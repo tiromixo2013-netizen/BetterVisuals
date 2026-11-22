@@ -54,6 +54,12 @@ object ShizukuBridge {
         statusListener?.invoke()
     }
 
+    fun readLayerTelemetry(targetPackage: String): Result<String> = runCatching {
+        check(granted()) { "Shizuku permission is not granted" }
+        val service = remote ?: error("Shell service is not connected. Tap Connect Shizuku service first.")
+        service.readLayerTelemetry(targetPackage)
+    }
+
     fun configureDebugLayer(targetPackage: String, layerPackage: String, api: LayerApi, enable: Boolean): Result<String> = runCatching {
         check(granted()) { "Shizuku permission is not granted" }
         val service = remote ?: error("Shell service is not connected. Tap Connect Shizuku service first.")
