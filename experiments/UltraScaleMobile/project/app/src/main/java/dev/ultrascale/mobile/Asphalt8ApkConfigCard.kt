@@ -364,7 +364,7 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Text("ASPHALT 8 · APK CONFIG EDITOR", color = AsphaltViolet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             Text(
-                "Extracts the game's embedded gameoptions.json, lets you edit its existing defaults and override profiles, then exports a separate JSON file.",
+                "Extracts the game's embedded gameoptions.json, lets you edit its existing defaults and resolution profiles, then exports or experimentally installs the edited config through Shizuku.",
                 color = AsphaltMuted,
                 style = MaterialTheme.typography.bodySmall
             )
