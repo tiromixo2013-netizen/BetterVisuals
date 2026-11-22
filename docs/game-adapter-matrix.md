@@ -8,7 +8,7 @@ This document is the source of truth for game-specific adapter registration. A g
 |---|---|---|---|---|---|
 | P0 | Asphalt 8 | `com.gameloft.android.ANMP.GloftA8HM` | `9.1.0i (91009)` observed from the user's selected APK | Not established; the scan reported ABI `none` | Identity observed; no tested adapter |
 | P0 | Geometry Dash | `com.robtopx.geometryjump` (candidate; verify against the selected APK) | Android `2.2081` is the initial research target, not yet verified from a supplied APK | ARM64 is the initial target, not yet verified from a supplied APK | Research target; no tested adapter |
-| P0 | Beach Buggy Racing | `com.vectorunit.purple.googleplay` (candidate; verify against the selected APK) | Not pinned | Not established | Research target; no tested adapter |
+| P0 | Beach Buggy Racing | `com.vectorunit.purple.googleplay` (public listing; still verify selected APK) | Public listing reports `2026.11.02 (220)`; not verified from user's installed APK | Public package variants include `arm64-v8a` and `armeabi-v7a`; installed variant not established | Research target; no tested adapter |
 
 Package IDs marked candidate must be confirmed from the APK manifest before registration. Store variants, regional variants, and sequel packages must not be silently treated as equivalent.
 
@@ -54,3 +54,12 @@ Shizuku shell access does not grant root and does not bypass Android's graphics-
 - Asphalt 8: obtain the installed app's complete split set (or a complete APK set), then inspect native libraries and engine/API fingerprints for version code 91009.
 - Geometry Dash: verify the exact package, version code, ABI, and native library set from the target APK before developing an engine-specific route.
 - Beach Buggy Racing: verify the exact package and whether the APK is the original game or another Vector Unit title; then pin version and ABI before adapter registration.
+
+
+## Research notes (external references; not target validation)
+
+- Geometry Dash: a public Android native-mod example documents the package class path `com/robtopx/geometryjump/GeometryJump`, a `cocos2dcpp` library load, and explicitly limits its procedure to Android v2.2081 / arm64-v8a. This is a useful investigation lead for identifying the game's native engine boundary, not proof that UltraScale's graphics layer can be loaded or that the same APK variant is installed. Reference: https://github.com/ItzZyann/gd-native-mod-android
+- Beach Buggy Racing: public listings identify package `com.vectorunit.purple.googleplay`; recent published builds include version `2026.11.02 (220)`, with architecture-specific split variants including ARM64 and ARM32. A base APK scan alone may therefore miss the ABI-bearing split. Reference: https://www.apkmirror.com/apk/vector-unit/beach-buggy-racing/
+- Beach Buggy Racing is reported as using Vector Unit's custom C++ engine in a third-party compatibility inventory. Treat this only as a hypothesis until the selected APK's libraries and runtime are inspected. Reference: https://digitalisx64.github.io/apps/android17/
+
+These public references guide investigation only. They do not replace inspection of the exact APK installed on the device and do not upgrade any adapter's registration state.
