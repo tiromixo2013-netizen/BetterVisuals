@@ -33,7 +33,11 @@ class ShellUserService : ICommandService.Stub() {
                     "enable_gpu_debug_layers" to "1"
                 )
             )
-            return "Configured $api layer for $targetPackage; existing layer entries were preserved. Fully stop and relaunch the game."
+            check(readSetting("gpu_debug_app") == targetPackage) { "Android did not retain the selected debug target." }
+            check(readSetting("enable_gpu_debug_layers") == "1") { "Android did not enable GPU debug layers." }
+            check(readSetting("gpu_debug_layer_app").split(':').contains(layerPackage)) { "Android did not retain the UltraScale layer package." }
+            check(readSetting(layerKey).split(':').contains(layerName)) { "Android did not retain the requested $api layer name." }
+            return "Verified Android $api debug-layer settings for $targetPackage. Fully stop and relaunch the game; actual loading still depends on Android and target eligibility."
         }
 
         require(targetNow == targetPackage) {
@@ -54,7 +58,12 @@ class ShellUserService : ICommandService.Stub() {
             changes["gpu_debug_app"] = null
         }
         writeSettingsTransaction(changes)
-        return "Disabled UltraScale $api layer for $targetPackage; unrelated layer names and package search entries were preserved. Restart the game."
+        check(!readSetting(layerKey).split(':').contains(layerName)) { "Android still reports the UltraScale $api layer as enabled." }
+        if (!anyVulkanLayers && !anyGlesLayers) {
+            check(readSetting("gpu_debug_app").isBlank()) { "Android still has a GPU debug target configured." }
+            check(readSetting("enable_gpu_debug_layers").isBlank()) { "Android GPU debug layers are still enabled." }
+        }
+        return "Verified UltraScale $api layer disabled for $targetPackage; unrelated layer names and package search entries were preserved. Restart the game."
 
     }
 
