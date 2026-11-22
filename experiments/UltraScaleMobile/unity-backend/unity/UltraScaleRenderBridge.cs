@@ -66,8 +66,12 @@ namespace UltraScale.Unity
             {
                 uint abi = ultrascale_unity_bridge_abi();
                 int nativeStatus = ultrascale_unity_backend_status();
-                if (abi != 1u || nativeStatus != 1)
-                    RuntimeStatus += " / NATIVE_BRIDGE_NOT_CONNECTED";
+                if (abi != 1u)
+                    RuntimeStatus += " / NATIVE_ABI_UNSUPPORTED";
+                else if (nativeStatus == 1)
+                    RuntimeStatus += " / NATIVE_INTEGRATION_REQUIRED";
+                else
+                    RuntimeStatus += " / NATIVE_BACKEND_UNAVAILABLE";
             }
             catch (DllNotFoundException)
             {
