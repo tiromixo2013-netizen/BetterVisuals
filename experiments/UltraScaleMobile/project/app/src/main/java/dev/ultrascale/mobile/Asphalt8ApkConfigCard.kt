@@ -230,6 +230,43 @@ object Asphalt8ApkConfig {
         root.toString(2)
     }
 
+    fun applyResolutionScaleToAllProfiles(jsonText: String, scaleValue: Int): Result<Pair<String, Int>> = runCatching {
+        require(scaleValue in 50..100) { "scaleDisplay must be between 50 and 100 for this profile editor." }
+        val root = JSONObject(jsonText)
+        val specific = root.getJSONObject("profiles").getJSONObject("Specific")
+        val definitions = readDefinitions(specific.optJSONArray("defaults")).associateBy { it.key }
+        val scaleDefinition = definitions["scaleDisplay"]
+        if (scaleDefinition != null) {
+            validateRange(scaleValue.toDouble(), scaleDefinition.range)
+            val defaults = specific.optJSONArray("defaults") ?: error("Missing Specific defaults")
+            for (i in 0 until defaults.length()) {
+                val tier = defaults.optJSONObject(i) ?: continue
+                val pairs = tier.optJSONArray(DEFAULT_CONFIG_TARGET) ?: continue
+                for (j in 0 until pairs.length()) {
+                    val pair = pairs.optJSONArray(j) ?: continue
+                    if (pair.optString(0) == "scaleDisplay") pair.put(1, scaleValue)
+                }
+            }
+        }
+
+        val overrides = specific.optJSONObject("overrides") ?: error("Specific overrides are missing")
+        val iterator = overrides.keys()
+        var updatedProfiles = 0
+        while (iterator.hasNext()) {
+            val profileName = iterator.next()
+            if (!profileName.startsWith("RES_")) continue
+            val profile = overrides.optJSONObject(profileName) ?: continue
+            if (profile.has("scaleDisplay")) {
+                profile.put("scaleDisplay", scaleValue)
+                updatedProfiles++
+            }
+        }
+        require(updatedProfiles > 0) {
+            "No existing RES_ override with scaleDisplay was found; no resolution profiles were changed."
+        }
+        root.toString(2) to updatedProfiles
+    }
+
     fun export(context: Context, destination: Uri, jsonText: String): Result<Unit> = runCatching {
         context.contentResolver.openOutputStream(destination, "wt")?.use {
             it.write(jsonText.toByteArray(Charsets.UTF_8))
@@ -299,6 +336,7 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
     var editStatus by remember { mutableStateOf("") }
     var deployStatus by remember { mutableStateOf("") }
     var deploying by remember { mutableStateOf(false) }
+    var allResolutionScale by remember { mutableStateOf(75f) }
 
     val exportPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -365,6 +403,37 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                 Text("Source entry: ${data.entryName}", color = AsphaltMuted, style = MaterialTheme.typography.bodySmall)
                 Text("Groups: ${data.profileNames.joinToString()}", style = MaterialTheme.typography.bodySmall)
                 Text("GPU override profiles: ${data.gpuOverrideCount}", style = MaterialTheme.typography.bodySmall)
+
+                Text(
+                    "GAME-NATIVE RESOLUTION SCALE",
+                    color = AsphaltViolet,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Text(
+                    "Set the existing scaleDisplay value across all RES_ profiles so the game's chosen resolution profile receives the same value.",
+                    color = AsphaltMuted,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text("scaleDisplay: ${allResolutionScale.toInt()}", color = AsphaltViolet, style = MaterialTheme.typography.labelMedium)
+                Slider(
+                    value = allResolutionScale,
+                    onValueChange = { allResolutionScale = it },
+                    valueRange = 50f..100f,
+                    steps = 9
+                )
+                Button(
+                    onClick = {
+                        Asphalt8ApkConfig.applyResolutionScaleToAllProfiles(editedJson, allResolutionScale.toInt())
+                            .onSuccess { (updated, count) ->
+                                editedJson = updated
+                                editStatus = "Updated scaleDisplay in $count existing RES_ profiles. Install the edited config to test it in Asphalt 8."
+                            }
+                            .onFailure { editStatus = "Scale was not changed: ${it.message}" }
+                    },
+                    enabled = editedJson.isNotBlank() && data.resolutionScales.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Set scaleDisplay in all RES profiles") }
                 Text(
                     if (editedJson != data.rawJson) "Edited copy · original extracted data remains unchanged" else "Original extracted values loaded",
                     color = if (editedJson != data.rawJson) AsphaltViolet else AsphaltMuted,
@@ -503,7 +572,7 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                 style = MaterialTheme.typography.bodySmall
             )
             Text(
-                "Important: this edits and exports the APK's embedded JSON only. It does not inject it into the installed game or rewrite/sign the APK. Profile selection, accepted file location, and the meaning of scaleDisplay still require runtime verification. No FSR, CAS, or real render-scale effect is claimed.",
+                "Experimental game-native path: Apply writes the edited gameoptions.json to Android/data/com.gameloft.android.ANMP.GloftA8HM/files through Shizuku and creates a timestamped backup first. The current Asphalt 8 version accepting this external file and the exact effect of scaleDisplay still need on-device verification. This changes only the game's own setting; it does not inject FSR/EASU or CAS shaders.",
                 color = AsphaltMuted,
                 style = MaterialTheme.typography.labelSmall
             )
