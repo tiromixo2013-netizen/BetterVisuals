@@ -115,7 +115,7 @@ class RenderScaleHarnessActivity : Activity() {
         root.addView(label("4 · Upscaling Preset"))
         val casSharpness = SeekBar(this).apply { max = 100; progress = 0 }
         val presetPicker = picker(listOf("Custom", "Performance", "Balanced", "Quality", "Ultra Quality")) { index ->
-            val presetScale = listOf(70, 50, 70, 85, 95)[index]
+            val presetScale = listOf(70, 50, 70, 85, 90)[index]
             scalePicker.setSelection(listOf(50, 60, 70, 75, 85, 90, 100).indexOf(presetScale).coerceAtLeast(0))
             when (index) {
                 1 -> { upscalerPicker.setSelection(6); upscaleSharpness.progress = 10; casSharpness.progress = 10 }
@@ -127,12 +127,12 @@ class RenderScaleHarnessActivity : Activity() {
         root.addView(presetPicker)
 
         root.addView(label("5 · AMD CAS Sharpness"))
-        val casLabel = label("AMD CAS: Off")
+        val casLabel = label("CAS-style sharpen: Off")
         root.addView(casLabel)
         casSharpness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) {
                 renderer.setSharpness(value / 100f)
-                casLabel.text = if (value == 0) "AMD CAS: Off" else "AMD CAS: $value%"
+                casLabel.text = if (value == 0) "AMD CAS: Off" else "CAS-style sharpen: $value%"
             }
             override fun onStartTrackingTouch(bar: SeekBar?) = Unit
             override fun onStopTrackingTouch(bar: SeekBar?) = Unit
@@ -267,6 +267,10 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
         GLES20.glUseProgram(compositeProgram)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
+        // Apply sampling changes immediately when the picker changes.
+        val sampling = if (requestedUpscaler == 2) GLES20.GL_NEAREST else GLES20.GL_LINEAR
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, sampling)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, sampling)
         GLES20.glUniform1i(compositeSampler, 0)
         GLES20.glUniform2f(compositeTexelSize, 1f / targetWidth.toFloat(), 1f / targetHeight.toFloat())
         GLES20.glUniform1i(compositeUpscaler, requestedUpscaler)
