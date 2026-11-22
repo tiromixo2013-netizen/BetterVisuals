@@ -257,14 +257,12 @@ namespace UltraScale.Unity
                 reduced.filterMode = FilterMode.Bilinear;
                 Graphics.Blit(source, reduced);
 
-                if (settings.scaler == "Native GLES Edge-aware" &&
-                    !TryNativeGles(reduced, upscaled))
+                if (settings.scaler == "Native GLES Edge-aware")
                 {
+                    // Establish a safe bilinear result first. The queued native
+                    // event overwrites it if the GLES context and FBO are valid.
                     Graphics.Blit(reduced, upscaled);
-                }
-                else if (settings.scaler == "Native GLES Edge-aware")
-                {
-                    // Native render event writes to upscaled before subsequent queued blits.
+                    TryNativeGles(reduced, upscaled);
                 }
                 else if (settings.scaler == "Bilinear")
                 {
