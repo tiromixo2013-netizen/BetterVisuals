@@ -390,7 +390,7 @@ private fun GameCard(app: ApplicationInfo, label: String, report: ApiReport) {
                             feedback = results.joinToString(" · ") +
                                 " — Android debug-layer settings only; this is not forced injection."
                             val launch = context.packageManager.getLaunchIntentForPackage(app.packageName)
-                            if (results.any { it.endsWith("configured") } && launch != null) {
+                            if (results.isNotEmpty() && results.all { it.endsWith("configured") } && launch != null) {
                                 launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 context.startActivity(launch)
                             }
