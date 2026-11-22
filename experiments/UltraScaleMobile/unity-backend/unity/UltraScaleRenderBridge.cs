@@ -80,7 +80,7 @@ namespace UltraScale.Unity
                 sgsr1Material = new Material(sgsr1Shader) { hideFlags = HideFlags.HideAndDontSave };
 
             RuntimeStatus = spatialMaterial != null || fsrLiteMaterial != null ||
-                mwsrMaterial != null || fsr1Material != null
+                mwsrMaterial != null || fsr1Material != null || sgsr1Material != null
                 ? "MANAGED_RENDER_READY"
                 : "BILINEAR_FALLBACK_ONLY";
 
