@@ -122,8 +122,8 @@ class RenderScaleHarnessActivity : Activity() {
             when (index) {
                 1 -> { upscalerPicker.setSelection(6); upscaleSharpness.progress = 10; casSharpness.progress = 10 }
                 2 -> { upscalerPicker.setSelection(6); upscaleSharpness.progress = 25; casSharpness.progress = 20 }
-                3 -> { upscalerPicker.setSelection(4); upscaleSharpness.progress = 35; casSharpness.progress = 25 }
-                4 -> { upscalerPicker.setSelection(1); upscaleSharpness.progress = 25; casSharpness.progress = 15 }
+                3 -> { upscalerPicker.setSelection(7); upscaleSharpness.progress = 35; casSharpness.progress = 25 }
+                4 -> { upscalerPicker.setSelection(3); upscaleSharpness.progress = 25; casSharpness.progress = 15 }
             }
         }
         root.addView(presetPicker)
