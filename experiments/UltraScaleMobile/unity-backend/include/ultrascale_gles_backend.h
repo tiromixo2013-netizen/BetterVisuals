@@ -39,6 +39,19 @@ US_GLES_API int32_t ultrascale_gles_process_texture(
 
 US_GLES_API const char* ultrascale_gles_backend_name(void);
 
+/* Unity render-event queue. Call queue from managed/main thread, then issue
+ * the returned callback with GL.IssuePluginEvent. The callback performs the
+ * queued GLES operation on Unity's render thread where the GL context is live.
+ * Queue capacity is intentionally bounded; overflow is reported immediately.
+ */
+US_GLES_API int32_t ultrascale_gles_queue_texture_job(
+    uint32_t src_texture, uint32_t dst_texture,
+    uint32_t input_width, uint32_t input_height,
+    uint32_t output_width, uint32_t output_height,
+    USGlesMode mode, float sharpness);
+US_GLES_API void* ultrascale_gles_get_render_event_func(void);
+US_GLES_API int32_t ultrascale_gles_get_last_result(void);
+
 #ifdef __cplusplus
 }
 #endif
