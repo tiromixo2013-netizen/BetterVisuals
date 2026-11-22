@@ -49,7 +49,8 @@ US_GLES_API int32_t ultrascale_gles_queue_texture_job(
     uint32_t input_width, uint32_t input_height,
     uint32_t output_width, uint32_t output_height,
     USGlesMode mode, float sharpness);
-US_GLES_API void* ultrascale_gles_get_render_event_func(void);
+typedef void (*USGlesUnityRenderEvent)(int32_t event_id);
+US_GLES_API USGlesUnityRenderEvent ultrascale_gles_get_render_event_func(void);
 US_GLES_API int32_t ultrascale_gles_get_last_result(void);
 
 #ifdef __cplusplus
