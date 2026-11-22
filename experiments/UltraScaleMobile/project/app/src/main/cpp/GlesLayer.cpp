@@ -37,6 +37,7 @@ struct TextureInfo {
     GLsizei height = 0;
     GLenum internalFormat = 0;
     bool isRenderbuffer = false;
+    GLsizei samples = 0;
 };
 struct ContextState {
     // Keep draw/read bindings separate: GL_FRAMEBUFFER updates both, while
@@ -235,7 +236,7 @@ void LayerRenderbufferStorageMultisample(GLenum target, GLsizei samples, GLenum 
     auto& state = StateFor(context);
     if (!state.boundRenderbuffer) return;
     state.renderbuffers[state.boundRenderbuffer] = {
-        state.boundRenderbuffer, width, height, internalFormat, true
+        state.boundRenderbuffer, width, height, internalFormat, true, samples
     };
     // The sample count is diagnostic metadata; this probe still does not resolve
     // or read a multisampled renderbuffer.
@@ -449,7 +450,7 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
         const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - start).count();
         __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
-            "Layer telemetry frame=%llu surface=%dx%d context=%p bound_fbo=%u last_draw_fbo=%u last_draw_texture=%u viewport=%d,%d %dx%d draws=%llu attachments=%llu last_attached=%u texture_size=%dx%d internal_format=0x%x swap_call=%lldus result=%d",
+            "Layer telemetry frame=%llu surface=%dx%d context=%p bound_fbo=%u last_draw_fbo=%u last_draw_texture=%u viewport=%d,%d %dx%d draws=%llu attachments=%llu last_attached=%u texture_size=%dx%d internal_format=0x%x samples=%d swap_call=%lldus result=%d",
             static_cast<unsigned long long>(frame), width, height,
             reinterpret_cast<void*>(context), snapshot.boundFramebuffer,
             snapshot.lastDrawFramebuffer, snapshot.lastDrawTexture,
@@ -461,6 +462,7 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
             snapshot.targetTextureInfo.width,
             snapshot.targetTextureInfo.height,
             snapshot.targetTextureInfo.internalFormat,
+            snapshot.targetTextureInfo.samples,
             static_cast<long long>(elapsed), static_cast<int>(result));
     }
     return result;
