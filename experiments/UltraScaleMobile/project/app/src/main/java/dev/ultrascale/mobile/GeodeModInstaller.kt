@@ -15,10 +15,10 @@ object GeodeModInstaller {
     data class Validation(val valid: Boolean, val modId: String?, val detail: String)
     data class InstallResult(val success: Boolean, val fileName: String, val detail: String)
 
-    fun validate(context: Context, uri: Uri): Validation {
+    fun validate(context: Context, uri: Uri, requiredAbi: String = "arm64-v8a"): Validation {
         return runCatching {
             var manifestText: String? = null
-            var hasAndroidBinary = false
+            var hasRequiredAndroidBinary = false
             context.contentResolver.openInputStream(uri)?.use { input ->
                 ZipInputStream(input).use { zip ->
                     while (true) {
@@ -28,8 +28,9 @@ object GeodeModInstaller {
                                 manifestText = zip.readBytes().toString(Charsets.UTF_8)
                             }
                             val lower = entry.name.lowercase()
-                            if (lower.endsWith(".so") && (lower.contains("android") || lower.contains("arm64") || lower.contains("armv7"))) {
-                                hasAndroidBinary = true
+                            val expectedSuffix = if (requiredAbi == "arm64-v8a") ".android64.so" else ".android32.so"
+                            if (lower.endsWith(expectedSuffix)) {
+                                hasRequiredAndroidBinary = true
                             }
                         }
                         zip.closeEntry()
@@ -43,8 +44,9 @@ object GeodeModInstaller {
             if (modId != "imes.bettervisuals") {
                 return Validation(false, modId, "Expected imes.bettervisuals, found $modId.")
             }
-            if (!hasAndroidBinary) {
-                return Validation(false, modId, "No Android native module was found in the selected archive. Choose the Android Geode build output, not source files or the combined desktop-only package.")
+            if (!hasRequiredAndroidBinary) {
+                val expectedSuffix = if (requiredAbi == "arm64-v8a") ".android64.so" else ".android32.so"
+                return Validation(false, modId, "No $expectedSuffix module was found. Choose the Geode artifact built for $requiredAbi.")
             }
             Validation(true, modId, "Verified Geode mod $modId with an Android native module.")
         }.getOrElse {
@@ -52,8 +54,8 @@ object GeodeModInstaller {
         }
     }
 
-    fun install(context: Context, moduleUri: Uri, modsTreeUri: Uri): InstallResult {
-        val validation = validate(context, moduleUri)
+    fun install(context: Context, moduleUri: Uri, modsTreeUri: Uri, requiredAbi: String = "arm64-v8a"): InstallResult {
+        val validation = validate(context, moduleUri, requiredAbi)
         if (!validation.valid) return InstallResult(false, "", validation.detail)
         return runCatching {
             val resolver = context.contentResolver
