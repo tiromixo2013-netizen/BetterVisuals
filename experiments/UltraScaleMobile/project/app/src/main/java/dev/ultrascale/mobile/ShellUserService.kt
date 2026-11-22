@@ -36,7 +36,7 @@ class ShellUserService : ICommandService.Stub() {
                 it.contains("Vulkan layer attached", ignoreCase = true)
         }
         return (if (loaded) "LAYER LOAD CONFIRMED for PID $pid. " else "Layer log activity found for PID $pid, but loader attachment is not confirmed. ") +
-            relevant.takeLast(20).joinToString("\\n").takeLast(10000)
+            relevant.takeLast(20).joinToString("\n").takeLast(10000)
     }
 
     override fun configureLayer(targetPackage: String, layerPackage: String, api: String, enable: Boolean): String {
