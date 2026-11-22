@@ -4,18 +4,27 @@ This folder contains an isolated, owner-integrated Unity plugin adapter, not an 
 
 ## Included
 - `native/`: standalone CMake shared-library target with a versioned C ABI.
-- `unity/UltraScaleRenderBridge.cs`: Built-in Render Pipeline callback example. It receives Unity's source/destination RenderTextures and preserves the original image with Graphics.Blit.
-- `include/ultrascale_unity_bridge.h`: shared ABI contract.
+- `unity/UltraScaleRenderBridge.cs`: Built-in Render Pipeline camera callback with a live in-game settings panel.
+- `unity/Shaders/UltraScaleSpatial6Tap.shader`: project-authored seven-sample spatial reconstruction and optional edge-sharpen pass.
+- `include/ultrascale_unity_bridge.h`: shared native ABI contract.
 
-## Current truthful behavior
-The native bridge validates ABI version, frame dimensions, texture handle and settings ranges. It then returns `INTEGRATION_REQUIRED` because no GLES/Vulkan frame processor is attached yet. The Unity sample intentionally copies the source image unchanged. It must never display ACTIVE or claim FSR/MWSR/CAS is running.
+## Current implemented behavior
+The managed Unity path is now connected:
+1. `OnRenderImage` receives the camera's real source RenderTexture.
+2. It creates a temporary RenderTexture at the selected 50–100% internal scale.
+3. It downsamples the camera image into that target.
+4. Bilinear mode scales the reduced target to the destination with Unity's bilinear blit.
+5. Experimental mode runs the included seven-sample spatial reconstruction shader, with optional edge sharpening.
+6. The temporary target is released after the pass.
 
-## Next engineering work
-1. Add a render-pipeline-specific processor: GLES FBO/shader path for GLES targets and a Vulkan render pass for Vulkan targets.
-2. Define ownership and synchronization for Unity's native texture handle; do not retain transient handles across frames.
-3. Connect the existing EASU, FSR Lite, MWSR, SGSR1 and CAS shaders through the processor.
-4. Add URP/SRP integration using supported ScriptableRendererFeature / RenderGraph APIs; `OnRenderImage` is Built-in RP only.
-5. Validate output, frame pacing, GPU time, thermal behavior and context/device-loss recovery on an owned Unity IL2CPP sample app.
+This is an actual managed render operation in an owned Unity Built-in Render Pipeline project. It is not AMD FidelityFX FSR1/EASU, Qualcomm SGSR1/SGSR2, or upstream MWSR. Those algorithms still need separate Unity shader ports and validation. The native C ABI remains a scaffold and does not yet process Unity texture handles.
 
-## Build
-Build this folder independently with Android NDK/CMake for the target ABI, then package the resulting `libultrascale_unity_bridge.so` into the owned Unity test project's `Assets/Plugins/Android/arm64-v8a/` directory. This module is intentionally not wired into the controller APK's Gradle build.
+## Current limitations
+- Built-in Render Pipeline only. URP/SRP requires a separate ScriptableRendererFeature / RenderGraph implementation.
+- The Unity shader is project-authored spatial filtering; no temporal history, motion vectors, depth reprojection or frame generation.
+- Native GLES/Vulkan bridge is not connected to the managed shader pass.
+- This adapter must be integrated into an owned/debug Unity project; it does not silently load into arbitrary third-party games.
+- No Android device, image-quality, frame-time or thermal validation has been claimed.
+
+## Build and integration
+Build the native folder independently with Android NDK/CMake for the target ABI, then package the resulting `libultrascale_unity_bridge.so` into the owned Unity test project's `Assets/Plugins/Android/arm64-v8a/` directory. Add `UltraScaleRenderBridge.cs` and the shader under the Unity project's `Assets/` tree, then attach the component to the camera. The managed shader path can be tested independently of the optional native library.
