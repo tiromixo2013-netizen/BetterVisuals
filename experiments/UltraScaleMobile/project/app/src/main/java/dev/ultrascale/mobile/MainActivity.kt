@@ -214,6 +214,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                    item { Asphalt8ConfigCard() }
                     item {
                         Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -709,4 +710,104 @@ private fun eligibilityText(state: LayerReadiness, vulkan: Boolean): String = wh
     LayerReadiness.ELIGIBLE_DEBUG -> "Debuggable target"
     LayerReadiness.ELIGIBLE_ROOT -> "Root available"
     else -> if (vulkan) "Needs opt-in, debug target or root" else "Needs debug target or root"
+}
+
+@Composable
+private fun Asphalt8ConfigCard() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sourceUri by remember { mutableStateOf<Uri?>(null) }
+    var folderUri by remember { mutableStateOf<Uri?>(null) }
+    var targetName by remember { mutableStateOf(Asphalt8ConfigAdapter.candidateNames.first()) }
+    var status by remember { mutableStateOf("Import a JSON config created for your exact Asphalt 8 build.") }
+    var valid by remember { mutableStateOf(false) }
+    val version = remember {
+        runCatching {
+            context.packageManager.getPackageInfo("com.gameloft.android.ANMP.GloftA8HM", 0).versionName
+        }.getOrNull()
+    }
+    val configPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        sourceUri = uri
+        valid = false
+        if (uri != null) scope.launch {
+            Asphalt8ConfigAdapter.validate(context, uri)
+                .onSuccess { valid = true; status = "Valid JSON object · ${it} bytes. Game schema is not yet verified for 9.1.0i." }
+                .onFailure { status = "Config rejected: ${it.message}" }
+        }
+    }
+    val folderPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            folderUri = uri
+            status = "Game files folder selected. Check the folder is Asphalt 8's files directory."
+        }
+    }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Panel),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("ASPHALT 8 · CONFIG ADAPTER", color = Violet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Text("Import a game-native JSON config, back up the current file, and copy the imported config into the selected game files folder.", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Text("Detected install version: ${version ?: "Not detected"}", style = MaterialTheme.typography.bodySmall)
+            if (version != null && !version.startsWith("9.1.0i")) {
+                Text("Warning: this install is not the expected 9.1.0i build. Do not apply a config until its schema is verified.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedButton(onClick = { configPicker.launch(arrayOf("application/json", "text/json", "*/*")) }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (sourceUri == null) "Import JSON config" else "Choose another JSON config")
+            }
+            Text("Target filename (historical candidates; neither is verified for 9.1.0i):", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Asphalt8ConfigAdapter.candidateNames.forEach { name ->
+                    OutlinedButton(onClick = { targetName = name }, modifier = Modifier.weight(1f)) {
+                        Text(if (targetName == name) "✓ $name" else name, maxLines = 1)
+                    }
+                }
+            }
+            OutlinedButton(onClick = { folderPicker.launch(null) }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (folderUri == null) "Select Asphalt 8 files folder" else "Change game files folder")
+            }
+            Text("Folder: ${if (folderUri == null) "Not selected" else "Selected via Android file access"}", color = Muted, style = MaterialTheme.typography.bodySmall)
+            Button(
+                enabled = valid && sourceUri != null && folderUri != null && (version == null || version.startsWith("9.1.0i")),
+                onClick = {
+                    val src = sourceUri
+                    val folder = folderUri
+                    if (src != null && folder != null) scope.launch {
+                        status = "Applying config and creating a backup if a target file already exists…"
+                        Asphalt8ConfigAdapter.apply(context, src, folder, targetName)
+                            .onSuccess { result ->
+                                status = "Copied ${result.bytesWritten} bytes to ${result.targetName}. Backup: ${result.backupName ?: "No previous file existed"}."
+                            }
+                            .onFailure { status = "Apply failed: ${it.message}" }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Apply imported config") }
+            OutlinedButton(
+                enabled = folderUri != null,
+                onClick = {
+                    val folder = folderUri
+                    if (folder != null) {
+                        Asphalt8ConfigAdapter.restoreBackup(context, folder, targetName)
+                            .onSuccess { status = it }
+                            .onFailure { status = "Restore failed: ${it.message}" }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Restore backup") }
+            Text(status, color = if (status.contains("failed", true) || status.contains("rejected", true)) MaterialTheme.colorScheme.error else Muted, style = MaterialTheme.typography.bodySmall)
+            Text("Safety: this only validates JSON syntax and copies your file. The filename and settings schema are not confirmed for 9.1.0i; Android 15 may also restrict access to Android/data. No CAS, FSR, render-scale or FPS changes are claimed.", color = Muted, style = MaterialTheme.typography.labelSmall)
+        }
+    }
 }
