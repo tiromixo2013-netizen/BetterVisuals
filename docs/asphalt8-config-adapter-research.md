@@ -48,8 +48,8 @@ The UltraScale Mobile card now has an opt-in Shizuku deployment path for the edi
 
 - Target file: `/storage/emulated/0/Android/data/com.gameloft.android.ANMP.GloftA8HM/files/gameoptions.json`.
 - It validates the expected `header` / `profiles.GPU` / `profiles.Specific` structure and caps the Binder payload at 512 KiB.
-- It writes a temporary file, syncs it, replaces the target, and verifies the final byte count.
-- If no prior UltraScale backup exists, it creates a timestamped backup of the existing target file. The UI exposes a restore action.
+- It refuses to write while the game process is running, writes and syncs a temporary file, atomically replaces the target when supported, and verifies the final byte count.
+- On the first apply, it preserves the original target in a timestamped backup, or records that no original file existed. Later applies keep that original baseline. Restore puts the original file back or removes the new file if none existed.
 - The resolution slider edits only existing `Specific.overrides.RES_*` entries that already have `scaleDisplay`; it does not invent unknown fields.
 
 **This is not an FSR/EASU/CAS injection.** It only writes the game's pre-existing `scaleDisplay` configuration. Community reports establish that similar config files have been placed in this folder by some Asphalt 8 builds, but the current 9.1.0i retail build's file precedence and the visual meaning of `scaleDisplay` have not been confirmed on-device. A successful file write is not proof the game accepted or applied it.
