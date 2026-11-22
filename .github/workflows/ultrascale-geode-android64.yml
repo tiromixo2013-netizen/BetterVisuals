@@ -1,0 +1,31 @@
+name: UltraScale Geometry Dash Android64 Geode Module
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/ultrascale-mobile-api-injection-lab
+
+permissions:
+  contents: read
+
+jobs:
+  build-android64:
+    name: Build Geometry Dash Android64 module
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Geode Android64 module
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          target: Android64
+
+      - name: Upload installable Geode module
+        uses: actions/upload-artifact@v4
+        with:
+          name: BetterVisuals-GeometryDash-Android64
+          path: '**/imes.bettervisuals.geode'
+          if-no-files-found: error
+          retention-days: 14
