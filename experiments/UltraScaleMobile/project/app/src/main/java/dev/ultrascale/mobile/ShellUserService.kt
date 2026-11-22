@@ -107,6 +107,32 @@ class ShellUserService : ICommandService.Stub() {
 
     }
 
+    override fun readAsphalt8Config(): String {
+        requireAsphalt8Stopped()
+        val directory = File(
+            "/storage/emulated/0/Android/data/com.gameloft.android.ANMP.GloftA8HM/files"
+        ).canonicalFile
+        require(directory.isDirectory && directory.canRead()) {
+            "Asphalt 8 files folder is unavailable or cannot be read through Shizuku."
+        }
+        val destination = File(directory, "gameoptions.json").canonicalFile
+        require(destination.parentFile == directory && destination.isFile) {
+            "No installed gameoptions.json was found in Asphalt 8's files folder."
+        }
+        require(destination.length() in 1..(512L * 1024L)) {
+            "Installed gameoptions.json is empty or exceeds the 512 KiB safety limit."
+        }
+        val json = destination.readText(Charsets.UTF_8)
+        val root = JSONObject(json)
+        val profiles = root.optJSONObject("profiles")
+        require(root.optJSONObject("header") != null &&
+            profiles?.optJSONObject("GPU") != null &&
+            profiles.optJSONObject("Specific") != null) {
+            "The installed file does not match the supported Asphalt 8 gameoptions schema."
+        }
+        return json
+    }
+
     override fun deployAsphalt8Config(json: String): String {
         val bytes = json.toByteArray(Charsets.UTF_8)
         require(bytes.isNotEmpty() && bytes.size <= 512 * 1024) {
@@ -142,6 +168,12 @@ class ShellUserService : ICommandService.Stub() {
             previousOrigin == null || previousOrigin == "CREATED" ||
                 Regex("""^gameoptions\.json\.ultrascale-\d+\.bak$""").matches(previousOrigin)
         ) { "The existing UltraScale backup marker is invalid; refusing to overwrite the game config." }
+        if (previousOrigin != null && previousOrigin != "CREATED") {
+            val recordedBackup = File(directory, previousOrigin).canonicalFile
+            require(recordedBackup.parentFile == directory && recordedBackup.isFile) {
+                "The original backup recorded by UltraScale is missing; refusing to replace the current game config."
+            }
+        }
         val backup = if (previousOrigin == null && destination.isFile) {
             File(directory, "gameoptions.json.ultrascale-${System.currentTimeMillis()}.bak").also {
                 Files.copy(destination.toPath(), it.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
@@ -211,17 +243,23 @@ class ShellUserService : ICommandService.Stub() {
             return "Removed the gameoptions.json created by UltraScale; no pre-existing config was present."
         }
 
-        val namedBackup = origin
-            ?.takeIf { Regex("""^gameoptions\\.json\\.ultrascale-\\d+\\.bak$""").matches(it) }
-            ?.let { File(directory, it).canonicalFile }
-            ?.takeIf { it.parentFile == directory && it.isFile }
-        val backup = namedBackup?.takeIf { it.isFile } ?: directory.listFiles()
-            ?.filter {
-                it.isFile && it.name.startsWith("gameoptions.json.ultrascale-") &&
-                    it.name.endsWith(".bak")
+        val backup = if (origin != null) {
+            require(Regex("""^gameoptions\.json\.ultrascale-\d+\.bak$""").matches(origin)) {
+                "The backup marker is invalid; refusing to guess which backup to restore."
             }
-            ?.maxByOrNull { it.lastModified() }
-            ?: error("No UltraScale backup was found; nothing to restore.")
+            File(directory, origin).canonicalFile.also {
+                require(it.parentFile == directory && it.isFile) {
+                    "The original backup recorded by UltraScale is missing; nothing was restored."
+                }
+            }
+        } else {
+            directory.listFiles()
+                ?.filter {
+                    it.isFile && it.name.matches(Regex("""^gameoptions\.json\.ultrascale-\d+\.bak$"""))
+                }
+                ?.maxByOrNull { it.lastModified() }
+                ?: error("No UltraScale backup was found; nothing to restore.")
+        }
 
         val temporary = File(directory, ".gameoptions.json.restore.tmp")
         try {
