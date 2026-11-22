@@ -144,6 +144,12 @@ namespace UltraScale.Unity
             GUILayout.Label("7-tap is a separate experimental spatial filter.");
             GUILayout.Label("MWSR is the upstream MIT HLSL spatial upscale port.");
             GUILayout.Label("SGSR1 uses texture gather; requires a supported GLES 3.1+ backend.");
+            if (settings.scaler == "Qualcomm SGSR1 (GLES 3.1+)" && sgsr1Material == null)
+                GUILayout.Label("SGSR1 unavailable on this backend: Bilinear fallback active.");
+            if (settings.scaler == "MWSR (MIT)" && mwsrMaterial == null)
+                GUILayout.Label("MWSR shader unavailable: Bilinear fallback active.");
+            if (settings.scaler == "AMD FSR1 EASU" && fsr1Material == null)
+                GUILayout.Label("EASU shader unavailable: Bilinear fallback active.");
             GUI.DragWindow(new Rect(0, 0, 10000, 28));
         }
 
@@ -185,12 +191,10 @@ namespace UltraScale.Unity
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
             if (source == null || destination == null)
-            {
-                if (source != null && destination != null)
-                    Graphics.Blit(source, destination);
                 return;
-            }
 
+            settings.renderScale = Mathf.Clamp(settings.renderScale, 0.5f, 1f);
+            settings.sharpness = Mathf.Clamp01(settings.sharpness);
             int width = Mathf.Max(1, Mathf.RoundToInt(source.width * settings.renderScale));
             int height = Mathf.Max(1, Mathf.RoundToInt(source.height * settings.renderScale));
             RenderTexture reduced = RenderTexture.GetTemporary(
