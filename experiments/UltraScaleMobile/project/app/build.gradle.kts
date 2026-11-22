@@ -44,3 +44,29 @@ dependencies {
     // Static APK/DEX/manifest parser for engine fingerprinting.
     implementation("net.dongliu:apk-parser:2.6.10")
 }
+
+
+// Verifies that both Android graphics-layer entry libraries are present in the
+// manager APK for every ABI we claim to support. This is a build-time packaging
+// check only; it does not prove that a target game is eligible or loaded a layer.
+tasks.register("verifyUltraScaleLayerPackaging") {
+    dependsOn("assembleDebug")
+    doLast {
+        val apk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk").get().asFile
+        check(apk.isFile) { "Debug APK was not produced: ${apk.absolutePath}" }
+        val expectedAbis = listOf("arm64-v8a", "armeabi-v7a")
+        val expectedLibraries = listOf(
+            "libGLES_ultrascale.so",
+            "libVkLayer_ultrascale_api_lab.so"
+        )
+        java.util.zip.ZipFile(apk).use { zip ->
+            val missing = expectedAbis.flatMap { abi ->
+                expectedLibraries.map { library -> "lib/$abi/$library" }
+            }.filter { zip.getEntry(it) == null }
+            check(missing.isEmpty()) {
+                "UltraScale graphics-layer libraries missing from APK: ${missing.joinToString()}"
+            }
+        }
+        logger.lifecycle("UltraScale GLES and Vulkan layer libraries are packaged for: ${expectedAbis.joinToString()}")
+    }
+}
