@@ -263,10 +263,18 @@ class MainActivity : ComponentActivity() {
                                                     selectedLayerFeedback = ""
                                                     val adapterMatch = GameAdapterRegistry.resolve(result)
                                                     geodeRoute = adapterMatch.route
+                                                    val researchProfile = PriorityGameProfiles.identify(result.packageName)
+                                                    val profileStatus = when {
+                                                        researchProfile == null -> "No priority-game profile."
+                                                        result.nativeAbis.isEmpty() -> "${researchProfile.title}: identity recognized, but ABI is unknown in this APK file; inspect the complete split set."
+                                                        !researchProfile.matches(result.packageName, result.versionName, result.nativeAbis.toSet()) ->
+                                                            "${researchProfile.title}: package recognized, but version/ABI does not match this research profile."
+                                                        else -> "${researchProfile.title}: ${researchProfile.state} · APIs are candidates only: ${researchProfile.apiCandidates.joinToString()}."
+                                                    }
                                                     apkInjectionStatus = if (adapterMatch.route != null) {
-                                                        "GEODE ADAPTER MATCH · ${adapterMatch.route.displayName}\n${adapterMatch.reason}\nAPK identity: ${result.packageName} ${result.versionName} · ABI: ${result.nativeAbis.joinToString()}"
+                                                        "GEODE ADAPTER MATCH · ${adapterMatch.route.displayName}\n${adapterMatch.reason}\n${profileStatus}\nAPK identity: ${result.packageName} ${result.versionName} · ABI: ${result.nativeAbis.joinToString()}"
                                                     } else {
-                                                        "${result.decision} · ${result.detail}\nAdapter: ${adapterMatch.reason}\nPackage: ${result.packageName ?: "unknown"} · Version: ${result.versionName ?: "?"} (${result.versionCode ?: "?"})\nEntries: ${result.entryCount} · DEX: ${result.dexFiles.joinToString()} · ABI: ${result.nativeAbis.joinToString().ifBlank { "none" }} · Existing signature metadata: ${result.hasV1SignatureMetadata}"
+                                                        "${result.decision} · ${result.detail}\nProfile: ${profileStatus}\nAdapter: ${adapterMatch.reason}\nPackage: ${result.packageName ?: "unknown"} · Version: ${result.versionName ?: "?"} (${result.versionCode ?: "?"})\nEntries: ${result.entryCount} · DEX: ${result.dexFiles.joinToString()} · ABI: ${result.nativeAbis.joinToString().ifBlank { "none" }} · Existing signature metadata: ${result.hasV1SignatureMetadata}"
                                                     }
                                                 }.onFailure {
                                                     apkInjectionStatus = "Preflight failed: ${it.message}"
