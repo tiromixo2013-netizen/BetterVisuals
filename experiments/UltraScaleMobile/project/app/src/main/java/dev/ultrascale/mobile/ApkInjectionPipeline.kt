@@ -2,15 +2,18 @@ package dev.ultrascale.mobile
 
 import android.content.Context
 import android.net.Uri
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.security.DigestInputStream
 import java.security.MessageDigest
-import java.util.zip.ZipInputStream
+import java.util.UUID
+import java.util.zip.ZipFile
 
 /**
  * Conservative APK injection gate.
- *
- * This stage verifies the selected archive and computes a stable fingerprint. It deliberately
- * refuses to patch/re-sign unless an exact, tested game/version/ABI adapter is registered.
- * APK resource insertion alone does not integrate a shader into a game's render pipeline.
+ * It validates the archive and fingerprint, then refuses mutation unless an exact tested
+ * game/version/ABI adapter exists. Adding assets alone does not integrate a game's renderer.
  */
 object ApkInjectionPipeline {
     data class Preflight(
@@ -27,54 +30,59 @@ object ApkInjectionPipeline {
 
     suspend fun inspect(context: Context, uri: Uri): Preflight {
         val digest = MessageDigest.getInstance("SHA-256")
-        val entries = linkedSetOf<String>()
-        var validZip = false
-        context.contentResolver.openInputStream(uri)?.use { raw ->
-            DigestInputStreamCompat(raw, digest).use { hashed ->
-                ZipInputStream(hashed).use { zip ->
-                    while (true) {
-                        val entry = zip.nextEntry ?: break
-                        if (!entry.isDirectory) {
-                            entries += entry.name
-                            // Consume each entry fully so CRC and decompression errors are surfaced.
-                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                            while (zip.read(buffer) != -1) Unit
-                        }
-                        zip.closeEntry()
-                    }
-                    validZip = entries.isNotEmpty()
+        val temp = File(context.cacheDir, "ultrascale-preflight-${UUID.randomUUID()}.apk")
+        try {
+            val input = context.contentResolver.openInputStream(uri)
+                ?: return rejected("The selected document could not be opened.")
+            input.use { source ->
+                DigestInputStream(source, digest).use { hashed ->
+                    FileOutputStream(temp).use { output -> hashed.copyTo(output) }
                 }
             }
-        } ?: return Preflight(false, false, emptyList(), emptyList(), 0, "", false,
-            "REJECTED", "The selected document could not be opened.")
-
-        val dex = entries.filter { it.matches(Regex("classes(\\d+)?\\.dex")) }.sorted()
-        val abis = entries.filter { it.startsWith("lib/") && it.endsWith(".so") }
-            .mapNotNull { it.split('/').getOrNull(1) }.distinct().sorted()
-        val manifest = "AndroidManifest.xml" in entries
-        val signatureMetadata = entries.any {
-            it.startsWith("META-INF/") && (it.endsWith(".RSA", true) ||
-                it.endsWith(".DSA", true) || it.endsWith(".EC", true))
+            val hash = digest.digest().joinToString("") { "%02x".format(it) }
+            val entries = linkedSetOf<String>()
+            var validZip = false
+            ZipFile(temp).use { zip ->
+                val enumeration = zip.entries()
+                while (enumeration.hasMoreElements()) {
+                    val entry = enumeration.nextElement()
+                    if (!entry.isDirectory) {
+                        entries += entry.name
+                        zip.getInputStream(entry).use { stream ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            while (stream.read(buffer) != -1) Unit
+                        }
+                    }
+                }
+                validZip = entries.isNotEmpty()
+            }
+            val dex = entries.filter { it.matches(Regex("classes(\\d+)?\\.dex")) }.sorted()
+            val abis = entries.filter { it.startsWith("lib/") && it.endsWith(".so") }
+                .mapNotNull { it.split('/').getOrNull(1) }.distinct().sorted()
+            val manifest = "AndroidManifest.xml" in entries
+            val signatureMetadata = entries.any {
+                it.startsWith("META-INF/") && (it.endsWith(".RSA", true) ||
+                    it.endsWith(".DSA", true) || it.endsWith(".EC", true))
+            }
+            val decision = if (!validZip || !manifest || dex.isEmpty()) "REJECTED" else "ADAPTER_REQUIRED"
+            val detail = if (decision == "REJECTED") {
+                "APK preflight failed: ZIP, AndroidManifest.xml or DEX payload is missing."
+            } else {
+                "Archive verified. SHA-256: $hash. No exact tested game/version/ABI adapter is registered; patching and signing are blocked. The original APK remains unchanged."
+            }
+            return Preflight(validZip, manifest, dex, abis, entries.size, hash,
+                signatureMetadata, decision, detail)
+        } catch (error: Exception) {
+            return rejected("Archive validation failed: ${error.message ?: error.javaClass.simpleName}")
+        } finally {
+            temp.delete()
         }
-        val hash = digest.digest().joinToString("") { "%02x".format(it) }
-
-        val decision = when {
-            !validZip || !manifest || dex.isEmpty() -> "REJECTED"
-            else -> "ADAPTER_REQUIRED"
-        }
-        val detail = when (decision) {
-            "REJECTED" -> "APK preflight failed: ZIP, AndroidManifest.xml or DEX payload is missing."
-            else -> "Archive verified. SHA-256: $hash. No exact, tested game/version/ABI adapter is registered yet; patching and signing are blocked. The original APK remains unchanged."
-        }
-        return Preflight(validZip, manifest, dex, abis, entries.size, hash,
-            signatureMetadata, decision, detail)
     }
 
-    /** Adapter registration is intentionally explicit; never infer compatibility from engine hints. */
+    /** Exact adapter matching is mandatory; heuristics never authorize an APK patch. */
     fun adapterAvailable(packageName: String?, versionCode: Long?, abi: String?): Boolean = false
 
-    private class DigestInputStreamCompat(
-        input: java.io.InputStream,
-        digest: MessageDigest
-    ) : java.security.DigestInputStream(input, digest)
+    private fun rejected(detail: String) = Preflight(
+        false, false, emptyList(), emptyList(), 0, "", false, "REJECTED", detail
+    )
 }
