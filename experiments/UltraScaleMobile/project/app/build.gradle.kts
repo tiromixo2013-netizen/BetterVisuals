@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -59,7 +61,7 @@ tasks.register("verifyUltraScaleLayerPackaging") {
             "libGLES_ultrascale.so",
             "libVkLayer_ultrascale_api_lab.so"
         )
-        java.util.zip.ZipFile(apk).use { zip ->
+        ZipFile(apk).use { zip ->
             val missing = expectedAbis.flatMap { abi ->
                 expectedLibraries.map { library -> "lib/$abi/$library" }
             }.filter { zip.getEntry(it) == null }
