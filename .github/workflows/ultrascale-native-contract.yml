@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure
-        run: cmake -S experiments/UltraScaleMobile/unity-backend/native -B build/ultrascale-native -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+        run: cmake -S experiments/UltraScaleMobile/unity-backend/native -B build/ultrascale-native -DCMAKE_BUILD_TYPE=Release -DULTRASCALE_BUILD_TESTS=ON
       - name: Build
         run: cmake --build build/ultrascale-native --parallel
       - name: Test ABI and host fallback
