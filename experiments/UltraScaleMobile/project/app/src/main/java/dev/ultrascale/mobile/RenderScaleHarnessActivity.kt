@@ -32,7 +32,19 @@ class RenderScaleHarnessActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val savedProfile = readUltraScaleSettings(this)
         renderer = HarnessRenderer()
+        renderer.setScale(savedProfile.renderScalePercent / 100f)
+        renderer.setUpscaler(
+            when {
+                savedProfile.integerScaling || savedProfile.upscaler == UpscaleMode.NEAREST -> 2
+                savedProfile.upscaler == UpscaleMode.CATMULL_ROM -> 1
+                savedProfile.upscaler == UpscaleMode.FSR_LITE -> 3
+                else -> 0
+            }
+        )
+        renderer.setReconstructionSharpness(savedProfile.upscaleSharpnessPercent / 100f)
+        renderer.setCasSharpness(savedProfile.casSharpnessPercent / 100f)
         surface = GLSurfaceView(this).apply {
             setEGLContextClientVersion(2)
             setRenderer(renderer)
@@ -52,7 +64,7 @@ class RenderScaleHarnessActivity : Activity() {
             setPadding(0, 8, 0, 4)
         }
         val subtitle = TextView(this).apply {
-            text = "Low-resolution off-screen render → full-size output"
+            text = "Loaded saved UltraScale profile: ${savedProfile.preset.title}"
             setTextColor(Color.LTGRAY)
             textSize = 13f
         }
@@ -76,7 +88,10 @@ class RenderScaleHarnessActivity : Activity() {
         val scalePicker = picker(listOf("50%", "60%", "70%", "75%", "85%", "90%", "100%")) {
             renderer.setScale(listOf(50, 60, 70, 75, 85, 90, 100)[it] / 100f)
         }
-        scalePicker.setSelection(2)
+        val scaleOptions = listOf(50, 60, 70, 75, 85, 90, 100)
+        scalePicker.setSelection(scaleOptions.indices.minByOrNull {
+            kotlin.math.abs(scaleOptions[it] - savedProfile.renderScalePercent)
+        } ?: 2)
         root.addView(scalePicker)
 
         root.addView(label("2 · Upscaling"))
@@ -96,13 +111,23 @@ class RenderScaleHarnessActivity : Activity() {
             }
         }
         root.addView(upscalerPicker)
+        val initialUpscalerIndex = when {
+            savedProfile.integerScaling || savedProfile.upscaler == UpscaleMode.NEAREST -> 5
+            savedProfile.upscaler == UpscaleMode.CATMULL_ROM -> 7
+            savedProfile.upscaler == UpscaleMode.FSR_LITE -> 3
+            savedProfile.upscaler == UpscaleMode.AMD_FSR1_EASU -> 4
+            savedProfile.upscaler == UpscaleMode.MWSR -> 2
+            savedProfile.upscaler == UpscaleMode.SGSR1 || savedProfile.upscaler == UpscaleMode.SGSR2 -> 1
+            else -> 6
+        }
+        upscalerPicker.setSelection(initialUpscalerIndex)
 
         root.addView(label("3 · Upscaling Sharpness"))
         val upscaleSharpnessLabel = label("Upscaling sharpness: 0% · independent reconstruction stage")
         root.addView(upscaleSharpnessLabel)
         val upscaleSharpness = SeekBar(this).apply {
             max = 100
-            progress = 0
+            progress = savedProfile.upscaleSharpnessPercent
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) {
                     renderer.setReconstructionSharpness(value / 100f)
@@ -115,14 +140,15 @@ class RenderScaleHarnessActivity : Activity() {
         root.addView(upscaleSharpness)
 
         root.addView(label("4 · Upscaling Preset"))
-        val casSharpness = SeekBar(this).apply { max = 100; progress = 0 }
-        val presetPicker = picker(listOf("Custom", "Performance", "Balanced", "Quality", "Ultra Quality")) { index ->
+        val casSharpness = SeekBar(this).apply { max = 100; progress = savedProfile.casSharpnessPercent }
+        val presetPicker = picker(listOf("Ultra Performance", "Performance", "Balanced", "Quality", "Ultra Quality", "Custom")) { index ->
             // Custom preserves manually selected controls; named presets apply their tested defaults.
-            if (index != 0) {
-                val presetScale = listOf(50, 70, 85, 90)[index - 1]
+            val presetScale = listOf(50, 55, 70, 85, 90).getOrNull(index)
+            if (presetScale != null) {
                 scalePicker.setSelection(listOf(50, 60, 70, 75, 85, 90, 100).indexOf(presetScale))
             }
             when (index) {
+                0 -> { upscalerPicker.setSelection(6); upscaleSharpness.progress = 5; casSharpness.progress = 5 }
                 1 -> { upscalerPicker.setSelection(6); upscaleSharpness.progress = 10; casSharpness.progress = 10 }
                 2 -> { upscalerPicker.setSelection(6); upscaleSharpness.progress = 25; casSharpness.progress = 20 }
                 3 -> { upscalerPicker.setSelection(7); upscaleSharpness.progress = 35; casSharpness.progress = 25 }
@@ -130,6 +156,16 @@ class RenderScaleHarnessActivity : Activity() {
             }
         }
         root.addView(presetPicker)
+        presetPicker.setSelection(
+            when (savedProfile.preset) {
+                UpscalePreset.ULTRA_PERFORMANCE -> 0
+                UpscalePreset.PERFORMANCE -> 1
+                UpscalePreset.BALANCED -> 2
+                UpscalePreset.QUALITY -> 3
+                UpscalePreset.ULTRA_QUALITY -> 4
+                UpscalePreset.CUSTOM -> 5
+            }
+        )
 
         root.addView(label("5 · AMD CAS Sharpness"))
         val casLabel = label("CAS-style sharpen: Off")
@@ -145,6 +181,8 @@ class RenderScaleHarnessActivity : Activity() {
         root.addView(casSharpness)
 
         root.addView(label("6 · Low Latency"))
+        val savedLatencyNote = label("Saved profile: ${savedProfile.lowLatency.title}. This GLES2 demo does not control the game frame queue.")
+        root.addView(savedLatencyNote)
         val latencyStatus = label("Off · frame-queue control is not implemented in this harness")
         root.addView(latencyStatus)
         root.addView(picker(listOf("Off", "On · unavailable", "Ultra / No Queue · unavailable")) {
@@ -159,7 +197,7 @@ class RenderScaleHarnessActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
         ))
         val note = TextView(this).apply {
-            text = "Test harness only. It does not modify other apps or prove arbitrary-game compatibility."
+            text = "Live profile preview only. Unsupported methods use a safe Bilinear fallback; this does not modify Asphalt 8 or another app."
             setTextColor(Color.LTGRAY)
             textSize = 12f
             gravity = Gravity.CENTER

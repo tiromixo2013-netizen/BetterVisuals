@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 
 private const val ULTRASCALE_PREFS = "ultrascale_graphics_settings"
 
-private fun readUltraScaleSettings(context: Context): UltraScaleSettings {
+internal fun readUltraScaleSettings(context: Context): UltraScaleSettings {
     val p = context.getSharedPreferences(ULTRASCALE_PREFS, Context.MODE_PRIVATE)
     fun enumValue(key: String, fallback: String) = p.getString(key, fallback) ?: fallback
     return UltraScaleSettings(
