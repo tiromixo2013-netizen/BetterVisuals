@@ -1,6 +1,17 @@
 #include "ultrascale_gles_backend.h"
 #include <cmath>
 #include <cstdint>
+#include <atomic>
+#include <deque>
+#include <mutex>
+
+namespace {
+struct GlesJob { uint32_t src, dst, in_w, in_h, out_w, out_h; USGlesMode mode; float sharpness; };
+std::mutex g_job_mutex;
+std::deque<GlesJob> g_jobs;
+std::atomic<int32_t> g_last_result{US_GLES_UNSUPPORTED_PLATFORM};
+constexpr size_t kMaxQueuedJobs = 4;
+}
 
 #if defined(__ANDROID__)
 #include <GLES3/gl3.h>
@@ -185,6 +196,42 @@ extern "C" const char* ultrascale_gles_backend_name(void) {
     return "UltraScale GLES3 spatial backend (bilinear + edge-aware sharpen)";
 }
 
+extern "C" void ultrascale_gles_render_event(int event_id) {
+    if (event_id != 1) return;
+    GlesJob job{};
+    {
+        std::lock_guard<std::mutex> lock(g_job_mutex);
+        if (g_jobs.empty()) return;
+        job = g_jobs.front();
+        g_jobs.pop_front();
+    }
+    g_last_result.store(ultrascale_gles_process_texture(
+        job.src, job.dst, job.in_w, job.in_h, job.out_w, job.out_h,
+        job.mode, job.sharpness));
+}
+
+extern "C" int32_t ultrascale_gles_queue_texture_job(
+    uint32_t src, uint32_t dst, uint32_t in_w, uint32_t in_h,
+    uint32_t out_w, uint32_t out_h, USGlesMode mode, float sharpness) {
+    if (!src || !dst || src == dst || !in_w || !in_h || !out_w || !out_h ||
+        in_w > 16384 || in_h > 16384 || out_w > 16384 || out_h > 16384 ||
+        (mode != US_GLES_MODE_BILINEAR && mode != US_GLES_MODE_EDGE_AWARE) ||
+        !std::isfinite(sharpness) || sharpness < 0.0f || sharpness > 1.0f)
+        return US_GLES_INVALID_ARGUMENT;
+    std::lock_guard<std::mutex> lock(g_job_mutex);
+    if (g_jobs.size() >= kMaxQueuedJobs) return US_GLES_INVALID_ARGUMENT;
+    g_jobs.push_back({src, dst, in_w, in_h, out_w, out_h, mode, sharpness});
+    return US_GLES_OK;
+}
+
+extern "C" void* ultrascale_gles_get_render_event_func(void) {
+    return reinterpret_cast<void*>(&ultrascale_gles_render_event);
+}
+
+extern "C" int32_t ultrascale_gles_get_last_result(void) {
+    return g_last_result.load();
+}
+
 #else
 extern "C" int32_t ultrascale_gles_process_texture(
     uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
@@ -193,5 +240,12 @@ extern "C" int32_t ultrascale_gles_process_texture(
 }
 extern "C" const char* ultrascale_gles_backend_name(void) {
     return "UltraScale GLES backend unavailable on this platform";
+}
+extern "C" int32_t ultrascale_gles_queue_texture_job(
+    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
+    USGlesMode, float) { return US_GLES_UNSUPPORTED_PLATFORM; }
+extern "C" void* ultrascale_gles_get_render_event_func(void) { return nullptr; }
+extern "C" int32_t ultrascale_gles_get_last_result(void) {
+    return US_GLES_UNSUPPORTED_PLATFORM;
 }
 #endif
