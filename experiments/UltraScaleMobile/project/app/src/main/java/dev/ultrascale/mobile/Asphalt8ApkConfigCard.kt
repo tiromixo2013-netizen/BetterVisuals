@@ -188,9 +188,9 @@ object Asphalt8ApkConfig {
         val profile = root.getJSONObject("profiles").getJSONObject(section)
         val definitions = readDefinitions(profile.optJSONArray("defaults")).associateBy { it.key }
         val definition = definitions[key]
-        val overrides = profile.optJSONObject("overrides") ?: error("Missing override table")
+        val overrides = profile.optJSONObject("overrides")
         val currentOverride = if (target == DEFAULT_CONFIG_TARGET) null else
-            overrides.optJSONObject(target) ?: error("Unknown override profile: $target")
+            overrides?.optJSONObject(target) ?: error("Unknown override profile: $target")
 
         if (rawValue == null) {
             require(target != DEFAULT_CONFIG_TARGET) { "Default values cannot be removed" }
@@ -223,7 +223,7 @@ object Asphalt8ApkConfig {
                 }
                 require(updated) { "Could not locate default pair for $key" }
             } else {
-                currentOverride?.put(key, parsed)
+                currentOverride?.put(key, parsed) ?: error("Override profile is unavailable")
             }
         }
         root.toString(2)
