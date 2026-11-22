@@ -66,6 +66,10 @@ class MainActivity : ComponentActivity() {
                 var apkReconError by remember { mutableStateOf("") }
                 var apkInjectionStatus by remember { mutableStateOf("") }
                 var selectedApkUri by remember { mutableStateOf<Uri?>(null) }
+                var selectedTargetPackage by remember { mutableStateOf<String?>(null) }
+                var selectedTargetReport by remember { mutableStateOf<ApiReport?>(null) }
+                var selectedTargetVersionMatches by remember { mutableStateOf(false) }
+                var selectedLayerFeedback by remember { mutableStateOf("") }
                 var geodeRoute by remember { mutableStateOf<GameAdapterRegistry.Route?>(null) }
                 var selectedGeodeUri by remember { mutableStateOf<Uri?>(null) }
                 var geodeModuleValidation by remember { mutableStateOf<GeodeModInstaller.Validation?>(null) }
@@ -77,6 +81,10 @@ class MainActivity : ComponentActivity() {
                         selectedApkUri = uri
                         apkReconError = ""
                         apkInjectionStatus = ""
+                        selectedTargetPackage = null
+                        selectedTargetReport = null
+                        selectedTargetVersionMatches = false
+                        selectedLayerFeedback = ""
                         geodeRoute = null
                         selectedGeodeUri = null
                         geodeModuleValidation = null
@@ -224,9 +232,23 @@ class MainActivity : ComponentActivity() {
                                                 apkInjectionStatus = "Checking APK archive and fingerprint…"
                                                 runCatching {
                                                     withContext(Dispatchers.IO) {
-                                                        ApkInjectionPipeline.inspect(this@MainActivity, uri)
+                                                        val preflight = ApkInjectionPipeline.inspect(this@MainActivity, uri)
+                                                        val installedApp = preflight.packageName?.let { packageName ->
+                                                            runCatching { packageManager.getApplicationInfo(packageName, 0) }.getOrNull()
+                                                        }
+                                                        val installedReport = installedApp?.let {
+                                                            GraphicsApiScanner.inspect(this@MainActivity, it)
+                                                        }
+                                                        val exactInstalledVersion = installedReport != null &&
+                                                            installedReport.versionName == preflight.versionName &&
+                                                            installedReport.versionCode == preflight.versionCode
+                                                        Triple(preflight, installedReport, exactInstalledVersion)
                                                     }
-                                                }.onSuccess { result ->
+                                                }.onSuccess { (result, installedReport, exactInstalledVersion) ->
+                                                    selectedTargetPackage = result.packageName
+                                                    selectedTargetReport = installedReport
+                                                    selectedTargetVersionMatches = exactInstalledVersion
+                                                    selectedLayerFeedback = ""
                                                     val adapterMatch = GameAdapterRegistry.resolve(result)
                                                     geodeRoute = adapterMatch.route
                                                     apkInjectionStatus = if (adapterMatch.route != null) {
@@ -242,6 +264,70 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.fillMaxWidth()
                                     ) { Text("Inject UltraScale") }
                                     if (apkInjectionStatus.isNotBlank()) Text(apkInjectionStatus, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+                                    if (selectedTargetPackage != null && selectedTargetReport == null) {
+                                        Text(
+                                            "The APK package is not installed on this device. Android graphics-layer configuration can only target an installed, eligible app; this file has only been inspected.",
+                                            color = Muted,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    selectedTargetReport?.let { target ->
+                                        val vulkanReady = RenderApi.VULKAN in target.candidateApis &&
+                                            target.vulkanLayer in setOf(LayerReadiness.ELIGIBLE_OPT_IN, LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
+                                        val glesReady = RenderApi.OPENGL_ES in target.candidateApis &&
+                                            target.glesLayer in setOf(LayerReadiness.ELIGIBLE_DEBUG, LayerReadiness.ELIGIBLE_ROOT)
+                                        HorizontalDivider(color = Color.White.copy(alpha = .08f))
+                                        Text("INSTALLED TARGET · ${selectedTargetPackage}", fontWeight = FontWeight.SemiBold)
+                                        if (!selectedTargetVersionMatches) {
+                                            Text(
+                                                "Installed app version does not exactly match the selected APK. Layer activation is blocked to avoid configuring a different build.",
+                                                color = MaterialTheme.colorScheme.error,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        } else {
+                                            Text("Installed version matches the selected APK · ${target.engine}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                            EligibilityLine("Vulkan", vulkanReady, eligibilityText(target.vulkanLayer, true))
+                                            EligibilityLine("OpenGL ES", glesReady, eligibilityText(target.glesLayer, false))
+                                            Text(
+                                                "This action configures Android's documented GPU debug-layer settings for the installed app. It does not rewrite or re-sign the selected APK, and it cannot bypass Android's layer-loading eligibility rules.",
+                                                color = Muted,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                            Button(
+                                                enabled = selectedTargetVersionMatches && (vulkanReady || glesReady) &&
+                                                    ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                                                onClick = {
+                                                    val packageName = selectedTargetPackage ?: return@Button
+                                                    val results = mutableListOf<String>()
+                                                    if (vulkanReady) {
+                                                        ShizukuBridge.configureDebugLayer(packageName, this@MainActivity.packageName, LayerApi.VULKAN, true)
+                                                            .onSuccess { results += "Vulkan configured" }
+                                                            .onFailure { results += "Vulkan failed: ${it.message}" }
+                                                    }
+                                                    if (glesReady) {
+                                                        ShizukuBridge.configureDebugLayer(packageName, this@MainActivity.packageName, LayerApi.OPENGL_ES, true)
+                                                            .onSuccess { results += "GLES configured" }
+                                                            .onFailure { results += "GLES failed: ${it.message}" }
+                                                    }
+                                                    selectedLayerFeedback = results.joinToString(" · ")
+                                                    if (results.isNotEmpty() && results.all { it.endsWith("configured") }) {
+                                                        val launch = packageManager.getLaunchIntentForPackage(packageName)
+                                                        if (launch != null) {
+                                                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                            startActivity(launch)
+                                                            selectedLayerFeedback += " · Game launched; restart fully if it was already running."
+                                                        } else {
+                                                            selectedLayerFeedback += " · Settings saved; launch the game manually."
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) { Text("Apply compatible layer & launch game") }
+                                            if (selectedLayerFeedback.isNotBlank()) {
+                                                Text(selectedLayerFeedback, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+                                            }
+                                        }
+                                    }
                                     geodeRoute?.let { route ->
                                         HorizontalDivider(color = Color.White.copy(alpha = .08f))
                                         Text("SUPPORTED GAME ROUTE · ${route.displayName}", color = Color(0xFF8BD8C7), fontWeight = FontWeight.SemiBold)
