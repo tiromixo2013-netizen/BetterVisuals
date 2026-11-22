@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p acquired/raw acquired/extracted reports
-          apkeep -a com.gameloft.android.ANMP.GloftA8HM -d apk-pure acquired/raw
+          apkeep -a com.gameloft.android.ANMP.GloftA8HM -d apk-pure -o 'acknowledge_dangers=true' acquired/raw
           find acquired/raw -maxdepth 2 -type f -printf '%p (%s bytes)\\n'
           test -n "$(find acquired/raw -type f | head -n 1)"
 
