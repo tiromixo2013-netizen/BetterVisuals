@@ -113,6 +113,9 @@ class ShellUserService : ICommandService.Stub() {
             "The config must be between 1 byte and 512 KiB."
         }
         val root = JSONObject(json)
+        require(!root.has("ultrascale")) {
+            "UltraScale renderer settings are not part of Asphalt 8's native gameoptions schema. Keep them in a separate UltraScale profile; no game file was changed."
+        }
         require(root.optJSONObject("header") != null &&
             root.optJSONObject("profiles")?.has("GPU") == true &&
             root.optJSONObject("profiles")?.has("Specific") == true) {
