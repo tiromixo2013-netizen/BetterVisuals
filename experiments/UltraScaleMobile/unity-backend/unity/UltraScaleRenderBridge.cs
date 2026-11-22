@@ -214,9 +214,19 @@ namespace UltraScale.Unity
                 }
                 else if (settings.scaler == "MWSR (MIT)" && mwsrMaterial != null)
                 {
-                    ConfigureMwsr(reduced.width, reduced.height,
-                        upscaled.width, upscaled.height);
-                    Graphics.Blit(reduced, upscaled, mwsrMaterial, 0);
+                    float mwsrScale = Mathf.Min(
+                        (float)upscaled.width / reduced.width,
+                        (float)upscaled.height / reduced.height);
+                    if (mwsrScale >= 1.07f)
+                    {
+                        ConfigureMwsr(reduced.width, reduced.height,
+                            upscaled.width, upscaled.height);
+                        Graphics.Blit(reduced, upscaled, mwsrMaterial, 0);
+                    }
+                    else
+                    {
+                        Graphics.Blit(reduced, upscaled);
+                    }
                 }
                 else if (settings.scaler == "AMD FSR1 EASU" && fsr1Material != null)
                 {
@@ -232,7 +242,8 @@ namespace UltraScale.Unity
                             reduced.width, reduced.height));
                     Graphics.Blit(reduced, upscaled, sgsr1Material, 0);
                 }
-                else if (spatialMaterial != null)
+                else if (settings.scaler == "UltraScale 7-tap (experimental)" &&
+                    spatialMaterial != null)
                 {
                     spatialMaterial.SetFloat("_Sharpness", 0f);
                     Graphics.Blit(reduced, upscaled, spatialMaterial, 0);
