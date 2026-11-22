@@ -215,7 +215,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     item { Asphalt8ApkConfigCard(selectedApkUri) }
-                    item { Asphalt8ConfigCard() }
                     item {
                         Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
