@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(ultrascale_unity_bridge LANGUAGES CXX)
 
+option(ULTRASCALE_BUILD_TESTS "Build host/native contract tests" OFF)
+
 add_library(ultrascale_unity_bridge SHARED
     ultrascale_unity_bridge.cpp
     ultrascale_gles_backend.cpp
@@ -17,8 +19,8 @@ if(ANDROID)
     target_link_libraries(ultrascale_unity_bridge PRIVATE ${GLESV3_LIBRARY})
 endif()
 
-include(CTest)
-if(BUILD_TESTING)
+if(ULTRASCALE_BUILD_TESTS)
+    enable_testing()
     add_executable(ultrascale_unity_bridge_tests
         tests/ultrascale_unity_bridge_tests.cpp
         ultrascale_unity_bridge.cpp
