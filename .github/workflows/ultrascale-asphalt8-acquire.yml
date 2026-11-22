@@ -1,0 +1,95 @@
+name: UltraScale Asphalt 8 APK acquisition lab
+
+on:
+  push:
+    branches:
+      - feature/ultrascale-mobile-api-injection-lab
+    paths:
+      - ".github/workflows/ultrascale-asphalt8-acquire.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ultrascale-asphalt8-acquire
+  cancel-in-progress: false
+
+jobs:
+  acquire-and-inspect:
+    name: Download and inspect Asphalt 8
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout UltraScale project
+        uses: actions/checkout@v4
+
+      - name: Install Android build tools
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install APK inspection tools
+        run: sdkmanager "build-tools;35.0.0"
+
+      - name: Install apkeep downloader
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build apkeep
+        run: cargo install apkeep --locked
+
+      - name: Download Asphalt 8 from APKPure
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p acquired/raw acquired/extracted reports
+          apkeep -a com.gameloft.android.ANMP.GloftA8HM -d apk-pure acquired/raw
+          find acquired/raw -maxdepth 2 -type f -printf '%p (%s bytes)\\n'
+          test -n "$(find acquired/raw -type f | head -n 1)"
+
+      - name: Normalize APK or XAPK and inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for file in acquired/raw/*; do
+            case "$file" in
+              *.xapk|*.zip)
+                dest="acquired/extracted/$(basename "$file").contents"
+                mkdir -p "$dest"
+                unzip -q "$file" -d "$dest"
+                ;;
+              *.apk)
+                mkdir -p acquired/extracted/single-apk
+                cp "$file" acquired/extracted/single-apk/
+                ;;
+            esac
+          done
+          : > reports/asphalt8-inspection.txt
+          echo "Acquisition time (UTC): $(date -u +%FT%TZ)" >> reports/asphalt8-inspection.txt
+          echo "Expected package: com.gameloft.android.ANMP.GloftA8HM" >> reports/asphalt8-inspection.txt
+          echo >> reports/asphalt8-inspection.txt
+          mapfile -t apks < <(find acquired -type f -name '*.apk' | sort)
+          if [ "${#apks[@]}" -eq 0 ]; then
+            echo "ERROR: downloader returned no APK files." | tee -a reports/asphalt8-inspection.txt
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            echo "===== $apk =====" | tee -a reports/asphalt8-inspection.txt
+            sha256sum "$apk" | tee -a reports/asphalt8-inspection.txt
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" 2>&1 | head -n 35 | tee -a reports/asphalt8-inspection.txt || true
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" 2>&1 | tee -a reports/asphalt8-inspection.txt || true
+            echo "Native libraries:" | tee -a reports/asphalt8-inspection.txt
+            unzip -Z1 "$apk" | grep -E '^lib/[^/]+/.*\\.so$' | sort -u | tee -a reports/asphalt8-inspection.txt || true
+            echo | tee -a reports/asphalt8-inspection.txt
+          done
+          echo "NOTE: No APK modifications or re-signing were performed in this acquisition job." >> reports/asphalt8-inspection.txt
+
+      - name: Upload acquired APKs and inspection report
+        uses: actions/upload-artifact@v4
+        with:
+          name: Asphalt8-acquired-source-and-inspection
+          path: |
+            acquired/raw/**
+            acquired/extracted/**
+            reports/asphalt8-inspection.txt
+          if-no-files-found: error
+          retention-days: 3
