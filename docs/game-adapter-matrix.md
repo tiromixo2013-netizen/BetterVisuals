@@ -84,3 +84,18 @@ No APK/XAPK/APKS binary was downloaded or inspected in this update. Do not regis
 - Beach Buggy Racing APKMirror release page gives a bundle-level SHA-256 of `b02331be24bb5297b0c2f198428788c740662601162eb4823f385de8d93d9480`, signing certificate SHA-256 `66b46a40a5647e9e514daaad03eb9467601c7329414f6a146db485a86ea4d124`, and an arm64-v8a split of 17.63 MB. This gives concrete expected values for later local verification: https://www.apkmirror.com/apk/vector-unit/beach-buggy-racing/beach-buggy-racing-2026-11-02-release/beach-buggy-racing-2026-11-02-android-apk-download/
 - Geometry Dash's official Android version has advanced to 2.209 / 2.2091 by October 2026; 2.2081 is now an older target. The 2.2081 itch.io upload is user-posted and its own comments raise malware concerns; do not treat it as a trusted binary. The official Geode project states compatibility with 2.2081, and the native-mod template documents the arm64-only `cocos2dcpp`/Java load boundary, but neither is an official 2.2081 APK mirror. Use a legitimately acquired APK and verify signing certificate/hash before analysis.
 - This update records source metadata only. No third-party game APK binary has been downloaded, extracted, or cryptographically verified in the UltraScale build environment.
+
+
+## Geometry Dash cross-version strategy (updated 2026-11-22)
+
+The current research target is Android 2.2091, while 2.2081 remains a compatibility baseline. Public patch notes indicate that 2.209 introduced improved Options/navigation and 2.2091 mainly contains fixes and smaller tweaks; the public Settings reference still describes the familiar top-level sections (Account, How to play, Options, Graphics, Rate, Songs, Help). This supports investigating a shared settings entry point, but it does NOT prove identical internal menu node IDs, class layouts, offsets, binary symbols, or render pipeline behavior.
+
+Implementation policy:
+- Keep one shared conceptual settings integration/UI design for 2.2081 and 2.2091 where verified.
+- Use separate version fingerprints and per-version native symbol/layout maps.
+- Do not reuse hard-coded offsets or hook addresses across versions without binary comparison.
+- Prefer capability detection (menu node/class/function signatures) over brittle fixed offsets.
+- Keep the renderer integration separate from the settings UI: matching settings menus do not prove the same render target, framebuffer ownership, or safe injection route.
+- Test both versions independently before marking either adapter as INTEGRATION_TESTED.
+
+Reference notes: https://geometrydash.wiki.gg/wiki/Update_2.2 ; https://geometrydash.wiki.gg/wiki/Settings ; https://apps.apple.com/za/app/geometry-dash/id625334537
