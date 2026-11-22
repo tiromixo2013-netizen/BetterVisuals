@@ -428,7 +428,7 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
         std::lock_guard<std::mutex> lock(g_contextMutex);
         const auto found = g_contexts.find(context);
         if (found != g_contexts.end()) {
-            const auto& state = found->second;
+            auto& state = found->second;
             snapshot.boundFramebuffer = state.boundFramebuffer;
             snapshot.viewportX = state.viewportX;
             snapshot.viewportY = state.viewportY;
