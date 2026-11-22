@@ -204,6 +204,18 @@ class MainActivity : ComponentActivity() {
                     item { UpscalerLibraryCard() }
                     item {
                         Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("RENDER SCALE LAB", color = Violet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                Text("Test real off-screen rendering at reduced resolution, then upscale to the full screen.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                Button(
+                                    onClick = { startActivity(Intent(this@MainActivity, RenderScaleHarnessActivity::class.java)) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text("Open render-scale test") }
+                            }
+                        }
+                    }
+                    item {
+                        Card(colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                                 Text("APK FILE INSPECTOR", color = Violet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                                 Text("Choose an APK file to fingerprint its engine, native ABI libraries and public asset/config hints.", color = Muted, style = MaterialTheme.typography.bodySmall)
