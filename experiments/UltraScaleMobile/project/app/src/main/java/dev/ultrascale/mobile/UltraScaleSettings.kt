@@ -20,15 +20,17 @@ enum class UpscaleMode(
     FSR_LITE("UltraScale FSR Lite · custom 6-tap", 2, 0, true),
     AMD_FSR1_EASU("AMD FSR1 · EASU", 2, 0, false),
     MWSR("MWSR", 3, 0, false),
-    SGSR1("Qualcomm SGSR1 Mobile", 3, 1, false)
+    SGSR1("Qualcomm SGSR1 Mobile", 3, 1, false),
+    SGSR2("Qualcomm SGSR2 · temporal", 3, 1, false)
 }
 
 enum class UpscalePreset(val title: String) {
-    CUSTOM("Custom"),
+    ULTRA_PERFORMANCE("Ultra Performance"),
     PERFORMANCE("Performance"),
     BALANCED("Balanced"),
     QUALITY("Quality"),
-    ULTRA_QUALITY("Ultra Quality")
+    ULTRA_QUALITY("Ultra Quality"),
+    CUSTOM("Custom")
 }
 
 enum class LowLatencyMode(val title: String) {
@@ -46,7 +48,9 @@ data class UltraScaleSettings(
     val preset: UpscalePreset = UpscalePreset.CUSTOM,
     /** Independent post-upscale CAS-style sharpening strength. Zero disables it; official AMD CAS requires a separately validated backend. */
     val casSharpnessPercent: Int = 0,
-    val lowLatency: LowLatencyMode = LowLatencyMode.OFF
+    val lowLatency: LowLatencyMode = LowLatencyMode.OFF,
+    /** Preserve integer pixel edges when the output scale is an exact integer ratio. */
+    val integerScaling: Boolean = false
 ) {
     fun normalized(): UltraScaleSettings = copy(
         renderScalePercent = renderScalePercent.coerceIn(50, 100),
@@ -57,8 +61,15 @@ data class UltraScaleSettings(
     companion object {
         fun forPreset(preset: UpscalePreset): UltraScaleSettings = when (preset) {
             UpscalePreset.CUSTOM -> UltraScaleSettings()
-            UpscalePreset.PERFORMANCE -> UltraScaleSettings(
+            UpscalePreset.ULTRA_PERFORMANCE -> UltraScaleSettings(
                 renderScalePercent = 50,
+                upscaler = UpscaleMode.BILINEAR,
+                upscaleSharpnessPercent = 5,
+                preset = preset,
+                casSharpnessPercent = 5
+            )
+            UpscalePreset.PERFORMANCE -> UltraScaleSettings(
+                renderScalePercent = 55,
                 upscaler = UpscaleMode.BILINEAR,
                 upscaleSharpnessPercent = 10,
                 preset = preset,
