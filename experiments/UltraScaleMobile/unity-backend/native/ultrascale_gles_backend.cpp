@@ -267,8 +267,8 @@ extern "C" int32_t ultrascale_gles_queue_texture_job(
     return US_GLES_OK;
 }
 
-extern "C" void* ultrascale_gles_get_render_event_func(void) {
-    return reinterpret_cast<void*>(&ultrascale_gles_render_event);
+extern "C" USGlesUnityRenderEvent ultrascale_gles_get_render_event_func(void) {
+    return &ultrascale_gles_render_event;
 }
 
 extern "C" int32_t ultrascale_gles_get_last_result(void) {
@@ -287,7 +287,7 @@ extern "C" const char* ultrascale_gles_backend_name(void) {
 extern "C" int32_t ultrascale_gles_queue_texture_job(
     uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
     USGlesMode, float) { return US_GLES_UNSUPPORTED_PLATFORM; }
-extern "C" void* ultrascale_gles_get_render_event_func(void) { return nullptr; }
+extern "C" USGlesUnityRenderEvent ultrascale_gles_get_render_event_func(void) { return nullptr; }
 extern "C" int32_t ultrascale_gles_get_last_result(void) {
     return US_GLES_UNSUPPORTED_PLATFORM;
 }
