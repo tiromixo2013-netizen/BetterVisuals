@@ -105,7 +105,7 @@ object GameRecon {
             label = label ?: pkg,
             packageName = pkg,
             versionName = info?.versionName,
-            versionCode = info?.longVersionCode,
+            versionCode = info?.let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode else @Suppress("DEPRECATION") it.versionCode.toLong() },
             installer = installer,
             installKind = installKind,
             apkFiles = apkPaths,
