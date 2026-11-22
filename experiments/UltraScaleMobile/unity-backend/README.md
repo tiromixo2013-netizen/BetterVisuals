@@ -5,7 +5,7 @@ This folder contains an isolated, owner-integrated Unity plugin adapter, not an 
 ## Included
 - `native/`: standalone CMake shared-library target with a versioned C ABI.
 - `unity/UltraScaleRenderBridge.cs`: Built-in Render Pipeline camera callback with a live in-game settings panel.
-- `unity/Shaders/UltraScaleSpatial6Tap.shader`: project-authored seven-sample spatial reconstruction and optional edge-sharpen pass.
+- `unity/Shaders/UltraScaleSpatial7Tap.shader`: project-authored seven-sample spatial reconstruction and optional edge-sharpen pass.
 - `include/ultrascale_unity_bridge.h`: shared native ABI contract.
 
 ## Current implemented behavior
