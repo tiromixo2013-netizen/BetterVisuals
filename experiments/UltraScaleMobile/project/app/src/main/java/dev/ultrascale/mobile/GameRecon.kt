@@ -25,7 +25,12 @@ object GameRecon {
         val graphicsLibraries: List<String>,
         val engine: String,
         val assetHints: List<String>,
-        val confidenceNotes: List<String>
+        val confidenceNotes: List<String>,
+        val entryCount: Int = 0,
+        val hasManifest: Boolean = false,
+        val dexFiles: List<String> = emptyList(),
+        val topLevelFolders: List<String> = emptyList(),
+        val apkReadable: Boolean = true
     )
 
     private val targetHints = listOf(
@@ -157,8 +162,13 @@ object GameRecon {
             }.take(80).sorted(),
             confidenceNotes = listOf(
                 "Read-only scan of the APK selected by the user.",
-                "Split APK sets should be selected and inspected together for complete ABI/asset coverage."
-            )
+                "A base APK may not contain all resources or native libraries; inspect matching split APK files too."
+            ),
+            entryCount = entries.size,
+            hasManifest = "AndroidManifest.xml" in entries,
+            dexFiles = entries.filter { it.matches(Regex("classes(\\d+)?\\.dex")) }.sorted(),
+            topLevelFolders = entries.map { it.substringBefore('/') }.distinct().sorted().take(30),
+            apkReadable = entries.isNotEmpty() && "AndroidManifest.xml" in entries
         )
     }
 
