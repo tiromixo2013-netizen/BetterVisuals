@@ -56,102 +56,99 @@ class RenderScaleHarnessActivity : Activity() {
             setTextColor(Color.LTGRAY)
             textSize = 13f
         }
-        scaleLabel = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            textSize = 15f
-            setPadding(0, 12, 0, 4)
-            text = "Render scale: 70%"
-        }
-        val scale = SeekBar(this).apply {
-            max = 75
-            progress = 45 // 25%..100%, default 70%
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) {
-                    val factor = (25 + value) / 100f
-                    scaleLabel.text = "Render scale: ${(factor * 100).roundToInt()}%"
-                    renderer.setScale(factor)
-                }
-                override fun onStartTrackingTouch(bar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(bar: SeekBar?) = Unit
-            })
-        }
-        root.addView(title)
-        root.addView(subtitle)
-        root.addView(scaleLabel)
-        root.addView(scale)
-
-        val upscalerLabel = TextView(this).apply {
-            text = "Upscaler: Linear"
+        fun label(value: String) = TextView(this).apply {
+            text = value
             setTextColor(Color.WHITE)
             textSize = 14f
-            setPadding(0, 10, 0, 4)
+            setPadding(0, 8, 0, 2)
         }
-        val upscalerPicker = Spinner(this).apply {
-            adapter = ArrayAdapter(
-                this@RenderScaleHarnessActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                listOf("Linear (fast)", "Catmull-Rom 4×4 (sharper)")
-            )
-            setSelection(0)
-            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                    renderer.setUpscaler(position)
-                    upscalerLabel.text = if (position == 0) "Upscaler: Linear" else "Upscaler: Catmull-Rom 4×4"
+        fun picker(items: List<String>, onPick: (Int) -> Unit) =
+            Spinner(this).apply {
+                adapter = ArrayAdapter(this@RenderScaleHarnessActivity,
+                    android.R.layout.simple_spinner_dropdown_item, items)
+                onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) = onPick(position)
+                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
                 }
-                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            }
+
+        root.addView(label("1 · Render Scale"))
+        val scalePicker = picker(listOf("50%", "60%", "70%", "75%", "85%", "90%", "100%")) {
+            renderer.setScale(listOf(50, 60, 70, 75, 85, 90, 100)[it] / 100f)
+        }
+        scalePicker.setSelection(2)
+        root.addView(scalePicker)
+
+        root.addView(label("2 · Upscaling"))
+        val upscalerStatus = label("Active in harness: Bilinear")
+        root.addView(upscalerStatus)
+        val upscalerPicker = picker(listOf(
+            "Off", "SGSR1 · not wired", "MWSR · not wired", "FSR Lite · not wired",
+            "AMD FSR1 EASU · not wired", "Nearest Neighbor", "Bilinear", "Catmull-Rom · lab"
+        )) { index ->
+            when (index) {
+                0 -> { renderer.setUpscaler(0); upscalerStatus.text = "Active in harness: pass-through / bilinear sampling" }
+                5 -> { renderer.setUpscaler(2); upscalerStatus.text = "Active in harness: Nearest Neighbor" }
+                6 -> { renderer.setUpscaler(0); upscalerStatus.text = "Active in harness: Bilinear" }
+                7 -> { renderer.setUpscaler(1); upscalerStatus.text = "Active in harness: Catmull-Rom (experimental)" }
+                else -> { renderer.setUpscaler(0); upscalerStatus.text = "Not wired in this GLES2 harness; pass-through selected." }
             }
         }
-        root.addView(upscalerLabel)
         root.addView(upscalerPicker)
 
-        val sharpnessLabel = TextView(this).apply {
-            text = "CAS sharpening: Off"
-            setTextColor(Color.WHITE)
-            textSize = 14f
-            setPadding(0, 10, 0, 4)
-        }
-        val sharpness = SeekBar(this).apply {
+        root.addView(label("3 · Upscaling Sharpness"))
+        val upscaleSharpnessLabel = label("Reconstruction sharpness: 0% · UI only, no separate shader stage yet")
+        root.addView(upscaleSharpnessLabel)
+        val upscaleSharpness = SeekBar(this).apply {
             max = 100
             progress = 0
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) {
-                    renderer.setSharpness(value / 100f)
-                    sharpnessLabel.text = if (value == 0) "CAS sharpening: Off" else "CAS sharpening: $value%"
+                    upscaleSharpnessLabel.text = "Reconstruction sharpness: $value% · UI only in this build"
                 }
                 override fun onStartTrackingTouch(bar: SeekBar?) = Unit
                 override fun onStopTrackingTouch(bar: SeekBar?) = Unit
             })
         }
-        root.addView(sharpnessLabel)
-        root.addView(sharpness)
+        root.addView(upscaleSharpness)
 
-        val presetLabel = TextView(this).apply {
-            text = "Preset"
-            setTextColor(Color.WHITE)
-            textSize = 14f
-            setPadding(0, 10, 0, 4)
-        }
-        val presetPicker = Spinner(this).apply {
-            adapter = ArrayAdapter(
-                this@RenderScaleHarnessActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                listOf("Custom", "Performance · 50%", "Balanced · 70%", "Quality · 85%", "Native · 100%")
-            )
-            setSelection(0)
-            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                    when (position) {
-                        1 -> { scale.progress = 25; upscalerPicker.setSelection(0); sharpness.progress = 0 }
-                        2 -> { scale.progress = 45; upscalerPicker.setSelection(1); sharpness.progress = 25 }
-                        3 -> { scale.progress = 60; upscalerPicker.setSelection(1); sharpness.progress = 45 }
-                        4 -> { scale.progress = 75; upscalerPicker.setSelection(0); sharpness.progress = 0 }
-                    }
-                }
-                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        root.addView(label("4 · Upscaling Preset"))
+        val casSharpness = SeekBar(this).apply { max = 100; progress = 0 }
+        val presetPicker = picker(listOf("Custom", "Performance", "Balanced", "Quality", "Ultra Quality")) { index ->
+            val presetScale = listOf(70, 50, 70, 85, 95)[index]
+            scalePicker.setSelection(listOf(50, 60, 70, 75, 85, 90, 100).indexOf(presetScale).coerceAtLeast(0))
+            when (index) {
+                1 -> { upscalerPicker.setSelection(6); upscaleSharpness.progress = 10; casSharpness.progress = 10 }
+                2 -> { upscalerPicker.setSelection(6); upscaleSharpness.progress = 25; casSharpness.progress = 20 }
+                3 -> { upscalerPicker.setSelection(4); upscaleSharpness.progress = 35; casSharpness.progress = 25 }
+                4 -> { upscalerPicker.setSelection(1); upscaleSharpness.progress = 25; casSharpness.progress = 15 }
             }
         }
-        root.addView(presetLabel)
         root.addView(presetPicker)
+
+        root.addView(label("5 · AMD CAS Sharpness"))
+        val casLabel = label("AMD CAS: Off")
+        root.addView(casLabel)
+        casSharpness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) {
+                renderer.setSharpness(value / 100f)
+                casLabel.text = if (value == 0) "AMD CAS: Off" else "AMD CAS: $value%"
+            }
+            override fun onStartTrackingTouch(bar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(bar: SeekBar?) = Unit
+        })
+        root.addView(casSharpness)
+
+        root.addView(label("6 · Low Latency"))
+        val latencyStatus = label("Off · frame-queue control is not implemented in this harness")
+        root.addView(latencyStatus)
+        root.addView(picker(listOf("Off", "On · unavailable", "Ultra / No Queue · unavailable")) {
+            latencyStatus.text = when (it) {
+                0 -> "Off · frame-queue control is not implemented in this harness"
+                1 -> "Unavailable: this harness does not own Android/game frame submission."
+                else -> "Unavailable: Ultra / No Queue requires a verified backend frame-queue hook."
+            }
+        })
 
         root.addView(surface, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
@@ -202,7 +199,7 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
     }
 
     fun setUpscaler(value: Int) {
-        requestedUpscaler = value.coerceIn(0, 1)
+        requestedUpscaler = value.coerceIn(0, 2)
     }
 
     fun setSharpness(value: Float) {
@@ -288,8 +285,9 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
         GLES20.glGenTextures(1, names, 0)
         texture = names[0]
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+        val sampling = if (requestedUpscaler == 2) GLES20.GL_NEAREST else GLES20.GL_LINEAR
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, sampling)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, sampling)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
         GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, targetWidth, targetHeight,
