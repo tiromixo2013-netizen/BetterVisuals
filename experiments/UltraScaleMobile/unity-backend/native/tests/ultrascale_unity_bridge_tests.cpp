@@ -76,5 +76,26 @@ int main() {
     assert(ultrascale_unity_process_frame(&f, &s, &r) ==
            US_UNITY_ERROR_INVALID_ARGUMENT);
 
+    // ABI mismatches and non-finite floats must not cross the boundary.
+    f = frame();
+    s = settings();
+    s.abi_version = US_UNITY_BRIDGE_ABI_VERSION + 1;
+    r = result();
+    assert(ultrascale_unity_process_frame(&f, &s, &r) ==
+           US_UNITY_ERROR_INVALID_ARGUMENT);
+
+    s = settings();
+    s.render_scale = 0.0f / 0.0f;
+    r = result();
+    assert(ultrascale_unity_process_frame(&f, &s, &r) ==
+           US_UNITY_ERROR_INVALID_ARGUMENT);
+
+    // Reserved flag bits are rejected rather than silently ignored.
+    s = settings();
+    f.flags |= 1u << 9;
+    r = result();
+    assert(ultrascale_unity_process_frame(&f, &s, &r) ==
+           US_UNITY_ERROR_INVALID_ARGUMENT);
+
     return 0;
 }
