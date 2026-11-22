@@ -65,3 +65,15 @@ References:
 - https://github.com/xLlotus0/Android-UnityImGui
 - https://github.com/reveny/Android-Virtual-Inject
 - https://github.com/reveny/Android-GUI-Injector
+
+
+## Adapter scaffold added
+
+The isolated `unity-backend/` folder now contains:
+- `native/CMakeLists.txt` and `native/ultrascale_unity_bridge.cpp`: a standalone Android NDK shared-library target and fail-closed ABI implementation. It validates ABI, frame dimensions, texture handle and settings ranges; it returns `INTEGRATION_REQUIRED` because no GPU processor is attached.
+- `unity/UltraScaleRenderBridge.cs`: a Built-in Render Pipeline `OnRenderImage` adapter and an in-game UltraScale settings panel for Bilinear, FSR Lite, MWSR, SGSR1 and FSR1 EASU, render scale and optional CAS settings. The current callback copies the source to the destination unchanged.
+- `README.md`: packaging and next-step notes.
+
+This is an owner-integrated plugin scaffold, not a BepInEx runtime import and not an external injector. The BepInEx/NextBep and StArray projects remain upstream integration candidates because importing their complete launcher/framework source into the controller APK would add unrelated runtime bootstraps and license/build obligations. The plugin adapter is designed to be packaged into an owned Unity test project after its native processor is implemented.
+
+The Unity sample currently targets the Built-in Render Pipeline only. URP/SRP require a separate supported renderer feature / RenderGraph integration. No scaler is marked active by this scaffold.
