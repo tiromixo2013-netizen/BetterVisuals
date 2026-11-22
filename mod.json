@@ -99,20 +99,6 @@
 				"FSR 1"
 			]
 		},
-		"upscale-preset": {
-			"type": "string",
-			"name": "Upscale Preset",
-			"description": "Sets Render Scale to a common quality/performance ratio. Custom keeps the manual Render Scale value.",
-			"default": "Custom",
-			"one-of": [
-				"Ultra Performance",
-				"Performance",
-				"Balanced",
-				"Quality",
-				"Ultra Quality",
-				"Custom"
-			]
-		},
 		"fsr-sharpness": {
 			"type": "float",
 			"name": "Upscale Sharpness",
@@ -126,6 +112,20 @@
 				"slider": true,
 				"slider-step": 0.05
 			}
+		},
+		"upscale-preset": {
+			"type": "string",
+			"name": "Upscale Preset",
+			"description": "Sets Render Scale to a common quality/performance ratio. Custom keeps the manual Render Scale value.",
+			"default": "Custom",
+			"one-of": [
+				"Ultra Performance",
+				"Performance",
+				"Balanced",
+				"Quality",
+				"Ultra Quality",
+				"Custom"
+			]
 		},
 		"aa-title": {
 			"type": "title",
