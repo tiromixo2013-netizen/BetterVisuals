@@ -1,4 +1,5 @@
 #include "../../include/ultrascale_unity_bridge.h"
+#include "../../include/ultrascale_gles_backend.h"
 #include <cassert>
 #include <cstdint>
 
@@ -21,6 +22,11 @@ USUnityBridgeResult result() {
 
 int main() {
     assert(ultrascale_unity_bridge_abi() == US_UNITY_BRIDGE_ABI_VERSION);
+#if !defined(__ANDROID__)
+    assert(ultrascale_gles_backend_name() != nullptr);
+    assert(ultrascale_gles_process_texture(1, 2, 16, 16, 32, 32,
+        US_GLES_MODE_EDGE_AWARE, 0.25f) == US_GLES_UNSUPPORTED_PLATFORM);
+#endif
     assert(ultrascale_unity_backend_status() == US_UNITY_INTEGRATION_REQUIRED);
 
     auto f = frame();
