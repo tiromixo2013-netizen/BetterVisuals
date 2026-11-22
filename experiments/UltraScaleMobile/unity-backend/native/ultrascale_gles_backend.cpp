@@ -16,9 +16,18 @@ constexpr size_t kMaxQueuedJobs = 4;
 #endif
 
 #if defined(__ANDROID__)
+#include <EGL/egl.h>
 #include <GLES3/gl3.h>
 
 namespace {
+struct GlesResources {
+    EGLContext context = EGL_NO_CONTEXT;
+    GLuint program = 0;
+    GLuint framebuffer = 0;
+    GLuint vertex_array = 0;
+};
+GlesResources g_resources;
+
 const char* kVertexShader = R"(#version 300 es
 precision highp float;
 out vec2 v_uv;
@@ -89,7 +98,26 @@ GLuint create_program() {
 }
 
 bool has_current_context() {
-    return glGetString(GL_VERSION) != nullptr;
+    return eglGetCurrentContext() != EGL_NO_CONTEXT &&
+           glGetString(GL_VERSION) != nullptr;
+}
+
+bool ensure_resources() {
+    EGLContext current = eglGetCurrentContext();
+    if (current == EGL_NO_CONTEXT) return false;
+    if (g_resources.context != current) {
+        // Names from the previous context are no longer valid in this one.
+        g_resources = {};
+        g_resources.context = current;
+    }
+    if (!g_resources.program || !glIsProgram(g_resources.program))
+        g_resources.program = create_program();
+    if (!g_resources.framebuffer || !glIsFramebuffer(g_resources.framebuffer))
+        glGenFramebuffers(1, &g_resources.framebuffer);
+    if (!g_resources.vertex_array || !glIsVertexArray(g_resources.vertex_array))
+        glGenVertexArrays(1, &g_resources.vertex_array);
+    return g_resources.program != 0 && g_resources.framebuffer != 0 &&
+           g_resources.vertex_array != 0;
 }
 
 struct GlState {
@@ -166,29 +194,17 @@ extern "C" int32_t ultrascale_gles_process_texture(
     // GLES 3.0 has no core texture-level dimension query. The owner supplies
     // dimensions from the Unity RenderTexture descriptors; FBO completeness
     // below validates that the destination can be rendered to.
-    GLuint program = create_program();
-    if (!program) {
-        restore_state(old);
-        return US_GLES_SHADER_ERROR;
-    }
-
-    GLuint fbo = 0, vao = 0;
-    glGenFramebuffers(1, &fbo);
-    glGenVertexArrays(1, &vao);
-    if (!fbo || !vao) {
-        if (vao) glDeleteVertexArrays(1, &vao);
-        if (fbo) glDeleteFramebuffers(1, &fbo);
-        glDeleteProgram(program);
+    if (!ensure_resources()) {
         restore_state(old);
         return US_GLES_GL_ERROR;
     }
+    const GLuint program = g_resources.program;
+    const GLuint fbo = g_resources.framebuffer;
+    const GLuint vao = g_resources.vertex_array;
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                             GL_TEXTURE_2D, dst_texture, 0);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        glDeleteVertexArrays(1, &vao);
-        glDeleteFramebuffers(1, &fbo);
-        glDeleteProgram(program);
         restore_state(old);
         return US_GLES_FRAMEBUFFER_ERROR;
     }
@@ -215,9 +231,6 @@ extern "C" int32_t ultrascale_gles_process_texture(
     glDrawArrays(GL_TRIANGLES, 0, 3);
     GLenum error = glGetError();
 
-    glDeleteVertexArrays(1, &vao);
-    glDeleteFramebuffers(1, &fbo);
-    glDeleteProgram(program);
     restore_state(old);
     return error == GL_NO_ERROR ? US_GLES_OK : US_GLES_GL_ERROR;
 }
