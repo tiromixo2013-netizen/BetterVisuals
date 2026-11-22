@@ -76,3 +76,11 @@ These are leads for obtaining test inputs, not files downloaded or verified by t
 | Beach Buggy Racing | APKMirror 2026.11.02 bundle: https://www.apkmirror.com/apk/vector-unit/beach-buggy-racing/beach-buggy-racing-2026-11-02-release/beach-buggy-racing-2026-11-02-android-apk-download/ | Package com.vectorunit.purple.googleplay; version 2026.11.02 (220); bundle reports Base APK + 37 splits and arm64-v8a among supported ABIs | Bundle metadata is a useful ARM64 investigation lead; actual downloaded files and signatures still need local verification. |
 
 No APK/XAPK/APKS binary was downloaded or inspected in this update. Do not register any game adapter based solely on these listing pages.
+
+
+## Fresh source check (2026-11-22)
+
+- Asphalt 8 APKMirror upload index currently lists both 9.2.0i (15 Oct 2026, 141.32 MB) and the requested 9.1.0i (11 Aug 2026, 138.90 MB). The index is a listing, not the binary itself: https://www.apkmirror.com/uploads/?appcategory=asphalt-8-airborne . Do not assume its 9.1.0i package hash matches the user's selected APK.
+- Beach Buggy Racing APKMirror release page gives a bundle-level SHA-256 of `b02331be24bb5297b0c2f198428788c740662601162eb4823f385de8d93d9480`, signing certificate SHA-256 `66b46a40a5647e9e514daaad03eb9467601c7329414f6a146db485a86ea4d124`, and an arm64-v8a split of 17.63 MB. This gives concrete expected values for later local verification: https://www.apkmirror.com/apk/vector-unit/beach-buggy-racing/beach-buggy-racing-2026-11-02-release/beach-buggy-racing-2026-11-02-android-apk-download/
+- Geometry Dash's official Android version has advanced to 2.209 / 2.2091 by October 2026; 2.2081 is now an older target. The 2.2081 itch.io upload is user-posted and its own comments raise malware concerns; do not treat it as a trusted binary. The official Geode project states compatibility with 2.2081, and the native-mod template documents the arm64-only `cocos2dcpp`/Java load boundary, but neither is an official 2.2081 APK mirror. Use a legitimately acquired APK and verify signing certificate/hash before analysis.
+- This update records source metadata only. No third-party game APK binary has been downloaded, extracted, or cryptographically verified in the UltraScale build environment.
