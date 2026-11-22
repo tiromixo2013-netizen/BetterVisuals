@@ -118,6 +118,7 @@ class ShellUserService : ICommandService.Stub() {
             root.optJSONObject("profiles")?.has("Specific") == true) {
             "The selected JSON is not a supported Asphalt 8 gameoptions.json file."
         }
+        requireAsphalt8Stopped()
 
         val directory = File(
             "/storage/emulated/0/Android/data/com.gameloft.android.ANMP.GloftA8HM/files"
@@ -132,11 +133,23 @@ class ShellUserService : ICommandService.Stub() {
         val destination = File(directory, "gameoptions.json").canonicalFile
         require(destination.parentFile == directory) { "Invalid Asphalt 8 config destination." }
         val temporary = File(directory, ".gameoptions.json.ultrascale.tmp")
-        val backup = if (destination.isFile) {
+        val originMarker = File(directory, ".ultrascale-asphalt8-config-origin")
+        val previousOrigin = if (originMarker.isFile) originMarker.readText().trim() else null
+        require(
+            previousOrigin == null || previousOrigin == "CREATED" ||
+                (previousOrigin.startsWith("gameoptions.json.ultrascale-") && previousOrigin.endsWith(".bak"))
+        ) { "The existing UltraScale backup marker is invalid; refusing to overwrite the game config." }
+        val backup = if (previousOrigin == null && destination.isFile) {
             File(directory, "gameoptions.json.ultrascale-${System.currentTimeMillis()}.bak").also {
                 Files.copy(destination.toPath(), it.toPath(), StandardCopyOption.COPY_ATTRIBUTES)
             }
         } else null
+        val originValue = previousOrigin ?: backup?.name ?: "CREATED"
+        FileOutputStream(originMarker, false).use { marker ->
+            marker.write(originValue.toByteArray(Charsets.UTF_8))
+            marker.flush()
+            marker.fd.sync()
+        }
 
         try {
             FileOutputStream(temporary, false).use { output ->
@@ -166,18 +179,39 @@ class ShellUserService : ICommandService.Stub() {
         }
 
         return "Wrote gameoptions.json to the Asphalt 8 files folder and verified its size." +
-            (backup?.let { " Previous file backed up as ${it.name}." } ?: " No previous gameoptions.json existed to back up.") +
+            (backup?.let { " Previous file backed up as ${it.name}." } ?: if (originValue == "CREATED") {
+                " This was a new config file; rollback will remove it."
+            } else {
+                " The original backup from the first UltraScale install was preserved."
+            }) +
             " Fully close and relaunch the game. The game accepting this external override is not yet runtime-verified."
     }
 
     override fun restoreAsphalt8Config(): String {
+        requireAsphalt8Stopped()
         val directory = File(
             "/storage/emulated/0/Android/data/com.gameloft.android.ANMP.GloftA8HM/files"
         ).canonicalFile
         require(directory.isDirectory && directory.canWrite()) {
             "Asphalt 8 files folder is unavailable or not writable through Shizuku."
         }
-        val backup = directory.listFiles()
+        val destination = File(directory, "gameoptions.json")
+        val originMarker = File(directory, ".ultrascale-asphalt8-config-origin")
+        val origin = if (originMarker.isFile) originMarker.readText().trim() else null
+        if (origin == "CREATED") {
+            if (destination.exists()) {
+                require(destination.isFile && destination.delete()) {
+                    "Could not remove the UltraScale-created gameoptions.json."
+                }
+            }
+            originMarker.delete()
+            return "Removed the gameoptions.json created by UltraScale; no pre-existing config was present."
+        }
+
+        val namedBackup = origin?.takeIf {
+            it.startsWith("gameoptions.json.ultrascale-") && it.endsWith(".bak")
+        }?.let { File(directory, it) }
+        val backup = namedBackup?.takeIf { it.isFile } ?: directory.listFiles()
             ?.filter {
                 it.isFile && it.name.startsWith("gameoptions.json.ultrascale-") &&
                     it.name.endsWith(".bak")
@@ -185,7 +219,6 @@ class ShellUserService : ICommandService.Stub() {
             ?.maxByOrNull { it.lastModified() }
             ?: error("No UltraScale backup was found; nothing to restore.")
 
-        val destination = File(directory, "gameoptions.json")
         val temporary = File(directory, ".gameoptions.json.restore.tmp")
         try {
             Files.copy(backup.toPath(), temporary.toPath(), StandardCopyOption.REPLACE_EXISTING)
@@ -209,7 +242,20 @@ class ShellUserService : ICommandService.Stub() {
         check(destination.isFile && destination.length() == backup.length()) {
             "Restored file failed verification."
         }
+        originMarker.delete()
         return "Restored gameoptions.json from ${backup.name}."
+    }
+
+    private fun requireAsphalt8Stopped() {
+        val process = ProcessBuilder(
+            "pidof",
+            "com.gameloft.android.ANMP.GloftA8HM"
+        ).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+        val exitCode = process.waitFor()
+        require(exitCode != 0 || output.isBlank()) {
+            "Asphalt 8 is still running. Close the game fully, then retry."
+        }
     }
 
     /**
