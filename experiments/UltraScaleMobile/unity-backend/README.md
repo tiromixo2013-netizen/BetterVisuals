@@ -53,3 +53,9 @@ For Built-in, add `UltraScaleRenderBridge.cs` and all shaders under the Unity pr
 For URP 14, add the `URP/` folder and shaders under `Assets/`, ensure URP 14 is installed, then add **UltraScale Renderer Feature** to the active Universal Renderer Data asset. Preserve shader references or include shaders in **Always Included Shaders** to avoid build stripping.
 
 The native library is optional for both managed paths. Do not package it as an active scaler until a real GLES/Vulkan processor is implemented and validated.
+
+## Native bridge contract hardening
+
+The native ABI now validates the scaler enum, CAS boolean, finite/ranged settings, frame dimension ceiling, explicitly owned render-target flag, reserved frame flags, graphics API and pixel format. It distinguishes invalid arguments, unsupported API/format and the expected `NO_SCALER_ATTACHED` state. A valid call still returns `INTEGRATION_REQUIRED` with processed frame index zero because no GLES/Vulkan processor is attached.
+
+A CTest contract suite is included at `native/tests/ultrascale_unity_bridge_tests.cpp`. It covers the fail-closed valid-frame case and invalid mode, oversized dimensions, missing ownership declaration, unsupported format/API and invalid CAS flag. The test source was compiled with a host C++17 compiler using `-Wall -Wextra -Werror` and all assertions passed in this development session. This is a native ABI contract test only, not an Android NDK, Unity shader or device test.
