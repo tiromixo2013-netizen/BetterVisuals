@@ -137,7 +137,7 @@ class ShellUserService : ICommandService.Stub() {
         val previousOrigin = if (originMarker.isFile) originMarker.readText().trim() else null
         require(
             previousOrigin == null || previousOrigin == "CREATED" ||
-                Regex("""^gameoptions\\.json\\.ultrascale-\\d+\\.bak$""").matches(previousOrigin)
+                Regex("""^gameoptions\.json\.ultrascale-\d+\.bak$""").matches(previousOrigin)
         ) { "The existing UltraScale backup marker is invalid; refusing to overwrite the game config." }
         val backup = if (previousOrigin == null && destination.isFile) {
             File(directory, "gameoptions.json.ultrascale-${System.currentTimeMillis()}.bak").also {
