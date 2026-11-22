@@ -137,6 +137,43 @@ object Asphalt8ApkConfig {
         )
     }
 
+    fun inspectJson(jsonText: String, entryName: String = "gameoptions.json"): Result<Report> = runCatching {
+        require(jsonText.toByteArray(Charsets.UTF_8).size in 1..(512 * 1024)) {
+            "gameoptions.json must be between 1 byte and 512 KiB."
+        }
+        val root = JSONObject(jsonText)
+        require(root.optJSONObject("header") != null) { "Missing gameoptions header" }
+        val profiles = root.optJSONObject("profiles") ?: error("Missing profiles object")
+        require(profiles.optJSONObject("GPU") != null && profiles.optJSONObject("Specific") != null) {
+            "JSON does not match the expected Asphalt 8 profile layout"
+        }
+        val gpu = profiles.getJSONObject("GPU")
+        val specific = profiles.getJSONObject("Specific")
+        val gpuOverrides = gpu.optJSONObject("overrides") ?: JSONObject()
+        val specificOverrides = specific.optJSONObject("overrides") ?: JSONObject()
+        val resolution = linkedMapOf<String, String>()
+        val keys = specificOverrides.keys()
+        while (keys.hasNext()) {
+            val name = keys.next()
+            if (name.startsWith("RES_")) {
+                val value = specificOverrides.optJSONObject(name)?.opt("scaleDisplay")
+                if (value != null && value != JSONObject.NULL) resolution[name] = value.toString()
+            }
+        }
+        Report(
+            entryName = entryName,
+            rawJson = root.toString(2),
+            profileNames = buildList {
+                val names = profiles.keys()
+                while (names.hasNext()) add(names.next())
+            }.sorted(),
+            gpuDefaults = readDefaults(gpu.optJSONArray("defaults")),
+            specificDefaults = readDefaults(specific.optJSONArray("defaults")),
+            gpuOverrideCount = gpuOverrides.length(),
+            resolutionScales = resolution.toSortedMap()
+        )
+    }
+
     fun targets(jsonText: String, section: String): List<String> {
         val profile = JSONObject(jsonText).getJSONObject("profiles").getJSONObject(section)
         val overrides = profile.optJSONObject("overrides") ?: JSONObject()
@@ -364,7 +401,7 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Text("ASPHALT 8 · APK CONFIG EDITOR", color = AsphaltViolet, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             Text(
-                "Extracts the game's embedded gameoptions.json, lets you edit its existing defaults and resolution profiles, then exports or experimentally installs the edited config through Shizuku.",
+                "First load the installed gameoptions.json through Shizuku (recommended). You can also extract the embedded APK copy as a fallback. Edit only existing game settings, then export or experimentally install the edited config.",
                 color = AsphaltMuted,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -373,6 +410,34 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                 color = AsphaltMuted,
                 style = MaterialTheme.typography.bodySmall
             )
+            Button(
+                enabled = !busy && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                onClick = {
+                    busy = true
+                    status = "Reading the installed Asphalt 8 gameoptions.json…"
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) { ShizukuBridge.readAsphalt8Config() }
+                        result.fold(
+                            onSuccess = { json ->
+                                Asphalt8ApkConfig.inspectJson(json, "Installed gameoptions.json")
+                                    .onSuccess {
+                                        report = it
+                                        editedJson = it.rawJson
+                                        selectedSection = "GPU"
+                                        selectedTarget = DEFAULT_CONFIG_TARGET
+                                        editStatus = ""
+                                        status = "Loaded the installed gameoptions.json. Editing starts from the live file and preserves its existing profiles and unknown keys."
+                                    }
+                                    .onFailure { status = "Installed config validation failed: ${it.message}" }
+                            },
+                            onFailure = { status = "Could not read installed config: ${it.message}" }
+                        )
+                        busy = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (busy) "Reading…" else "Load installed Asphalt 8 config (recommended)") }
+
             Button(
                 enabled = selectedApkUri != null && !busy,
                 onClick = {
@@ -572,7 +637,7 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                 style = MaterialTheme.typography.bodySmall
             )
             Text(
-                "Experimental game-native path: Apply writes the edited gameoptions.json to Android/data/com.gameloft.android.ANMP.GloftA8HM/files through Shizuku and creates a timestamped backup first. The current Asphalt 8 version accepting this external file and the exact effect of scaleDisplay still need on-device verification. This changes only the game's own setting; it does not inject FSR/EASU or CAS shaders.",
+                "Safety: loading reads the installed file first. Apply is blocked while Asphalt 8 is running and creates a timestamped original backup before replacing gameoptions.json. The current 9.1.0i build's external-file precedence and the visual meaning of scaleDisplay still require on-device verification. This does not add in-game menu items or inject FSR/EASU/CAS/SGSR/MWSR shaders.",
                 color = AsphaltMuted,
                 style = MaterialTheme.typography.labelSmall
             )
