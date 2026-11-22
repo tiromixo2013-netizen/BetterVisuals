@@ -105,6 +105,10 @@ namespace UltraScale.Unity
             {
                 RuntimeStatus += " / NATIVE_ABI_MISMATCH";
             }
+            catch (BadImageFormatException)
+            {
+                RuntimeStatus += " / NATIVE_ABI_OR_ARCH_MISMATCH";
+            }
         }
 
         private void OnGUI()
@@ -197,15 +201,17 @@ namespace UltraScale.Unity
             settings.sharpness = Mathf.Clamp01(settings.sharpness);
             int width = Mathf.Max(1, Mathf.RoundToInt(source.width * settings.renderScale));
             int height = Mathf.Max(1, Mathf.RoundToInt(source.height * settings.renderScale));
-            RenderTexture reduced = RenderTexture.GetTemporary(
-                width, height, 0, source.format, RenderTextureReadWrite.Default);
-            RenderTexture upscaled = RenderTexture.GetTemporary(
-                destination.width, destination.height, 0,
-                destination.format, RenderTextureReadWrite.Default);
-            reduced.filterMode = FilterMode.Bilinear;
+            RenderTexture reduced = null;
+            RenderTexture upscaled = null;
 
             try
             {
+                reduced = RenderTexture.GetTemporary(
+                    width, height, 0, source.format, RenderTextureReadWrite.Default);
+                upscaled = RenderTexture.GetTemporary(
+                    destination.width, destination.height, 0,
+                    destination.format, RenderTextureReadWrite.Default);
+                reduced.filterMode = FilterMode.Bilinear;
                 Graphics.Blit(source, reduced);
 
                 if (settings.scaler == "Bilinear")
@@ -270,8 +276,10 @@ namespace UltraScale.Unity
             }
             finally
             {
-                RenderTexture.ReleaseTemporary(upscaled);
-                RenderTexture.ReleaseTemporary(reduced);
+                if (upscaled != null)
+                    RenderTexture.ReleaseTemporary(upscaled);
+                if (reduced != null)
+                    RenderTexture.ReleaseTemporary(reduced);
             }
         }
 
