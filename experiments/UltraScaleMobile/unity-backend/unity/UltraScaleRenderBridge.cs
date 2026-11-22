@@ -57,7 +57,7 @@ namespace UltraScale.Unity
             "MWSR (MIT)",
             "AMD FSR1 EASU",
             "Qualcomm SGSR1 (GLES 3.1+)",
-            "Native GLES Edge-aware"
+            "Native GLES Bilinear + Detail Sharpen"
         };
         private int selectedScaler = 1;
         private Material spatialMaterial;
@@ -160,7 +160,7 @@ namespace UltraScale.Unity
             GUILayout.Label("7-tap is a separate experimental spatial filter.");
             GUILayout.Label("MWSR is the upstream MIT HLSL spatial upscale port.");
             GUILayout.Label("SGSR1 uses texture gather; requires a supported GLES 3.1+ backend.");
-            if (settings.scaler == "Native GLES Edge-aware")
+            if (settings.scaler == "Native GLES Bilinear + Detail Sharpen")
             {
                 GUILayout.Label(Application.platform == RuntimePlatform.Android &&
                     SystemInfo.graphicsDeviceType == GraphicsDeviceType.OpenGLES3
@@ -264,7 +264,7 @@ namespace UltraScale.Unity
                 reduced.filterMode = FilterMode.Bilinear;
                 Graphics.Blit(source, reduced);
 
-                if (settings.scaler == "Native GLES Edge-aware")
+                if (settings.scaler == "Native GLES Bilinear + Detail Sharpen")
                 {
                     // Establish a safe bilinear result first. The queued native
                     // event overwrites it if the GLES context and FBO are valid.
