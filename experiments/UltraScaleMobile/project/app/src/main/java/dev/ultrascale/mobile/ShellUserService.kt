@@ -137,7 +137,7 @@ class ShellUserService : ICommandService.Stub() {
         val previousOrigin = if (originMarker.isFile) originMarker.readText().trim() else null
         require(
             previousOrigin == null || previousOrigin == "CREATED" ||
-                (previousOrigin.startsWith("gameoptions.json.ultrascale-") && previousOrigin.endsWith(".bak"))
+                Regex("""^gameoptions\\.json\\.ultrascale-\\d+\\.bak$""").matches(previousOrigin)
         ) { "The existing UltraScale backup marker is invalid; refusing to overwrite the game config." }
         val backup = if (previousOrigin == null && destination.isFile) {
             File(directory, "gameoptions.json.ultrascale-${System.currentTimeMillis()}.bak").also {
@@ -208,9 +208,10 @@ class ShellUserService : ICommandService.Stub() {
             return "Removed the gameoptions.json created by UltraScale; no pre-existing config was present."
         }
 
-        val namedBackup = origin?.takeIf {
-            it.startsWith("gameoptions.json.ultrascale-") && it.endsWith(".bak")
-        }?.let { File(directory, it) }
+        val namedBackup = origin
+            ?.takeIf { Regex("""^gameoptions\\.json\\.ultrascale-\\d+\\.bak$""").matches(it) }
+            ?.let { File(directory, it).canonicalFile }
+            ?.takeIf { it.parentFile == directory && it.isFile }
         val backup = namedBackup?.takeIf { it.isFile } ?: directory.listFiles()
             ?.filter {
                 it.isFile && it.name.startsWith("gameoptions.json.ultrascale-") &&
