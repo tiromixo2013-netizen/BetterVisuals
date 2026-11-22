@@ -18,12 +18,13 @@ permissions:
 
 concurrency:
   group: ultrascale-mobile-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   android-build:
     name: Android SDK 35 / JDK 17 / NDK
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
