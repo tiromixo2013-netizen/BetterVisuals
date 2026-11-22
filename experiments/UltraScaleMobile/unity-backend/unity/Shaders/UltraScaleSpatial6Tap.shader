@@ -1,4 +1,4 @@
-Shader "UltraScale/Spatial6Tap"
+Shader "UltraScale/Spatial7Tap"
 {
     Properties
     {
@@ -27,30 +27,21 @@ Shader "UltraScale/Spatial6Tap"
             fixed4 frag(v2f_img input) : SV_Target
             {
                 float2 uv = input.uv;
-                float2 texel = _MainTex_TexelSize.xy;
+                float2 t = _MainTex_TexelSize.xy;
+                float4 c = tex2D(_MainTex, uv);
+                float4 a = tex2D(_MainTex, uv + float2(-t.x, 0.0));
+                float4 b = tex2D(_MainTex, uv + float2( t.x, 0.0));
+                float4 d = tex2D(_MainTex, uv + float2(0.0, -t.y));
+                float4 e = tex2D(_MainTex, uv + float2(0.0,  t.y));
+                float4 f = tex2D(_MainTex, uv + float2(-0.5 * t.x, -0.5 * t.y));
+                float4 g = tex2D(_MainTex, uv + float2( 0.5 * t.x,  0.5 * t.y));
 
-                // Six symmetric-direction taps: centre, horizontal pair,
-                // and a vertically offset pair plus the opposite diagonal.
-                // This is an original lightweight spatial filter, not FSR/EASU.
-                float4 centre = tex2D(_MainTex, uv);
-                float4 left = tex2D(_MainTex, uv + float2(-texel.x, 0.0));
-                float4 right = tex2D(_MainTex, uv + float2(texel.x, 0.0));
-                float4 upLeft = tex2D(_MainTex, uv + float2(-0.5 * texel.x, texel.y));
-                float4 upRight = tex2D(_MainTex, uv + float2(0.5 * texel.x, texel.y));
-                float4 down = tex2D(_MainTex, uv + float2(0.0, -texel.y));
-
-                float4 reconstruction =
-                    centre * 0.40 +
-                    (left + right) * 0.16 +
-                    (upLeft + upRight) * 0.10 +
-                    down * 0.08;
-
-                float4 localAverage =
-                    (left + right + upLeft + upRight + down) * 0.2;
-                float4 sharpened = reconstruction +
-                    (centre - localAverage) * saturate(_Sharpness) * 0.65;
-
-                return fixed4(saturate(sharpened.rgb), centre.a);
+                // Seven taps: centre plus three opposing pairs.
+                // Original spatial reconstruction; not AMD FidelityFX or Qualcomm SGSR.
+                float4 neighbours = (a + b + d + e + f + g) * (1.0 / 6.0);
+                float4 result = c * 0.55 + neighbours * 0.45;
+                result += (c - neighbours) * saturate(_Sharpness) * 0.65;
+                return fixed4(saturate(result.rgb), c.a);
             }
             ENDCG
         }
