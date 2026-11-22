@@ -19,7 +19,7 @@ Custom leaves the manual Render Scale value unchanged.
 The Android app validates the selected APK identity and the selected `.geode` archive
 (`mod.json` ID plus Android native module), then copies the module into a directory selected
 through Android's Storage Access Framework. It does not patch or re-sign Geometry Dash's APK.
-The user must select the actual Geode mods folder and restart the game through Geode.
+A dedicated `UltraScale Geometry Dash Android64 Geode Module` workflow publishes the `BetterVisuals-GeometryDash-Android64` artifact. The user selects the `.geode` file inside that artifact, selects the actual Geode mods folder (normally `/storage/emulated/0/Android/media/com.geode.launcher/game/geode/mods/`), and restarts the game through Geode.
 
 ## Not supported yet
 
