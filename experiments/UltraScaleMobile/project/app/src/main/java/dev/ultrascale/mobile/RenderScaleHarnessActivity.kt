@@ -7,6 +7,8 @@ import android.os.Bundle
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Spinner
+import android.widget.ArrayAdapter
 import android.view.ViewGroup
 import android.graphics.Color
 import android.view.Gravity
@@ -77,6 +79,31 @@ class RenderScaleHarnessActivity : Activity() {
         root.addView(subtitle)
         root.addView(scaleLabel)
         root.addView(scale)
+
+        val upscalerLabel = TextView(this).apply {
+            text = "Upscaler: Linear"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            setPadding(0, 10, 0, 4)
+        }
+        val upscalerPicker = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@RenderScaleHarnessActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                listOf("Linear (fast)", "Catmull-Rom 4×4 (sharper)")
+            )
+            setSelection(0)
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                    renderer.setUpscaler(position)
+                    upscalerLabel.text = if (position == 0) "Upscaler: Linear" else "Upscaler: Catmull-Rom 4×4"
+                }
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            }
+        }
+        root.addView(upscalerLabel)
+        root.addView(upscalerPicker)
+
         root.addView(surface, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
         ))
@@ -97,6 +124,7 @@ class RenderScaleHarnessActivity : Activity() {
 
 private class HarnessRenderer : GLSurfaceView.Renderer {
     @Volatile private var requestedScale = 0.70f
+    @Volatile private var requestedUpscaler = 0
     private var appliedScale = -1f
     private var surfaceWidth = 1
     private var surfaceHeight = 1
@@ -113,10 +141,16 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
     private var compositePosition = 0
     private var compositeUv = 0
     private var compositeSampler = 0
+    private var compositeTexelSize = 0
+    private var compositeUpscaler = 0
     private var startNanos = System.nanoTime()
 
     fun setScale(value: Float) {
         requestedScale = value.coerceIn(0.25f, 1f)
+    }
+
+    fun setUpscaler(value: Int) {
+        requestedUpscaler = value.coerceIn(0, 1)
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -129,6 +163,8 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
         compositePosition = GLES20.glGetAttribLocation(compositeProgram, "aPosition")
         compositeUv = GLES20.glGetAttribLocation(compositeProgram, "aUv")
         compositeSampler = GLES20.glGetUniformLocation(compositeProgram, "uTexture")
+        compositeTexelSize = GLES20.glGetUniformLocation(compositeProgram, "uTexelSize")
+        compositeUpscaler = GLES20.glGetUniformLocation(compositeProgram, "uUpscaler")
         val data = floatArrayOf(
             -1f, -1f, 0f, 0f,  1f, -1f, 1f, 0f,
             -1f,  1f, 0f, 1f,  1f,  1f, 1f, 1f
@@ -177,6 +213,8 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
         GLES20.glUniform1i(compositeSampler, 0)
+        GLES20.glUniform2f(compositeTexelSize, 1f / targetWidth.toFloat(), 1f / targetHeight.toFloat())
+        GLES20.glUniform1i(compositeUpscaler, requestedUpscaler)
         bindQuad(compositePosition, compositeUv)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
@@ -268,10 +306,45 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
             }
         """
         private const val COMPOSITE_SHADER = """
-            precision mediump float;
+            precision highp float;
             varying vec2 vUv;
             uniform sampler2D uTexture;
-            void main() { gl_FragColor = texture2D(uTexture, vUv); }
+            uniform vec2 uTexelSize;
+            uniform int uUpscaler;
+
+            float catmullWeight(int index, float t) {
+                float t2 = t * t;
+                float t3 = t2 * t;
+                if (index == 0) return -0.5 * t + t2 - 0.5 * t3;
+                if (index == 1) return 1.0 - 2.5 * t2 + 1.5 * t3;
+                if (index == 2) return 0.5 * t + 2.0 * t2 - 1.5 * t3;
+                return -0.5 * t2 + 0.5 * t3;
+            }
+
+            vec4 sampleCatmullRom(vec2 uv) {
+                vec2 pixel = uv / uTexelSize - 0.5;
+                vec2 base = floor(pixel);
+                vec2 f = fract(pixel);
+                vec4 result = vec4(0.0);
+                for (int y = 0; y < 4; ++y) {
+                    float wy = catmullWeight(y, f.y);
+                    for (int x = 0; x < 4; ++x) {
+                        float wx = catmullWeight(x, f.x);
+                        vec2 sampleUv = (base + vec2(float(x - 1), float(y - 1)) + 0.5) * uTexelSize;
+                        sampleUv = clamp(sampleUv, uTexelSize * 0.5, vec2(1.0) - uTexelSize * 0.5);
+                        result += texture2D(uTexture, sampleUv) * (wx * wy);
+                    }
+                }
+                return clamp(result, 0.0, 1.0);
+            }
+
+            void main() {
+                if (uUpscaler == 1) {
+                    gl_FragColor = sampleCatmullRom(vUv);
+                } else {
+                    gl_FragColor = texture2D(uTexture, vUv);
+                }
+            }
         """
     }
 }
