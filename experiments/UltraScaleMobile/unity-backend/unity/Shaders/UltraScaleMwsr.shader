@@ -97,7 +97,7 @@ float gazeWeight(float2 uv) {
     return (1.0 - smoothstep(1.0, 1.0 + zring, d)) * gaze;
 }
 
-fixed4 frag(v2f_img i) : SV_Target {
+float4 frag(v2f_img i) : SV_Target {
     float2 uv = i.uv;
     float2 sp = uv * dims;
     float2 f0 = floor(sp - 0.5);
