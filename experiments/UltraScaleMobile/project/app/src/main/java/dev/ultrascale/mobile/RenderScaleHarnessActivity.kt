@@ -436,49 +436,5 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
                 gl_FragColor = vec4(color, 1.0);
             }
         """
-            #ifdef GL_FRAGMENT_PRECISION_HIGH
-            precision highp float;
-            #else
-            precision mediump float;
-            #endif
-            varying vec2 vUv;
-            uniform sampler2D uTexture;
-            uniform vec2 uTexelSize;
-            uniform int uUpscaler;
-
-            float catmullWeight(int index, float t) {
-                float t2 = t * t;
-                float t3 = t2 * t;
-                if (index == 0) return -0.5 * t + t2 - 0.5 * t3;
-                if (index == 1) return 1.0 - 2.5 * t2 + 1.5 * t3;
-                if (index == 2) return 0.5 * t + 2.0 * t2 - 1.5 * t3;
-                return -0.5 * t2 + 0.5 * t3;
-            }
-
-            vec4 sampleCatmullRom(vec2 uv) {
-                vec2 pixel = uv / uTexelSize - 0.5;
-                vec2 base = floor(pixel);
-                vec2 f = fract(pixel);
-                vec4 result = vec4(0.0);
-                for (int y = 0; y < 4; ++y) {
-                    float wy = catmullWeight(y, f.y);
-                    for (int x = 0; x < 4; ++x) {
-                        float wx = catmullWeight(x, f.x);
-                        vec2 sampleUv = (base + vec2(float(x - 1), float(y - 1)) + 0.5) * uTexelSize;
-                        sampleUv = clamp(sampleUv, uTexelSize * 0.5, vec2(1.0) - uTexelSize * 0.5);
-                        result += texture2D(uTexture, sampleUv) * (wx * wy);
-                    }
-                }
-                return clamp(result, 0.0, 1.0);
-            }
-
-            void main() {
-                if (uUpscaler == 1) {
-                    gl_FragColor = sampleCatmullRom(vUv);
-                } else {
-                    gl_FragColor = texture2D(uTexture, vUv);
-                }
-            }
-        """
     }
 }
