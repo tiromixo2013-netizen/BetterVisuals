@@ -86,7 +86,7 @@ The adapter now contains a working managed render-path implementation for an own
 - A temporary RenderTexture is allocated at the selected 50–100% internal resolution, then the source is downsampled into it.
 - Bilinear mode scales that reduced target to the destination. Experimental mode runs `UltraScaleSpatial7Tap.shader`, a project-authored seven-sample spatial reconstruction filter with optional edge sharpening.
 - The in-game panel exposes only the two modes that are actually implemented in this Unity adapter. MWSR, SGSR1 and AMD FSR1 EASU are not mislabeled as active Unity modes; their Unity shader ports remain separate work.
-- The seven-tap filter is not AMD FidelityFX, Qualcomm SGSR, temporal upscaling or frame generation.
+- The custom FSR Lite filter is not AMD FidelityFX FSR/EASU. The seven-tap filter is also project-authored, not Qualcomm SGSR, temporal upscaling or frame generation.
 - The native C ABI is still a separate scaffold and is not called to process frame textures. The managed shader path does not require the native bridge library to be packaged.
 
 This is a real render operation only when the script and shader are added to an owned Unity Built-in RP project and attached to its camera. It does not inject into third-party games. URP/SRP support and device-side validation remain outstanding.
