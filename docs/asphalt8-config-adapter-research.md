@@ -42,6 +42,18 @@ Those require code running in the game's render process at the correct render ta
 7. Keep restore/rollback and show exactly which file was changed.
 8. Separately develop an in-process native render adapter for UltraScale Render Scale → Upscaling → CAS. Do not label config-file changes as a completed shader injection.
 
+## Experimental game-native config deployment
+
+The UltraScale Mobile card now has an opt-in Shizuku deployment path for the edited JSON:
+
+- Target file: `/storage/emulated/0/Android/data/com.gameloft.android.ANMP.GloftA8HM/files/gameoptions.json`.
+- It validates the expected `header` / `profiles.GPU` / `profiles.Specific` structure and caps the Binder payload at 512 KiB.
+- It writes a temporary file, syncs it, replaces the target, and verifies the final byte count.
+- If no prior UltraScale backup exists, it creates a timestamped backup of the existing target file. The UI exposes a restore action.
+- The resolution slider edits only existing `Specific.overrides.RES_*` entries that already have `scaleDisplay`; it does not invent unknown fields.
+
+**This is not an FSR/EASU/CAS injection.** It only writes the game's pre-existing `scaleDisplay` configuration. Community reports establish that similar config files have been placed in this folder by some Asphalt 8 builds, but the current 9.1.0i retail build's file precedence and the visual meaning of `scaleDisplay` have not been confirmed on-device. A successful file write is not proof the game accepted or applied it.
+
 ## Current decision
 
 This is a promising additional route for Asphalt 8's **native game settings**, and is worth implementing as a profile/config adapter after the exact installed version's config is collected. It is not yet a proven injection path for UltraScale's custom shaders. For the previously inspected 9.1.0i build, do not assume the v5.x community `gamesettings.json` reports apply.
