@@ -160,6 +160,13 @@ namespace UltraScale.Unity
             GUILayout.Label("7-tap is a separate experimental spatial filter.");
             GUILayout.Label("MWSR is the upstream MIT HLSL spatial upscale port.");
             GUILayout.Label("SGSR1 uses texture gather; requires a supported GLES 3.1+ backend.");
+            if (settings.scaler == "Native GLES Edge-aware")
+            {
+                GUILayout.Label(Application.platform == RuntimePlatform.Android &&
+                    SystemInfo.graphicsDeviceType == GraphicsDeviceType.OpenGLES3
+                    ? "Native GLES pass queued; bilinear fallback is retained."
+                    : "Native GLES requires an Android OpenGLES3 Unity build; bilinear fallback active.");
+            }
             if (settings.scaler == "Qualcomm SGSR1 (GLES 3.1+)" && sgsr1Material == null)
                 GUILayout.Label("SGSR1 unavailable on this backend: Bilinear fallback active.");
             if (settings.scaler == "MWSR (MIT)" && mwsrMaterial == null)
