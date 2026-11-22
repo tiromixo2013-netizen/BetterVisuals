@@ -124,7 +124,13 @@ namespace UltraScale.Unity.URP
                 try
                 {
                     Blit(cmd, cameraColor, reduced);
-                    if (scaler == null || settings.upscaler == Upscaler.Bilinear)
+                    float effectiveScale = Mathf.Min(
+                        (float)reconstructed.rt.width / reduced.rt.width,
+                        (float)reconstructed.rt.height / reduced.rt.height);
+                    bool mwsrBelowUsefulScale = settings.upscaler == Upscaler.Mwsr &&
+                        effectiveScale < 1.07f;
+                    if (scaler == null || settings.upscaler == Upscaler.Bilinear ||
+                        mwsrBelowUsefulScale)
                     {
                         Blit(cmd, reduced, reconstructed);
                     }
