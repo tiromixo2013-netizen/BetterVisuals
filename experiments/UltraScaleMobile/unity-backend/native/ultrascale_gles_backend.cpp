@@ -93,18 +93,22 @@ bool has_current_context() {
 }
 
 struct GlState {
-    GLint framebuffer = 0;
+    GLint draw_framebuffer = 0;
+    GLint read_framebuffer = 0;
     GLint viewport[4] = {};
+    GLint color_mask[4] = {1, 1, 1, 1};
+    GLint depth_mask = 1;
     GLint program = 0;
     GLint active_texture = 0;
     GLint texture0 = 0;
     GLint vao = 0;
     GLint array_buffer = 0;
-    GLint blend = 0, depth = 0, scissor = 0, cull = 0;
+    GLint blend = 0, depth = 0, scissor = 0, cull = 0, stencil = 0;
 };
 
 void restore_state(const GlState& s) {
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(s.framebuffer));
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(s.draw_framebuffer));
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(s.read_framebuffer));
     glViewport(s.viewport[0], s.viewport[1], s.viewport[2], s.viewport[3]);
     glUseProgram(static_cast<GLuint>(s.program));
     glActiveTexture(GL_TEXTURE0);
@@ -115,6 +119,9 @@ void restore_state(const GlState& s) {
     if (s.depth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
     if (s.scissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
     if (s.cull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    if (s.stencil) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
+    glColorMask(s.color_mask[0], s.color_mask[1], s.color_mask[2], s.color_mask[3]);
+    glDepthMask(s.depth_mask);
     glActiveTexture(static_cast<GLenum>(s.active_texture));
 }
 }
@@ -135,8 +142,11 @@ extern "C" int32_t ultrascale_gles_process_texture(
 
     while (glGetError() != GL_NO_ERROR) {}
     GlState old;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old.framebuffer);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &old.draw_framebuffer);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &old.read_framebuffer);
     glGetIntegerv(GL_VIEWPORT, old.viewport);
+    glGetIntegerv(GL_COLOR_WRITEMASK, old.color_mask);
+    glGetIntegerv(GL_DEPTH_WRITEMASK, &old.depth_mask);
     glGetIntegerv(GL_CURRENT_PROGRAM, &old.program);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &old.active_texture);
     glActiveTexture(GL_TEXTURE0);
@@ -147,6 +157,25 @@ extern "C" int32_t ultrascale_gles_process_texture(
     old.depth = glIsEnabled(GL_DEPTH_TEST);
     old.scissor = glIsEnabled(GL_SCISSOR_TEST);
     old.cull = glIsEnabled(GL_CULL_FACE);
+    old.stencil = glIsEnabled(GL_STENCIL_TEST);
+
+    GLint actual_width = 0, actual_height = 0;
+    glBindTexture(GL_TEXTURE_2D, src_texture);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &actual_width);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &actual_height);
+    if (actual_width != static_cast<GLint>(input_width) ||
+        actual_height != static_cast<GLint>(input_height)) {
+        restore_state(old);
+        return US_GLES_INVALID_ARGUMENT;
+    }
+    glBindTexture(GL_TEXTURE_2D, dst_texture);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &actual_width);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &actual_height);
+    if (actual_width != static_cast<GLint>(output_width) ||
+        actual_height != static_cast<GLint>(output_height)) {
+        restore_state(old);
+        return US_GLES_INVALID_ARGUMENT;
+    }
 
     GLuint program = create_program();
     if (!program) {
@@ -174,6 +203,9 @@ extern "C" int32_t ultrascale_gles_process_texture(
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_CULL_FACE);
+    glDisable(GL_STENCIL_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(GL_FALSE);
     glBindVertexArray(vao);
     glUseProgram(program);
     glActiveTexture(GL_TEXTURE0);
