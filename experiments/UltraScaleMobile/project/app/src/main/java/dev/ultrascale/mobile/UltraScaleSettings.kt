@@ -1,0 +1,111 @@
+package dev.ultrascale.mobile
+
+/**
+ * Canonical UltraScale settings model.
+ *
+ * This is the shared settings contract for the app-owned renderer and future
+ * game adapters. A setting is not considered active in a game unless that
+ * adapter reports the required render-pipeline capability.
+ */
+enum class UpscaleMode(
+    val title: String,
+    val minGlesMajor: Int,
+    val minGlesMinor: Int,
+    val implementedInHarness: Boolean
+) {
+    OFF("Off", 2, 0, true),
+    NEAREST("Nearest Neighbor", 2, 0, false),
+    BILINEAR("Bilinear", 2, 0, true),
+    FSR_LITE("FSR Lite · 6-tap", 3, 0, false),
+    AMD_FSR1_EASU("AMD FSR1 · EASU", 2, 0, false),
+    MWSR("MWSR", 3, 0, false),
+    SGSR1("Qualcomm SGSR1 Mobile", 3, 1, false)
+}
+
+enum class UpscalePreset(val title: String) {
+    CUSTOM("Custom"),
+    PERFORMANCE("Performance"),
+    BALANCED("Balanced"),
+    QUALITY("Quality"),
+    ULTRA_QUALITY("Ultra Quality")
+}
+
+enum class LowLatencyMode(val title: String) {
+    OFF("Off"),
+    REDUCE_QUEUE("Reduce Queue"),
+    AGGRESSIVE("Aggressive · adapter dependent")
+}
+
+data class UltraScaleSettings(
+    /** Internal render resolution as a percentage of the output dimensions. */
+    val renderScalePercent: Int = 70,
+    val upscaler: UpscaleMode = UpscaleMode.BILINEAR,
+    /** Reconstruction-stage sharpness; separate from CAS. */
+    val upscaleSharpnessPercent: Int = 20,
+    val preset: UpscalePreset = UpscalePreset.CUSTOM,
+    /** Independent post-upscale AMD CAS strength. Zero disables CAS. */
+    val casSharpnessPercent: Int = 0,
+    val lowLatency: LowLatencyMode = LowLatencyMode.OFF
+) {
+    fun normalized(): UltraScaleSettings = copy(
+        renderScalePercent = renderScalePercent.coerceIn(25, 100),
+        upscaleSharpnessPercent = upscaleSharpnessPercent.coerceIn(0, 100),
+        casSharpnessPercent = casSharpnessPercent.coerceIn(0, 100)
+    )
+
+    companion object {
+        fun forPreset(preset: UpscalePreset): UltraScaleSettings = when (preset) {
+            UpscalePreset.CUSTOM -> UltraScaleSettings()
+            UpscalePreset.PERFORMANCE -> UltraScaleSettings(
+                renderScalePercent = 50,
+                upscaler = UpscaleMode.BILINEAR,
+                upscaleSharpnessPercent = 10,
+                preset = preset,
+                casSharpnessPercent = 10
+            )
+            UpscalePreset.BALANCED -> UltraScaleSettings(
+                renderScalePercent = 70,
+                upscaler = UpscaleMode.FSR_LITE,
+                upscaleSharpnessPercent = 25,
+                preset = preset,
+                casSharpnessPercent = 20
+            )
+            UpscalePreset.QUALITY -> UltraScaleSettings(
+                renderScalePercent = 85,
+                upscaler = UpscaleMode.AMD_FSR1_EASU,
+                upscaleSharpnessPercent = 35,
+                preset = preset,
+                casSharpnessPercent = 25
+            )
+            UpscalePreset.ULTRA_QUALITY -> UltraScaleSettings(
+                renderScalePercent = 95,
+                upscaler = UpscaleMode.SGSR1,
+                upscaleSharpnessPercent = 25,
+                preset = preset,
+                casSharpnessPercent = 15
+            )
+        }
+    }
+}
+
+/**
+ * Capability report supplied by a renderer/game adapter. Low-latency options
+ * remain unavailable unless the adapter can actually control frame submission.
+ */
+data class UltraScaleCapabilities(
+    val glesMajor: Int = 0,
+    val glesMinor: Int = 0,
+    val ownsRenderTarget: Boolean = false,
+    val canControlFrameQueue: Boolean = false
+) {
+    fun supports(mode: UpscaleMode): Boolean =
+        glesMajor > mode.minGlesMajor ||
+            (glesMajor == mode.minGlesMajor && glesMinor >= mode.minGlesMinor)
+
+    fun canApply(settings: UltraScaleSettings): Boolean {
+        val s = settings.normalized()
+        return ownsRenderTarget &&
+            supports(s.upscaler) &&
+            (s.lowLatency == LowLatencyMode.OFF || canControlFrameQueue)
+    }
+}
