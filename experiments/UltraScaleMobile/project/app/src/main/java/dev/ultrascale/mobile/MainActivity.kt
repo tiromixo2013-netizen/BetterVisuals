@@ -269,7 +269,16 @@ class MainActivity : ComponentActivity() {
                                                         result.nativeAbis.isEmpty() -> "${researchProfile.title}: identity recognized, but ABI is unknown in this APK file; inspect the complete split set."
                                                         !researchProfile.matches(result.packageName, result.versionName, result.nativeAbis.toSet()) ->
                                                             "${researchProfile.title}: package recognized, but version/ABI does not match this research profile."
-                                                        else -> "${researchProfile.title}: ${researchProfile.state} · APIs are candidates only: ${researchProfile.apiCandidates.joinToString()}."
+                                                        else -> {
+                                                            val versionState = if (researchProfile.hasSourceRenderPass(result.versionName)) {
+                                                                "SOURCE RENDER PASS PRESENT for this version"
+                                                            } else if (researchProfile.state == GameProfileState.SOURCE_RENDER_PASS_IMPLEMENTED) {
+                                                                "RESEARCH ONLY for this version; no matching render-pass binary"
+                                                            } else {
+                                                                researchProfile.state.toString()
+                                                            }
+                                                            "${researchProfile.title}: $versionState · APIs are candidates only: ${researchProfile.apiCandidates.joinToString()}."
+                                                        }
                                                     }
                                                     apkInjectionStatus = if (adapterMatch.route != null) {
                                                         "GEODE ADAPTER MATCH · ${adapterMatch.route.displayName}\n${adapterMatch.reason}\n${profileStatus}\nAPK identity: ${result.packageName} ${result.versionName} · ABI: ${result.nativeAbis.joinToString()}"
