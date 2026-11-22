@@ -104,6 +104,27 @@ class RenderScaleHarnessActivity : Activity() {
         root.addView(upscalerLabel)
         root.addView(upscalerPicker)
 
+        val sharpnessLabel = TextView(this).apply {
+            text = "CAS sharpening: Off"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            setPadding(0, 10, 0, 4)
+        }
+        val sharpness = SeekBar(this).apply {
+            max = 100
+            progress = 0
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) {
+                    renderer.setSharpness(value / 100f)
+                    sharpnessLabel.text = if (value == 0) "CAS sharpening: Off" else "CAS sharpening: $value%"
+                }
+                override fun onStartTrackingTouch(bar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(bar: SeekBar?) = Unit
+            })
+        }
+        root.addView(sharpnessLabel)
+        root.addView(sharpness)
+
         root.addView(surface, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
         ))
@@ -125,6 +146,7 @@ class RenderScaleHarnessActivity : Activity() {
 private class HarnessRenderer : GLSurfaceView.Renderer {
     @Volatile private var requestedScale = 0.70f
     @Volatile private var requestedUpscaler = 0
+    @Volatile private var requestedSharpness = 0f
     private var appliedScale = -1f
     private var surfaceWidth = 1
     private var surfaceHeight = 1
@@ -143,6 +165,8 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
     private var compositeSampler = 0
     private var compositeTexelSize = 0
     private var compositeUpscaler = 0
+    private var compositeOutputTexelSize = 0
+    private var compositeSharpness = 0
     private var startNanos = System.nanoTime()
 
     fun setScale(value: Float) {
@@ -151,6 +175,10 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
 
     fun setUpscaler(value: Int) {
         requestedUpscaler = value.coerceIn(0, 1)
+    }
+
+    fun setSharpness(value: Float) {
+        requestedSharpness = value.coerceIn(0f, 1f)
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -165,6 +193,8 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
         compositeSampler = GLES20.glGetUniformLocation(compositeProgram, "uTexture")
         compositeTexelSize = GLES20.glGetUniformLocation(compositeProgram, "uTexelSize")
         compositeUpscaler = GLES20.glGetUniformLocation(compositeProgram, "uUpscaler")
+        compositeOutputTexelSize = GLES20.glGetUniformLocation(compositeProgram, "uOutputTexelSize")
+        compositeSharpness = GLES20.glGetUniformLocation(compositeProgram, "uSharpness")
         val data = floatArrayOf(
             -1f, -1f, 0f, 0f,  1f, -1f, 1f, 0f,
             -1f,  1f, 0f, 1f,  1f,  1f, 1f, 1f
@@ -215,6 +245,8 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
         GLES20.glUniform1i(compositeSampler, 0)
         GLES20.glUniform2f(compositeTexelSize, 1f / targetWidth.toFloat(), 1f / targetHeight.toFloat())
         GLES20.glUniform1i(compositeUpscaler, requestedUpscaler)
+        GLES20.glUniform2f(compositeOutputTexelSize, 1f / surfaceWidth.toFloat(), 1f / surfaceHeight.toFloat())
+        GLES20.glUniform1f(compositeSharpness, requestedSharpness)
         bindQuad(compositePosition, compositeUv)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
@@ -306,6 +338,76 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
             }
         """
         private const val COMPOSITE_SHADER = """
+            #ifdef GL_FRAGMENT_PRECISION_HIGH
+            precision highp float;
+            #else
+            precision mediump float;
+            #endif
+            varying vec2 vUv;
+            uniform sampler2D uTexture;
+            uniform vec2 uTexelSize;
+            uniform vec2 uOutputTexelSize;
+            uniform int uUpscaler;
+            uniform float uSharpness;
+
+            float catmullWeight(int index, float t) {
+                float t2 = t * t;
+                float t3 = t2 * t;
+                if (index == 0) return -0.5 * t + t2 - 0.5 * t3;
+                if (index == 1) return 1.0 - 2.5 * t2 + 1.5 * t3;
+                if (index == 2) return 0.5 * t + 2.0 * t2 - 1.5 * t3;
+                return -0.5 * t2 + 0.5 * t3;
+            }
+
+            vec3 sampleCatmullRom(vec2 uv) {
+                vec2 pixel = uv / uTexelSize - 0.5;
+                vec2 base = floor(pixel);
+                vec2 f = fract(pixel);
+                vec3 result = vec3(0.0);
+                for (int y = 0; y < 4; ++y) {
+                    float wy = catmullWeight(y, f.y);
+                    for (int x = 0; x < 4; ++x) {
+                        float wx = catmullWeight(x, f.x);
+                        vec2 sampleUv = (base + vec2(float(x - 1), float(y - 1)) + 0.5) * uTexelSize;
+                        sampleUv = clamp(sampleUv, uTexelSize * 0.5, vec2(1.0) - uTexelSize * 0.5);
+                        result += texture2D(uTexture, sampleUv).rgb * (wx * wy);
+                    }
+                }
+                return clamp(result, 0.0, 1.0);
+            }
+
+            vec3 reconstruct(vec2 uv) {
+                if (uUpscaler == 1) return sampleCatmullRom(uv);
+                return texture2D(uTexture, clamp(uv, uTexelSize * 0.5, vec2(1.0) - uTexelSize * 0.5)).rgb;
+            }
+
+            vec3 casSample(vec2 uv) {
+                return reconstruct(clamp(uv, uOutputTexelSize * 0.5, vec2(1.0) - uOutputTexelSize * 0.5));
+            }
+
+            vec3 applyCas(vec2 uv) {
+                vec3 b = casSample(uv + vec2(0.0, -uOutputTexelSize.y));
+                vec3 d = casSample(uv + vec2(-uOutputTexelSize.x, 0.0));
+                vec3 e = casSample(uv);
+                vec3 f = casSample(uv + vec2(uOutputTexelSize.x, 0.0));
+                vec3 h = casSample(uv + vec2(0.0, uOutputTexelSize.y));
+
+                vec3 mn = min(min(d, e), min(f, min(b, h)));
+                vec3 mx = max(max(d, e), max(f, max(b, h)));
+                float ampG = clamp(min(mn.g, 1.0 - mx.g) / max(mx.g, 1e-4), 0.0, 1.0);
+                ampG = sqrt(ampG);
+                float peak = -1.0 / mix(8.0, 5.0, clamp(uSharpness, 0.0, 1.0));
+                float w = ampG * peak;
+                float rcpWeight = 1.0 / (1.0 + 4.0 * w);
+                return clamp((b * w + d * w + f * w + h * w + e) * rcpWeight, 0.0, 1.0);
+            }
+
+            void main() {
+                vec3 color = reconstruct(vUv);
+                if (uSharpness > 0.001) color = applyCas(vUv);
+                gl_FragColor = vec4(color, 1.0);
+            }
+        """
             #ifdef GL_FRAGMENT_PRECISION_HIGH
             precision highp float;
             #else
