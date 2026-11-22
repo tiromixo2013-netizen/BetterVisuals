@@ -306,7 +306,11 @@ private class HarnessRenderer : GLSurfaceView.Renderer {
             }
         """
         private const val COMPOSITE_SHADER = """
+            #ifdef GL_FRAGMENT_PRECISION_HIGH
             precision highp float;
+            #else
+            precision mediump float;
+            #endif
             varying vec2 vUv;
             uniform sampler2D uTexture;
             uniform vec2 uTexelSize;
