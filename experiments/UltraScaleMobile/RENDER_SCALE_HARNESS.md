@@ -34,3 +34,12 @@ When built and run on a GLES2-capable device, this harness exercises a genuine o
 6. Return to 100% and confirm the bypass-equivalent full-resolution target still renders.
 
 No build or device run is claimed by the source change alone.
+
+## Upscaling modes added
+
+The composite pass now exposes two explicit reconstruction modes:
+
+- **Linear (fast):** standard GLES texture filtering; lower sample cost.
+- **Catmull-Rom 4×4:** a separable cubic reconstruction evaluated from a 4×4 neighborhood (16 texture samples) with edge clamping and output clamping.
+
+The Catmull-Rom path uses a fragment precision fallback for GLES2 devices without fragment `highp`. It is a spatial reconstruction filter, not AI upscaling and not FSR/FSR 2/3. It may cost more GPU time than linear filtering and can produce different edge behavior. No performance or image-quality claim is made until measured on-device.
