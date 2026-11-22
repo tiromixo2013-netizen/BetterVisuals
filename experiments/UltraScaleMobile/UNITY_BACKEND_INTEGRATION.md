@@ -105,3 +105,16 @@ The Built-in Render Pipeline adapter now has separate Unity shader assets and mo
 The render callback now uses a full-resolution intermediate RenderTexture so CAS can be applied after the selected spatial scaler without reading and writing the same target. Both temporary targets are released in a `finally` block. Optional shader materials are loaded independently; an unsupported optional shader does not disable the remaining modes and falls back to Bilinear when selected.
 
 These are managed shader paths in an owner-integrated Unity Built-in RP sample. The native GLES/Vulkan bridge is still not connected, and this does not provide a general-purpose injector or modify third-party game UI. URP/SRP and device-side validation remain outstanding. No build or device test has been claimed.
+
+
+## URP 14 adapter added
+
+A separate URP compatibility-mode implementation now lives at:
+- `unity-backend/unity/URP/UltraScaleRendererFeature.cs`
+- `unity-backend/unity/URP/UltraScale.Unity.URP.asmdef`
+
+It is intended for Unity 2022.3 + URP 14 projects. Add the feature to the active Universal Renderer Data asset. It uses a ScriptableRenderPass, command-buffer blits and temporary RTHandles; it does not use `OnRenderImage`. It exposes render scale, Bilinear / custom FSR Lite / project 7-tap / MWSR / FSR1 EASU / SGSR1 selection, CAS enable/strength and injection point. MWSR's minimum useful upscale threshold is also applied in this adapter.
+
+This is an isolated compatibility-mode pass, not a RenderGraph-native Unity 6 implementation. It has not yet been compiled against a concrete URP package, and the shader ports have not been compiled by Unity or tested on Android. A missing/unsupported material falls back to a bilinear pass; this is not proof that the requested algorithm is active. HDRP remains unsupported.
+
+The existing Built-in Render Pipeline adapter is unchanged and remains separately usable. Neither adapter attaches to or injects into arbitrary installed games; the feature must be integrated into an owned Unity project or an explicitly supported plugin environment.
