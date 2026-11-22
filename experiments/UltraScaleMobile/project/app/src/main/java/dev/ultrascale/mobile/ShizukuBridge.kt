@@ -14,7 +14,7 @@ object ShizukuBridge {
             .daemon(false)
             .processNameSuffix("ultrascale-shell")
             .tag("ultrascale-shell-service")
-            .version(1)
+            .version(2)
     }
     @Volatile private var remote: ICommandService? = null
     @Volatile var statusListener: (() -> Unit)? = null
