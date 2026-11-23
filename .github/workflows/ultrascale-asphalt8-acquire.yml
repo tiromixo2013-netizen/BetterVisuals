@@ -29,7 +29,10 @@ jobs:
         with:
           packages: platform-tools
       - name: Install APK inspection tools
-        run: sdkmanager "build-tools;35.0.0"
+        run: |
+          sdkmanager "build-tools;35.0.0"
+          sudo apt-get update
+          sudo apt-get install -y binutils
 
       - name: Pull prebuilt apkeep downloader
         run: docker pull ghcr.io/efforg/apkeep:stable
@@ -132,6 +135,59 @@ jobs:
               head -n 100 >> reports/asphalt8-ui-resource-hints.txt || true
           done < <(find acquired -type f -name '*.apk' | sort)
           echo "Read-only inventory only: no game files were modified, patched, or re-signed." >> reports/asphalt8-ui-resource-hints.txt
+
+      - name: Extract native GameOptions and menu symbol hints
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > reports/asphalt8-native-ui-options-hints.txt
+          while IFS= read -r apk; do
+            if unzip -Z1 "$apk" | grep -q '^lib/arm64-v8a/libAsphalt8\\.so
+        uses: actions/upload-artifact@v4
+        with:
+          name: Asphalt8-acquired-source-and-inspection
+          path: |
+            acquired/raw/**
+            acquired/extracted/**
+            reports/asphalt8-inspection.txt
+            reports/asphalt8-resource-inventory.tsv
+            reports/asphalt8-ui-resource-hints.txt
+            reports/asphalt8-native-ui-options-hints.txt
+          if-no-files-found: error
+          retention-days: 3
+; then
+              echo "===== Native library: $apk =====" >> reports/asphalt8-native-ui-options-hints.txt
+              tmp="$(mktemp)"
+              unzip -p "$apk" lib/arm64-v8a/libAsphalt8.so > "$tmp"
+              strings -a "$tmp" | grep -iE 'GameOptions|scaleDisplay|GFXOption|useShadows|options_menu/|ingame_menu/|visual_quality|STR_MENU_SOUND_AND_DISPLAY|OPTIONS_CONTROLS' | sort -u | head -n 240 >> reports/asphalt8-native-ui-options-hints.txt || true
+              rm -f "$tmp"
+            fi
+            python3 - "$apk" <<'PY' >> reports/asphalt8-native-ui-options-hints.txt
+          import json, sys, zipfile
+          apk=sys.argv[1]
+          try:
+              with zipfile.ZipFile(apk) as z:
+                  names=[n for n in z.namelist() if n.lower().endswith('/gameoptions.json') or n.lower()=='gameoptions.json']
+                  for name in names:
+                      data=json.loads(z.read(name))
+                      profiles=data.get('profiles',{})
+                      print(f"\\n===== Embedded config: {apk}:{name} =====")
+                      print("header:", data.get("header"))
+                      print("profiles:", ", ".join(profiles))
+                      gpu=profiles.get("GPU",{})
+                      defaults=gpu.get("defaults",[])
+                      for group in defaults:
+                          for group_name, entries in group.items():
+                              selected={e[0]:e[1] for e in entries if isinstance(e,list) and len(e)>1 and e[0] in {"GFXOption","FPSLimit","defaultTextureFiltering","useShadows","postFX"}}
+                              print("GPU defaults:", selected)
+                      spec=profiles.get("Specific",{}).get("overrides",{})
+                      scales={k:v.get("scaleDisplay") for k,v in spec.items() if k.startswith("RES_") and isinstance(v,dict) and "scaleDisplay" in v}
+                      print("Existing RES_ scaleDisplay overrides:", scales)
+          except Exception as e:
+              print(f"Config scan skipped for {apk}: {e}")
+          PY
+          done < <(find acquired -type f -name '*.apk' | sort)
+          echo "String matches are discovery hints only; they do not prove a menu injection point or runtime file precedence." >> reports/asphalt8-native-ui-options-hints.txt
 
       - name: Upload acquired APKs and inspection report
         uses: actions/upload-artifact@v4
