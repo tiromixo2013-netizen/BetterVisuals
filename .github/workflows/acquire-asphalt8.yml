@@ -1,0 +1,63 @@
+name: Acquire Asphalt 8 APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/acquire-asphalt8.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Install APK inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip
+          mkdir -p acquired/raw reports
+
+      - name: Install apkeep
+        uses: dtolnay/rust-toolchain@stable
+      - run: cargo install apkeep --locked
+
+      - name: Download Asphalt 8 from APKPure
+        run: |
+          set -euo pipefail
+          apkeep -a com.gameloft.android.ANMP.GloftA8HM -d apk-pure -o 'acknowledge_dangers=true,arch=arm64-v8a;armeabi-v7a' acquired/raw
+          find acquired/raw -maxdepth 2 -type f -printf '%p (%s bytes)\\n'
+          test -n "$(find acquired/raw -type f | head -n 1)"
+
+      - name: Inspect downloaded packages
+        run: |
+          set -euo pipefail
+          {
+            echo "Acquisition timestamp: $(date -u +%FT%TZ)"
+            echo "Package: com.gameloft.android.ANMP.GloftA8HM"
+            find acquired/raw -type f -printf '\\nFILE %p SIZE %s bytes\\n'
+            find acquired/raw -type f -exec sha256sum {} \\;
+            for f in acquired/raw/*; do
+              [ -f "$f" ] || continue
+              case "$f" in
+                *.apk) aapt dump badging "$f" 2>/dev/null | head -n 8 || true ;;
+                *.xapk) unzip -l "$f" | head -n 30 || true ;;
+              esac
+            done
+          } | tee reports/acquisition-report.txt
+
+      - name: Upload acquired APK and report
+        uses: actions/upload-artifact@v4
+        with:
+          name: asphalt8-original-apkpure
+          path: |
+            acquired/raw/**
+            reports/acquisition-report.txt
+          if-no-files-found: error
+          retention-days: 7
