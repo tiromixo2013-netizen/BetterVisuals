@@ -43,3 +43,6 @@ The ARM64 native library also contains strings for `options_menu/screen_options_
 ## CI packaging retry
 
 The packaging workflow now removes stale `META-INF` BNDLTOOL/JAR signature metadata from original split APKs before signing all splits with the same temporary test key. This is a packaging integrity fix only; runtime GLES layer activation and image-processing features remain unverified.
+
+
+The split-signature cleanup predicate was corrected to match `.RSA`, `.DSA`, `.EC`, `.SF`, and `MANIFEST.MF` entries using case-insensitive filename suffix checks; a fresh CI run is triggered for this revision.
