@@ -31,17 +31,21 @@ jobs:
       - name: Install APK inspection tools
         run: sdkmanager "build-tools;35.0.0"
 
-      - name: Install apkeep downloader
-        uses: dtolnay/rust-toolchain@stable
-      - name: Build apkeep
-        run: cargo install apkeep --locked
+      - name: Pull prebuilt apkeep downloader
+        run: docker pull ghcr.io/efforg/apkeep:stable
 
       - name: Download Asphalt 8 from APKPure
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p acquired/raw acquired/extracted reports
-          apkeep -a com.gameloft.android.ANMP.GloftA8HM -d apk-pure -o 'acknowledge_dangers=true' acquired/raw
+          docker run --rm \\
+            -v "$PWD/acquired/raw:/output" \\
+            ghcr.io/efforg/apkeep:stable \\
+            -a com.gameloft.android.ANMP.GloftA8HM \\
+            -d apk-pure \\
+            -o 'acknowledge_dangers=true' \\
+            /output
           find acquired/raw -maxdepth 2 -type f -printf '%p (%s bytes)\\n'
           test -n "$(find acquired/raw -type f | head -n 1)"
 
