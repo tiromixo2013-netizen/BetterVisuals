@@ -139,7 +139,9 @@ jobs:
               --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
               --out "work/output/$name" "work/output/$name.aligned.apk"
           done
-          for apk in work/output/*.apk; do
+          # Verify only final signed APKs; *-aligned.apk files are unsigned intermediates.
+          for apk in work/output/com.gameloft.android.ANMP.GloftA8HM.apk work/output/config.*.apk; do
+            test -f "$apk"
             "$tools/apksigner" verify --verbose --print-certs "$apk"
           done
 
