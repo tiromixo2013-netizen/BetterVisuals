@@ -1,0 +1,173 @@
+name: UltraScale Asphalt 8 GLES layer package
+
+on:
+  push:
+    branches:
+      - feature/ultrascale-mobile-api-injection-lab
+    paths:
+      - ".github/workflows/ultrascale-asphalt8-layer-package.yml"
+      - "experiments/UltraScaleMobile/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ultrascale-asphalt8-layer-package
+  cancel-in-progress: false
+
+jobs:
+  package-layer-test:
+    name: Build and package ARM64 GLES layer into Asphalt 8
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/ultrascale-mobile-api-injection-lab
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android SDK and APK tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          curl -fsSL -o /tmp/apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v2.11.1/apktool_2.11.1.jar
+          printf '#!/usr/bin/env bash\nexec java -jar /tmp/apktool.jar "$@"\n' | sudo tee /usr/local/bin/apktool >/dev/null
+          sudo chmod +x /usr/local/bin/apktool
+          apktool --version
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" version
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build UltraScale native GLES layer
+        working-directory: experiments/UltraScaleMobile/project
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify ARM64 layer binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_apk="experiments/UltraScaleMobile/project/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$app_apk"
+          unzip -Z1 "$app_apk" | grep -Fx 'lib/arm64-v8a/libGLES_ultrascale.so'
+          mkdir -p work/layer
+          unzip -p "$app_apk" lib/arm64-v8a/libGLES_ultrascale.so > work/layer/libGLES_ultrascale.so
+          file work/layer/libGLES_ultrascale.so
+          readelf -h work/layer/libGLES_ultrascale.so | grep -E 'Class:|Machine:'
+
+      - name: Download pinned Asphalt 8 9.2.0i source artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 45261333997 --repo "${GITHUB_REPOSITORY}" --name asphalt8-original-apkpure --dir work/source
+          find work/source -maxdepth 2 -type f -printf '%p (%s bytes)\n'
+          test -n "$(find work/source -type f -name '*.xapk' -print -quit)"
+
+      - name: Extract XAPK and patch base manifest plus GLES layer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/xapk work/decoded work/output
+          xapk="$(find work/source -type f -name '*.xapk' -print -quit)"
+          python3 - "$xapk" work/xapk <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as z:
+              z.extractall(sys.argv[2])
+          PY
+          base="work/xapk/com.gameloft.android.ANMP.GloftA8HM.apk"
+          test -f "$base"
+          apktool d --no-src -f "$base" -o work/decoded/game
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          p=Path("work/decoded/game/AndroidManifest.xml")
+          android="http://schemas.android.com/apk/res/android"
+          ET.register_namespace("android", android)
+          tree=ET.parse(p)
+          root=tree.getroot()
+          app=root.find("application")
+          if app is None:
+              raise SystemExit("AndroidManifest.xml has no application element")
+          key="{%s}name" % android
+          for item in app.findall("meta-data"):
+              if item.get(key)=="com.android.graphics.injectLayers.enable":
+                  item.set("{%s}value" % android,"true")
+                  break
+          else:
+              item=ET.SubElement(app,"meta-data")
+              item.set(key,"com.android.graphics.injectLayers.enable")
+              item.set("{%s}value" % android,"true")
+          tree.write(p,encoding="utf-8",xml_declaration=True)
+          print("Added com.android.graphics.injectLayers.enable=true")
+          PY
+          mkdir -p work/decoded/game/lib/arm64-v8a
+          cp work/layer/libGLES_ultrascale.so work/decoded/game/lib/arm64-v8a/
+          apktool b work/decoded/game -o work/output/base-unsigned.apk
+
+      - name: Align and sign every split with one test key
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/ultrascale-test.jks"
+          keytool -genkeypair -keystore "$key" -storepass android -keypass android \
+            -alias ultrascale -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=UltraScale Test,O=UltraScale,C=DZ"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/zipalign" -f -p 4 work/output/base-unsigned.apk work/output/base-aligned.apk
+          "$tools/apksigner" sign --ks "$key" --ks-key-alias ultrascale \
+            --ks-pass pass:android --key-pass pass:android \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out work/output/com.gameloft.android.ANMP.GloftA8HM.apk work/output/base-aligned.apk
+          for split in work/xapk/config.*.apk; do
+            name="$(basename "$split")"
+            "$tools/zipalign" -f -p 4 "$split" "work/output/$name.aligned.apk"
+            "$tools/apksigner" sign --ks "$key" --ks-key-alias ultrascale \
+              --ks-pass pass:android --key-pass pass:android \
+              --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+              --out "work/output/$name" "work/output/$name.aligned.apk"
+          done
+          for apk in work/output/*.apk; do
+            "$tools/apksigner" verify --verbose --print-certs "$apk"
+          done
+
+      - name: Assemble installable test XAPK and verification report
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp work/xapk/manifest.json work/output/manifest.json
+          (cd work/output && zip -q -9 ../UltraScale-Asphalt8-9.2.0i-GLES-layer-test.xapk \
+            com.gameloft.android.ANMP.GloftA8HM.apk config.*.apk manifest.json)
+          sha256sum work/UltraScale-Asphalt8-9.2.0i-GLES-layer-test.xapk | tee work/SHA256SUMS.txt
+          {
+            echo "Target package: com.gameloft.android.ANMP.GloftA8HM"
+            echo "Source artifact run: 45261333997"
+            echo "Source version: Asphalt 8 9.2.0i (pinned source artifact)"
+            echo "Patch: manifest meta-data com.android.graphics.injectLayers.enable=true"
+            echo "Bundled native layer: lib/arm64-v8a/libGLES_ultrascale.so"
+            echo "Signing: temporary test key; original store signature is not preserved"
+            echo "Runtime activation and in-game attachment: NOT YET VERIFIED"
+            echo "This package contains the current diagnostic GLES layer, not completed upscaling or frame generation."
+          } > work/BUILD-REPORT.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UltraScale-Asphalt8-9.2.0i-GLES-layer-test
+          path: |
+            work/UltraScale-Asphalt8-9.2.0i-GLES-layer-test.xapk
+            work/SHA256SUMS.txt
+            work/BUILD-REPORT.txt
+          if-no-files-found: error
+          retention-days: 14
