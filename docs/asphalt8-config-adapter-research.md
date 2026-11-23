@@ -66,3 +66,45 @@ The editor now offers **Load installed Asphalt 8 config (recommended)** through 
 Backup handling validates that a previously recorded original backup still exists before another deployment, and restore uses the exact backup named by the marker rather than silently selecting an unrelated newest backup. Legacy restores without a marker may still select the newest matching UltraScale backup.
 
 The app UI remains separate from Asphalt 8's own UI. It does not inherit the game's selected language, and no new game-language strings or in-game menu entries are inserted. The app can be localized independently in a later UI-resource pass. The live file read and deploy are code paths only; no on-device result or game acceptance is asserted.
+
+
+## Verified APK acquisition: Asphalt 8 Android 9.2.0i (2026-11-23)
+
+The acquisition workflow completed successfully for package `com.gameloft.android.ANMP.GloftA8HM`:
+
+- Version: `9.2.0i`, versionCode `92009`, target SDK 36, minimum SDK 24.
+- XAPK manifest contains a base APK plus `config.arm64_v8a.apk` and `config.hdpi.apk` splits; no separate OBB entry was present in this XAPK manifest.
+- Base APK SHA-256: `dcb8510e7395f5288eba912fd246a2f5c9bd567fccaf46a3cd7f230292dd9e14`.
+- ARM64 split SHA-256: `75cb1436dd06324c666e310f4b62ec12f0181a5e20f09f825ee18b6d2d93f610`.
+- The ARM64 split contains `lib/arm64-v8a/libAsphalt8.so` (46,725,320 bytes). The base APK has no `lib/` entries; native code is delivered by the ABI split.
+- The inspected base APK signer SHA-256 is `2173a248e2b11f9760b9167f398b183c92816cf8fc74afd3c64b22eddf50481c` (Gameloft certificate). No APK modification or re-signing occurred during acquisition.
+
+### Embedded game-options schema found
+
+The base APK contains `assets/releaseminigame/gameoptions.json` (149,335 bytes), with header `file_version=2`, `format_version=1`, `library_version=1` and profiles:
+
+- `ColorCorrection`
+- `CPU`
+- `GPU`
+- `MEM`
+- `Specific`
+
+Confirmed existing GPU keys include `GFXOption`, `FPSLimit`, `useShadows`, `postFX`, `useMotionBlur`, `useRoadReflection`, `useAA` (in a GPU override), `numPostEffectAASamples`, `roadTextureAnisotropy`, and `carTextureAnisotropy`. The embedded GPU default sets `GFXOption=VERYLOW`, `FPSLimit=30.0`, and `defaultTextureFiltering=1` (bilinear).
+
+The `Specific` profile contains `scaleDisplay` and `scaleAABuffer`. Existing `RES_*` overrides set `scaleDisplay` to values including 50, 55, 56, 60, 70, 80, 85, 90 and 100. The default is `1.0`; the meaning/units and whether this embedded `releaseminigame` config governs the full live racing renderer still require runtime verification. The adapter must preserve the exact existing structure and should not infer that `scaleDisplay=50` is definitely a 50% render target without an on-device test.
+
+### Native-library corroboration and UI boundary
+
+Strings extracted from the ARM64 `libAsphalt8.so` include `GameOptionsManager`, `GS_GameOptions`, `GameOptions.json`, `GameOptions_saved.json`, `GameOptions_debug.json`, `GFXOption`, `scaleDisplay`, `textureBudgetMB`, `uiTextureQuality`, and `useShadows`. This confirms that the shipped native engine contains a game-options manager and recognizes these configuration concepts. It does not by itself prove which on-disk file wins precedence in 9.2.0i, or prove that every embedded `releaseminigame` option is consumed by the main racing mode.
+
+The resource inventory found 620 assets under `assets/releaseminigame/`, including `gameoptions.json`, `.bgin` menu resources, `.tga` UI textures, `.xml` post-processing/material definitions and `.pvs` track data. The inventory did not find a main-game XML/JSON settings-screen definition; Android resource XML hits were predominantly library layouts. Therefore, this acquisition identifies a native config surface and custom menu asset family, but does **not** yet establish a safe insertion point for new UltraScale controls inside the full game's settings screen.
+
+### Integration decision after acquisition
+
+1. Update the adapter's version-aware parser against this exact embedded schema and preserve unknown profile/selection/override data.
+2. Do not inject new keys for FSR, CAS, frame generation or latency: no evidence shows that the native game-options manager understands those UltraScale algorithms.
+3. Verify the current build's effective config path and precedence on a device before deploying any external config. Keep the existing backup/restore path.
+4. Continue reverse-engineering the custom menu resource format and native menu registration before claiming that controls can be added to the in-game settings screen.
+5. Keep the official APK untouched and signed by Gameloft; no modified/re-signed APK has been produced.
+
+Acquisition artifact: GitHub Actions run `45087768296`, artifact `Asphalt8-acquired-source-and-inspection` (250,926,304 bytes; expires 2026-11-26 UTC). The artifact contains the XAPK, split APKs, manifest and read-only inspection reports.
