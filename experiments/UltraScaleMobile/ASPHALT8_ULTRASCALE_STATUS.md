@@ -33,3 +33,8 @@ The APK acquisition and read-only inspection workflow completed successfully. It
 This is a useful version-matched config discovery, not yet a proven live-game patch: the embedded file is under `assets/releaseminigame/`, effective external-file precedence is not verified on-device, and the exact effect of `scaleDisplay` is not yet measured. No UltraScale shader keys were added. The custom in-game menu is not yet modified; the inventory found custom `.bgin` menu assets but no verified registration point for adding new controls. No APK was modified or re-signed, and no UltraScale-injected APK was built.
 
 Detailed findings: [docs/asphalt8-config-adapter-research.md](../../docs/asphalt8-config-adapter-research.md#verified-apk-acquisition-asphalt-8-android-920i-2026-11-23). Acquisition artifact is attached to GitHub Actions run [45087768296](https://github.com/tiromixo2013-netizen/BetterVisuals/actions/runs/45087768296).
+
+
+### Native menu path hints (read-only)
+
+The ARM64 native library also contains strings for `options_menu/screen_options_ads`, `options_menu/template_control`, `ingame_menu/template_ingame_options_controls`, `visual_quality_container_android`, `$STR_MENU_SOUND_AND_DISPLAY_OPTIONS`, `OPTIONS_CONTROLS_CUSTOM`, and `GameOptionsOverrideSlider`. These are promising names for the game's existing menu/quality UI, but the matching resource pack and registration code are not in the acquired XAPK. The next acquisition target is the installed game's downloaded resource data; the current APK artifact alone is insufficient to safely add an UltraScale menu entry.
