@@ -133,7 +133,19 @@ jobs:
             --out work/output/com.gameloft.android.ANMP.GloftA8HM.apk work/output/base-aligned.apk
           for split in work/xapk/config.*.apk; do
             name="$(basename "$split")"
-            "$tools/zipalign" -f -p 4 "$split" "work/output/$name.aligned.apk"
+            # Bundletool split APKs may carry an old BNDLTOOL v1 signature.
+            # Strip signature metadata before applying the common test key.
+            python3 - "$split" "work/output/$name.unsigned.apk" <<'PY'
+          import re, sys, zipfile
+          src, dst = sys.argv[1:3]
+          with zipfile.ZipFile(src, "r") as zin, zipfile.ZipFile(dst, "w") as zout:
+              for item in zin.infolist():
+                  upper = item.filename.upper()
+                  if upper.startswith("META-INF/") and re.search(r"(\\.RSA|\\.DSA|\\.EC|\\.SF|^META-INF/MANIFEST\\.MF)$", upper):
+                      continue
+                  zout.writestr(item, zin.read(item.filename))
+          PY
+            "$tools/zipalign" -f -p 4 "work/output/$name.unsigned.apk" "work/output/$name.aligned.apk"
             "$tools/apksigner" sign --ks "$key" --ks-key-alias ultrascale \
               --ks-pass pass:android --key-pass pass:android \
               --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
