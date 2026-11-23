@@ -108,3 +108,18 @@ The resource inventory found 620 assets under `assets/releaseminigame/`, includi
 5. Keep the official APK untouched and signed by Gameloft; no modified/re-signed APK has been produced.
 
 Acquisition artifact: GitHub Actions run `45087768296`, artifact `Asphalt8-acquired-source-and-inspection` (250,926,304 bytes; expires 2026-11-26 UTC). The artifact contains the XAPK, split APKs, manifest and read-only inspection reports.
+
+
+### Additional native menu symbol discovery
+
+A read-only `strings -a` pass over the ARM64 `libAsphalt8.so` also found native UI identifiers including:
+
+- `options_menu/screen_options_ads`
+- `options_menu/template_control`
+- `options_menu/template_gc_additional_button`
+- `ingame_menu/template_ingame_options_controls`
+- `visual_quality_container_android` and `visual_quality_container`
+- `$STR_MENU_SOUND_AND_DISPLAY_OPTIONS`, `$STR_MENU_OPTIONS_HELP`, `$STR_MENU_OPTIONS_LANGUAGES`
+- `OPTIONS_CONTROLS_CUSTOM` and `GameOptionsOverrideSlider`
+
+This is stronger evidence that the game has native options-menu templates and a visual-quality control path. However, these are string references in a stripped native library, not the corresponding layout/resource files or event-registration code. The acquired XAPK did not contain the full `options_menu/` resource tree; its 620 game-specific assets were under `assets/releaseminigame/`. The next useful source is the installed game's downloaded resource pack(s), especially the data associated with the `releaseminigame.jpk` reference, or a complete installed-data export. Until those resources are available and mapped to the menu state machine, inserting a new in-game UltraScale page remains unproven.
