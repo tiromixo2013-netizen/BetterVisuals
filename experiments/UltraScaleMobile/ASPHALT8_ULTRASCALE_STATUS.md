@@ -24,3 +24,12 @@ Frame Generation is deliberately not exposed as an active switch for Asphalt 8. 
 ## Activation boundary
 
 The new settings card persists values inside the UltraScale manager. It does not inject code into Asphalt 8, alter the official APK signature, or modify the game's own settings screen. Applying these options to the game requires a permitted, version-tested render-pass adapter and a successful device test.
+
+
+## 2026-11-23 acquisition result
+
+The APK acquisition and read-only inspection workflow completed successfully. It produced XAPK package `com.gameloft.android.ANMP.GloftA8HM`, version `9.2.0i` (92009), plus base/ARM64/HDPI split APKs and inspection reports. The embedded base APK contains `assets/releaseminigame/gameoptions.json` with ColorCorrection, CPU, GPU, MEM and Specific profiles. Existing controls include `GFXOption`, `FPSLimit`, shadow/post-FX toggles, texture filtering/anisotropy, memory budgets, and `Specific.scaleDisplay` / `scaleAABuffer` overrides. Strings in the ARM64 `libAsphalt8.so` corroborate a native `GameOptionsManager` and recognized keys such as `scaleDisplay`, `GFXOption`, `useShadows` and `GameOptions_saved.json`.
+
+This is a useful version-matched config discovery, not yet a proven live-game patch: the embedded file is under `assets/releaseminigame/`, effective external-file precedence is not verified on-device, and the exact effect of `scaleDisplay` is not yet measured. No UltraScale shader keys were added. The custom in-game menu is not yet modified; the inventory found custom `.bgin` menu assets but no verified registration point for adding new controls. No APK was modified or re-signed, and no UltraScale-injected APK was built.
+
+Detailed findings: [docs/asphalt8-config-adapter-research.md](../../docs/asphalt8-config-adapter-research.md#verified-apk-acquisition-asphalt-8-android-920i-2026-11-23). Acquisition artifact is attached to GitHub Actions run [45087768296](https://github.com/tiromixo2013-netizen/BetterVisuals/actions/runs/45087768296).
