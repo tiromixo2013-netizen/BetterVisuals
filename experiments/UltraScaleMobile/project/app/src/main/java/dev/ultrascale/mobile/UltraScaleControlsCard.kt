@@ -34,12 +34,30 @@ internal fun readUltraScaleSettings(context: Context): UltraScaleSettings {
     fun enumValue(key: String, fallback: String) = p.getString(key, fallback) ?: fallback
     return UltraScaleSettings(
         renderScalePercent = p.getInt("renderScale", 70),
-        upscaler = runCatching { UpscaleMode.valueOf(enumValue("upscaler", UpscaleMode.BILINEAR.name)) }.getOrDefault(UpscaleMode.BILINEAR),
+        upscaler = runCatching {
+            UpscaleMode.valueOf(enumValue("upscaler", UpscaleMode.BILINEAR.name))
+        }.getOrDefault(UpscaleMode.BILINEAR),
         upscaleSharpnessPercent = p.getInt("upscaleSharpness", 20),
-        preset = runCatching { UpscalePreset.valueOf(enumValue("preset", UpscalePreset.CUSTOM.name)) }.getOrDefault(UpscalePreset.CUSTOM),
+        preset = runCatching {
+            UpscalePreset.valueOf(enumValue("preset", UpscalePreset.CUSTOM.name))
+        }.getOrDefault(UpscalePreset.CUSTOM),
         casSharpnessPercent = p.getInt("casSharpness", 0),
-        lowLatency = runCatching { LowLatencyMode.valueOf(enumValue("lowLatency", LowLatencyMode.OFF.name)) }.getOrDefault(LowLatencyMode.OFF),
-        integerScaling = p.getBoolean("integerScaling", false)
+        lowLatency = runCatching {
+            LowLatencyMode.valueOf(enumValue("lowLatency", LowLatencyMode.OFF.name))
+        }.getOrDefault(LowLatencyMode.OFF),
+        integerScaling = p.getBoolean("integerScaling", false),
+        frameGeneration = runCatching {
+            FrameGenerationMode.valueOf(enumValue("frameGeneration", FrameGenerationMode.OFF.name))
+        }.getOrDefault(FrameGenerationMode.OFF),
+        framePacing = p.getBoolean("framePacing", true),
+        vsyncAligned = p.getBoolean("vsyncAligned", true),
+        lowQueue = p.getBoolean("lowQueue", true),
+        queueDepth = p.getInt("queueDepth", 1),
+        bidirectionalFlowCheck = p.getBoolean("bidirectionalFlowCheck", true),
+        sceneCutDetection = p.getBoolean("sceneCutDetection", true),
+        disocclusionRejection = p.getBoolean("disocclusionRejection", true),
+        edgeAwareWarping = p.getBoolean("edgeAwareWarping", true),
+        hudGhostingSuppression = p.getBoolean("hudGhostingSuppression", true)
     ).normalized()
 }
 
@@ -52,6 +70,16 @@ private fun writeUltraScaleSettings(context: Context, settings: UltraScaleSettin
         .putInt("casSharpness", settings.casSharpnessPercent)
         .putString("lowLatency", settings.lowLatency.name)
         .putBoolean("integerScaling", settings.integerScaling)
+        .putString("frameGeneration", settings.frameGeneration.name)
+        .putBoolean("framePacing", settings.framePacing)
+        .putBoolean("vsyncAligned", settings.vsyncAligned)
+        .putBoolean("lowQueue", settings.lowQueue)
+        .putInt("queueDepth", settings.queueDepth)
+        .putBoolean("bidirectionalFlowCheck", settings.bidirectionalFlowCheck)
+        .putBoolean("sceneCutDetection", settings.sceneCutDetection)
+        .putBoolean("disocclusionRejection", settings.disocclusionRejection)
+        .putBoolean("edgeAwareWarping", settings.edgeAwareWarping)
+        .putBoolean("hudGhostingSuppression", settings.hudGhostingSuppression)
         .apply()
 }
 
@@ -63,6 +91,7 @@ fun UltraScaleControlsCard() {
         settings = next.normalized()
         writeUltraScaleSettings(context, settings)
     }
+    val frameGenerationEnabled = settings.frameGeneration != FrameGenerationMode.OFF
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -72,79 +101,238 @@ fun UltraScaleControlsCard() {
             Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("ULTRASCALE · GRAPHICS PROFILE", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-            Text("Saved locally on this device", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-            Text("Quality preset", fontWeight = FontWeight.SemiBold)
-            EnumPicker(
-                label = settings.preset.title,
-                values = UpscalePreset.entries,
-                title = { it.title },
-                onSelect = { update(UltraScaleSettings.forPreset(it)) }
+            Text(
+                "ULTRASCALE · GRAPHICS PROFILE",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Saved locally on this device",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            HorizontalDivider()
-            SettingValue("Render scale", "${settings.renderScalePercent}% · before upscaling")
+            // 1 — Render Scale
+            SectionTitle("1 · RENDER SCALE")
+            SettingValue("Render scale", "\${settings.renderScalePercent}% · before upscaling")
             Slider(
                 value = settings.renderScalePercent.toFloat(),
-                onValueChange = { update(settings.copy(renderScalePercent = it.toInt(), preset = UpscalePreset.CUSTOM)) },
+                onValueChange = {
+                    update(settings.copy(
+                        renderScalePercent = it.toInt(),
+                        preset = UpscalePreset.CUSTOM
+                    ))
+                },
                 valueRange = 50f..100f,
                 steps = 9
             )
 
-            Text("Upscaler", fontWeight = FontWeight.SemiBold)
+            HorizontalDivider()
+
+            // 2 — Upscaling
+            SectionTitle("2 · UPSCALING")
             EnumPicker(
                 label = settings.upscaler.title,
                 values = UpscaleMode.entries,
                 title = { it.title },
-                onSelect = { update(settings.copy(upscaler = it, preset = UpscalePreset.CUSTOM)) }
+                onSelect = {
+                    update(settings.copy(upscaler = it, preset = UpscalePreset.CUSTOM))
+                }
             )
             Text(
                 when (settings.upscaler) {
-                    UpscaleMode.OFF, UpscaleMode.NEAREST, UpscaleMode.BILINEAR, UpscaleMode.CATMULL_ROM, UpscaleMode.FSR_LITE -> "Available in the app-owned render test only; not yet connected to Asphalt 8's render target."
-                    else -> "Shader/reference is bundled, but this technique still needs a validated game render-pass backend."
+                    UpscaleMode.OFF, UpscaleMode.NEAREST, UpscaleMode.BILINEAR,
+                    UpscaleMode.CATMULL_ROM, UpscaleMode.FSR_LITE ->
+                        "Available in the app-owned render test only; not yet connected to Asphalt 8's render target."
+                    else ->
+                        "Shader/reference is bundled, but this technique still needs a validated game render-pass backend."
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
-
-            SettingValue("Upscaling sharpness", "${settings.upscaleSharpnessPercent}% · reconstruction stage")
-            Slider(
-                value = settings.upscaleSharpnessPercent.toFloat(),
-                onValueChange = { update(settings.copy(upscaleSharpnessPercent = it.toInt(), preset = UpscalePreset.CUSTOM)) },
-                valueRange = 0f..100f
-            )
-
-            SettingValue("CAS / post-upscale sharpening", "${settings.casSharpnessPercent}% · 0 disables")
-            Slider(
-                value = settings.casSharpnessPercent.toFloat(),
-                onValueChange = { update(settings.copy(casSharpnessPercent = it.toInt(), preset = UpscalePreset.CUSTOM)) },
-                valueRange = 0f..100f
-            )
-
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text("Integer scaling", fontWeight = FontWeight.SemiBold)
-                    Text("Nearest-neighbour integer-ratio output; adapter required", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Nearest-neighbour integer-ratio output; adapter required",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 Switch(
                     checked = settings.integerScaling,
-                    onCheckedChange = { update(settings.copy(integerScaling = it, preset = UpscalePreset.CUSTOM)) }
+                    onCheckedChange = {
+                        update(settings.copy(integerScaling = it, preset = UpscalePreset.CUSTOM))
+                    }
                 )
             }
 
-            Text("Low latency", fontWeight = FontWeight.SemiBold)
+            // 3 — Upscaling Sharpness
+            HorizontalDivider()
+            SectionTitle("3 · UPSCALING SHARPNESS")
+            SettingValue(
+                "Upscaling sharpness",
+                "\${settings.upscaleSharpnessPercent}% · reconstruction stage"
+            )
+            Slider(
+                value = settings.upscaleSharpnessPercent.toFloat(),
+                onValueChange = {
+                    update(settings.copy(
+                        upscaleSharpnessPercent = it.toInt(),
+                        preset = UpscalePreset.CUSTOM
+                    ))
+                },
+                valueRange = 0f..100f
+            )
+
+            // 4 — Presets must be immediately after Upscaling Sharpness and before CAS.
+            HorizontalDivider()
+            SectionTitle("4 · UPSCALING PRESETS")
+            EnumPicker(
+                label = settings.preset.title,
+                values = UpscalePreset.entries,
+                title = { it.title },
+                onSelect = { update(UltraScaleSettings.forPreset(it).copy(
+                    frameGeneration = settings.frameGeneration,
+                    framePacing = settings.framePacing,
+                    vsyncAligned = settings.vsyncAligned,
+                    lowQueue = settings.lowQueue,
+                    queueDepth = settings.queueDepth,
+                    bidirectionalFlowCheck = settings.bidirectionalFlowCheck,
+                    sceneCutDetection = settings.sceneCutDetection,
+                    disocclusionRejection = settings.disocclusionRejection,
+                    edgeAwareWarping = settings.edgeAwareWarping,
+                    hudGhostingSuppression = settings.hudGhostingSuppression
+                )) }
+            )
+
+            // 5 — CAS
+            HorizontalDivider()
+            SectionTitle("5 · CAS")
+            SettingValue(
+                "CAS Sharpness",
+                "\${settings.casSharpnessPercent}% · 0 disables CAS"
+            )
+            Slider(
+                value = settings.casSharpnessPercent.toFloat(),
+                onValueChange = {
+                    update(settings.copy(
+                        casSharpnessPercent = it.toInt(),
+                        preset = UpscalePreset.CUSTOM
+                    ))
+                },
+                valueRange = 0f..100f
+            )
+
+            // 6 — Low Latency
+            HorizontalDivider()
+            SectionTitle("6 · LOW LATENCY")
             EnumPicker(
                 label = settings.lowLatency.title,
                 values = LowLatencyMode.entries,
                 title = { it.title },
                 onSelect = { update(settings.copy(lowLatency = it, preset = UpscalePreset.CUSTOM)) }
             )
-            Text("Requires control of the game's frame queue. Not active in Asphalt 8 until a compatible adapter is available.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Requires control of the game's frame queue. Not active in Asphalt 8 until a compatible adapter is available.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            // 7 — All Frame Generation and Frame Pacing controls stay in this same card/window.
+            HorizontalDivider()
+            SectionTitle("7 · FRAME GENERATION")
+            EnumPicker(
+                label = settings.frameGeneration.title,
+                values = FrameGenerationMode.entries,
+                title = { it.title },
+                onSelect = { update(settings.copy(frameGeneration = it)) }
+            )
+            Text(
+                "Algorithm · \${FrameGenerationAlgorithm.PYRAMIDAL_LUCAS_KANADE.title}",
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                "One algorithm only. The x2, x3 and x4 choices are saved as profile settings.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            SwitchSettingRow(
+                title = "Bidirectional Flow Check",
+                description = "Reject inconsistent forward/backward motion estimates.",
+                checked = settings.bidirectionalFlowCheck,
+                enabled = frameGenerationEnabled,
+                onCheckedChange = { update(settings.copy(bidirectionalFlowCheck = it)) }
+            )
+            SwitchSettingRow(
+                title = "Scene Cut Detection",
+                description = "Avoid interpolation across abrupt scene changes.",
+                checked = settings.sceneCutDetection,
+                enabled = frameGenerationEnabled,
+                onCheckedChange = { update(settings.copy(sceneCutDetection = it)) }
+            )
+            SwitchSettingRow(
+                title = "Disocclusion Rejection",
+                description = "Reject newly exposed regions without reliable history.",
+                checked = settings.disocclusionRejection,
+                enabled = frameGenerationEnabled,
+                onCheckedChange = { update(settings.copy(disocclusionRejection = it)) }
+            )
+            SwitchSettingRow(
+                title = "Edge-Aware Warping",
+                description = "Reduce edge tearing while warping the intermediate frame.",
+                checked = settings.edgeAwareWarping,
+                enabled = frameGenerationEnabled,
+                onCheckedChange = { update(settings.copy(edgeAwareWarping = it)) }
+            )
+            SwitchSettingRow(
+                title = "HUD Ghosting Suppression",
+                description = "Reduce trails around static UI elements.",
+                checked = settings.hudGhostingSuppression,
+                enabled = frameGenerationEnabled,
+                onCheckedChange = { update(settings.copy(hudGhostingSuppression = it)) }
+            )
 
             HorizontalDivider()
-            Text("Frame Generation", fontWeight = FontWeight.SemiBold)
-            Text("Not enabled for Asphalt 8: the inspected build exposes no supported motion-vector / frame-history interface to this app. No fake ON switch is shown.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text("FRAME PACING & PRESENTATION", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            SwitchSettingRow(
+                title = "Frame Pacing",
+                description = "Keep generated frames evenly spaced.",
+                checked = settings.framePacing,
+                enabled = frameGenerationEnabled,
+                onCheckedChange = { update(settings.copy(framePacing = it)) }
+            )
+            SwitchSettingRow(
+                title = "VSync Aligned",
+                description = "Align generated-frame presentation with display refresh.",
+                checked = settings.vsyncAligned,
+                enabled = frameGenerationEnabled,
+                onCheckedChange = { update(settings.copy(vsyncAligned = it)) }
+            )
+            SwitchSettingRow(
+                title = "Low Queue",
+                description = "Prefer a shorter presentation queue to limit latency.",
+                checked = settings.lowQueue,
+                enabled = frameGenerationEnabled,
+                onCheckedChange = { update(settings.copy(lowQueue = it)) }
+            )
+            Text("Queue Depth", fontWeight = FontWeight.SemiBold)
+            EnumPicker(
+                label = "Depth \${settings.queueDepth}",
+                values = listOf(1, 2, 3),
+                title = { "Depth $it" },
+                onSelect = { update(settings.copy(queueDepth = it)) }
+            )
+            Text(
+                "Saved profile only: Asphalt 8 still needs a compatible in-process adapter with frame history, motion estimation and presentation control before generated frames can be displayed.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
 
             Button(
                 onClick = { update(UltraScaleSettings()) },
@@ -155,10 +343,48 @@ fun UltraScaleControlsCard() {
 }
 
 @Composable
+private fun SectionTitle(title: String) {
+    Text(
+        title,
+        color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
 private fun SettingValue(title: String, value: String) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Text(title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         Text(value, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun SwitchSettingRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled
+        )
     }
 }
 
