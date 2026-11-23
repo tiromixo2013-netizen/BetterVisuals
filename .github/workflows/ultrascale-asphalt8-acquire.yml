@@ -173,6 +173,22 @@ jobs:
               print('Config scan skipped for ' + apk + ': ' + str(e))
           PY
           done < <(find acquired -type f -name '*.apk' | sort)
+          python3 - <<'PY' >> reports/asphalt8-native-ui-options-hints.txt
+          import re, zipfile
+          from pathlib import Path
+          print("\\n===== Game UI .bgin resource scan =====")
+          for apk in Path("acquired").rglob("*.apk"):
+              try:
+                  with zipfile.ZipFile(apk) as z:
+                      for name in z.namelist():
+                          if name.lower().endswith(".bgin") and any(k in name.lower() for k in ("menu", "option", "widget", "template", "debug")):
+                              data=z.read(name)
+                              strings=[x.decode("ascii","replace") for x in re.findall(rb"[\\x20-\\x7e]{5,}",data)]
+                              hits=[x for x in strings if re.search(r"option|graphic|quality|resolution|display|slider|visual|fps|render|setting|screen_options",x,re.I)]
+                              print(f"RESOURCE {name} ({len(data)} bytes)")
+                              for item in hits[:100]: print("  "+item)
+              except Exception as e: print("SCAN_ERROR",apk,e)
+          PY
           echo 'String matches are discovery hints only; they do not prove a menu injection point or runtime file precedence.' >> reports/asphalt8-native-ui-options-hints.txt
 
       - name: Upload acquired APKs and inspection report
