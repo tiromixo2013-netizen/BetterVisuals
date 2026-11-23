@@ -115,7 +115,7 @@ fun UltraScaleControlsCard() {
 
             // 1 — Render Scale
             SectionTitle("1 · RENDER SCALE")
-            SettingValue("Render scale", "\${settings.renderScalePercent}% · before upscaling")
+            SettingValue("Render scale", "${settings.renderScalePercent}% · before upscaling")
             Slider(
                 value = settings.renderScalePercent.toFloat(),
                 onValueChange = {
@@ -176,7 +176,7 @@ fun UltraScaleControlsCard() {
             SectionTitle("3 · UPSCALING SHARPNESS")
             SettingValue(
                 "Upscaling sharpness",
-                "\${settings.upscaleSharpnessPercent}% · reconstruction stage"
+                "${settings.upscaleSharpnessPercent}% · reconstruction stage"
             )
             Slider(
                 value = settings.upscaleSharpnessPercent.toFloat(),
@@ -215,7 +215,7 @@ fun UltraScaleControlsCard() {
             SectionTitle("5 · CAS")
             SettingValue(
                 "CAS Sharpness",
-                "\${settings.casSharpnessPercent}% · 0 disables CAS"
+                "${settings.casSharpnessPercent}% · 0 disables CAS"
             )
             Slider(
                 value = settings.casSharpnessPercent.toFloat(),
@@ -253,7 +253,7 @@ fun UltraScaleControlsCard() {
                 onSelect = { update(settings.copy(frameGeneration = it)) }
             )
             Text(
-                "Algorithm · \${FrameGenerationAlgorithm.PYRAMIDAL_LUCAS_KANADE.title}",
+                "Algorithm · ${FrameGenerationAlgorithm.PYRAMIDAL_LUCAS_KANADE.title}",
                 fontWeight = FontWeight.SemiBold
             )
             Text(
@@ -323,7 +323,7 @@ fun UltraScaleControlsCard() {
             )
             Text("Queue Depth", fontWeight = FontWeight.SemiBold)
             EnumPicker(
-                label = "Depth \${settings.queueDepth}",
+                label = "Depth ${settings.queueDepth}",
                 values = listOf(1, 2, 3),
                 title = { "Depth $it" },
                 onSelect = { update(settings.copy(queueDepth = it)) }
