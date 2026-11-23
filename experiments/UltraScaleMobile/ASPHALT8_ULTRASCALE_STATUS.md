@@ -38,3 +38,8 @@ Detailed findings: [docs/asphalt8-config-adapter-research.md](../../docs/asphalt
 ### Native menu path hints (read-only)
 
 The ARM64 native library also contains strings for `options_menu/screen_options_ads`, `options_menu/template_control`, `ingame_menu/template_ingame_options_controls`, `visual_quality_container_android`, `$STR_MENU_SOUND_AND_DISPLAY_OPTIONS`, `OPTIONS_CONTROLS_CUSTOM`, and `GameOptionsOverrideSlider`. These are promising names for the game's existing menu/quality UI, but the matching resource pack and registration code are not in the acquired XAPK. The next acquisition target is the installed game's downloaded resource data; the current APK artifact alone is insufficient to safely add an UltraScale menu entry.
+
+
+## CI packaging retry
+
+The packaging workflow now removes stale `META-INF` BNDLTOOL/JAR signature metadata from original split APKs before signing all splits with the same temporary test key. This is a packaging integrity fix only; runtime GLES layer activation and image-processing features remain unverified.
