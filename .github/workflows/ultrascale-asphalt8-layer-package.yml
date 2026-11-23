@@ -148,7 +148,7 @@ jobs:
             "$tools/zipalign" -f -p 4 "work/output/$name.unsigned.apk" "work/output/$name.aligned.apk"
             "$tools/apksigner" sign --ks "$key" --ks-key-alias ultrascale \
               --ks-pass pass:android --key-pass pass:android \
-              --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+              --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true \
               --out "work/output/$name" "work/output/$name.aligned.apk"
           done
           # Verify only final signed APKs; *-aligned.apk files are unsigned intermediates.
