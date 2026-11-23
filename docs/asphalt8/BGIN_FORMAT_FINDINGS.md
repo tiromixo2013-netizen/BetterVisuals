@@ -48,7 +48,9 @@ All 13 resources passed header and indexed-record bounds checks. Indexed records
 
 `ingame_menu.bgin` contains 91 indexed objects and seven additional unindexed records/regions. Its indexed names include `boss_icon_1`, `boss_icon_2`, `box_1`, and in-game controls/templates. It does **not** contain the native settings identifiers `screen_options_sound_and_display_ads`, `visual_quality_container_android`, `profile_quality_label`, or `quality_slider`.
 
-Those identifiers are referenced by executable native code in `libAsphalt8.so`. Their absence from these 13 BGIN resources means appending guessed BGIN objects is not a justified way to add UltraScale controls. The menu path likely uses native-created/runtime-resolved objects or resources outside these BGIN files. A full editor still needs the other Clara record kinds and the exact native registration/creation path.
+A second scan of **every asset entry** in the main APK also found none of those four identifiers. They are referenced by executable native code in `libAsphalt8.so`. In the relevant ARM64 code region, the native routine materializes `visual_quality_container` and `visual_quality_container_android` strings and passes them through the same virtual lookup path used for named UI objects. This supports a native/runtime lookup path rather than a ready-made BGIN node that can simply be extended.
+
+Therefore appending guessed BGIN objects is not a justified way to add UltraScale controls. The remaining route is to understand the native screen construction/lookup contract and determine whether the app exposes a legitimate extension point. No supported third-party registration API has been established.
 
 ## Limitations
 - The parser is structural and read-only; it is not a BGIN editor or full writer.
