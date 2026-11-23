@@ -118,7 +118,7 @@ class RenderScaleHarnessActivity : Activity() {
             savedProfile.upscaler == UpscaleMode.FSR_LITE -> 3
             savedProfile.upscaler == UpscaleMode.AMD_FSR1_EASU -> 4
             savedProfile.upscaler == UpscaleMode.MWSR -> 2
-            savedProfile.upscaler == UpscaleMode.SGSR1 || savedProfile.upscaler == UpscaleMode.SGSR2 -> 1
+            savedProfile.upscaler == UpscaleMode.SGSR1 -> 1
             else -> 6
         }
         upscalerPicker.setSelection(initialUpscalerIndex)
