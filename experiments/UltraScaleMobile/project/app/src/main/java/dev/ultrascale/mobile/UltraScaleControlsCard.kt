@@ -197,6 +197,8 @@ fun UltraScaleControlsCard() {
                 values = UpscalePreset.entries,
                 title = { it.title },
                 onSelect = { update(UltraScaleSettings.forPreset(it).copy(
+                    lowLatency = settings.lowLatency,
+                    integerScaling = settings.integerScaling,
                     frameGeneration = settings.frameGeneration,
                     framePacing = settings.framePacing,
                     vsyncAligned = settings.vsyncAligned,
@@ -325,6 +327,7 @@ fun UltraScaleControlsCard() {
             EnumPicker(
                 label = "Depth ${settings.queueDepth}",
                 values = listOf(1, 2, 3),
+                enabled = frameGenerationEnabled,
                 title = { "Depth $it" },
                 onSelect = { update(settings.copy(queueDepth = it)) }
             )
@@ -393,11 +396,12 @@ private fun <T> EnumPicker(
     label: String,
     values: List<T>,
     title: (T) -> String,
-    onSelect: (T) -> Unit
+    onSelect: (T) -> Unit,
+    enabled: Boolean = true
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column {
-        Button(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text(label) }
+        Button(onClick = { expanded = true }, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text(label) }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             values.forEach { value ->
                 DropdownMenuItem(
