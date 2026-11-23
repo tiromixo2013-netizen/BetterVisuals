@@ -142,20 +142,7 @@ jobs:
           set -euo pipefail
           : > reports/asphalt8-native-ui-options-hints.txt
           while IFS= read -r apk; do
-            if unzip -Z1 "$apk" | grep -q '^lib/arm64-v8a/libAsphalt8\\.so
-        uses: actions/upload-artifact@v4
-        with:
-          name: Asphalt8-acquired-source-and-inspection
-          path: |
-            acquired/raw/**
-            acquired/extracted/**
-            reports/asphalt8-inspection.txt
-            reports/asphalt8-resource-inventory.tsv
-            reports/asphalt8-ui-resource-hints.txt
-            reports/asphalt8-native-ui-options-hints.txt
-          if-no-files-found: error
-          retention-days: 3
-; then
+            if unzip -Z1 "$apk" | grep -q 'libAsphalt8.so'; then
               echo "===== Native library: $apk =====" >> reports/asphalt8-native-ui-options-hints.txt
               tmp="$(mktemp)"
               unzip -p "$apk" lib/arm64-v8a/libAsphalt8.so > "$tmp"
@@ -164,30 +151,29 @@ jobs:
             fi
             python3 - "$apk" <<'PY' >> reports/asphalt8-native-ui-options-hints.txt
           import json, sys, zipfile
-          apk=sys.argv[1]
+          apk = sys.argv[1]
           try:
               with zipfile.ZipFile(apk) as z:
-                  names=[n for n in z.namelist() if n.lower().endswith('/gameoptions.json') or n.lower()=='gameoptions.json']
+                  names = [n for n in z.namelist() if n.lower().endswith('/gameoptions.json') or n.lower() == 'gameoptions.json']
                   for name in names:
-                      data=json.loads(z.read(name))
-                      profiles=data.get('profiles',{})
-                      print(f"\\n===== Embedded config: {apk}:{name} =====")
-                      print("header:", data.get("header"))
-                      print("profiles:", ", ".join(profiles))
-                      gpu=profiles.get("GPU",{})
-                      defaults=gpu.get("defaults",[])
-                      for group in defaults:
+                      data = json.loads(z.read(name))
+                      profiles = data.get('profiles', {})
+                      print('\\n===== Embedded config: ' + apk + ':' + name + ' =====')
+                      print('header:', data.get('header'))
+                      print('profiles:', ', '.join(profiles))
+                      gpu = profiles.get('GPU', {})
+                      for group in gpu.get('defaults', []):
                           for group_name, entries in group.items():
-                              selected={e[0]:e[1] for e in entries if isinstance(e,list) and len(e)>1 and e[0] in {"GFXOption","FPSLimit","defaultTextureFiltering","useShadows","postFX"}}
-                              print("GPU defaults:", selected)
-                      spec=profiles.get("Specific",{}).get("overrides",{})
-                      scales={k:v.get("scaleDisplay") for k,v in spec.items() if k.startswith("RES_") and isinstance(v,dict) and "scaleDisplay" in v}
-                      print("Existing RES_ scaleDisplay overrides:", scales)
+                              selected = {e[0]: e[1] for e in entries if isinstance(e, list) and len(e) > 1 and e[0] in {'GFXOption', 'FPSLimit', 'defaultTextureFiltering', 'useShadows', 'postFX'}}
+                              print('GPU defaults:', selected)
+                      specific = profiles.get('Specific', {}).get('overrides', {})
+                      scales = {k: v.get('scaleDisplay') for k, v in specific.items() if k.startswith('RES_') and isinstance(v, dict) and 'scaleDisplay' in v}
+                      print('Existing RES_ scaleDisplay overrides:', scales)
           except Exception as e:
-              print(f"Config scan skipped for {apk}: {e}")
+              print('Config scan skipped for ' + apk + ': ' + str(e))
           PY
           done < <(find acquired -type f -name '*.apk' | sort)
-          echo "String matches are discovery hints only; they do not prove a menu injection point or runtime file precedence." >> reports/asphalt8-native-ui-options-hints.txt
+          echo 'String matches are discovery hints only; they do not prove a menu injection point or runtime file precedence.' >> reports/asphalt8-native-ui-options-hints.txt
 
       - name: Upload acquired APKs and inspection report
         uses: actions/upload-artifact@v4
