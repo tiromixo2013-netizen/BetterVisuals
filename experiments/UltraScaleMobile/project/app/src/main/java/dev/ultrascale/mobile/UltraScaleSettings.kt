@@ -3,9 +3,9 @@ package dev.ultrascale.mobile
 /**
  * Canonical UltraScale settings model.
  *
- * This is the shared settings contract for the app-owned renderer and future
- * game adapters. A setting is not considered active in a game unless that
- * adapter reports the required render-pipeline capability.
+ * Values are persisted as a user profile. A game setting is not considered
+ * active until its adapter proves that it owns the relevant render target,
+ * frame history and presentation controls.
  */
 enum class UpscaleMode(
     val title: String,
@@ -18,10 +18,9 @@ enum class UpscaleMode(
     BILINEAR("Bilinear", 2, 0, true),
     CATMULL_ROM("Catmull-Rom · experimental", 2, 0, true),
     FSR_LITE("UltraScale FSR Lite · custom 6-tap", 2, 0, true),
-    AMD_FSR1_EASU("AMD FSR1 · EASU", 2, 0, false),
-    MWSR("MWSR", 3, 0, false),
     SGSR1("Qualcomm SGSR1 Mobile", 3, 1, false),
-    SGSR2("Qualcomm SGSR2 · temporal", 3, 1, false)
+    MWSR("MWSR", 3, 0, false),
+    AMD_FSR1_EASU("AMD FSR1 · EASU", 2, 0, false)
 }
 
 enum class UpscalePreset(val title: String) {
@@ -35,8 +34,20 @@ enum class UpscalePreset(val title: String) {
 
 enum class LowLatencyMode(val title: String) {
     OFF("Off"),
-    REDUCE_QUEUE("Reduce Queue"),
-    AGGRESSIVE("Aggressive · adapter dependent")
+    ON("On"),
+    ULTRA("Ultra")
+}
+
+enum class FrameGenerationMode(val title: String, val multiplier: Int) {
+    OFF("Off", 1),
+    X2("2×", 2),
+    X3("3×", 3),
+    X4("4×", 4)
+}
+
+/** Exactly one selected Frame Generation algorithm, as agreed. */
+enum class FrameGenerationAlgorithm(val title: String) {
+    PYRAMIDAL_LUCAS_KANADE("Pyramidal Lucas–Kanade Optical Flow")
 }
 
 data class UltraScaleSettings(
@@ -46,16 +57,30 @@ data class UltraScaleSettings(
     /** Reconstruction-stage sharpness; separate from CAS. */
     val upscaleSharpnessPercent: Int = 20,
     val preset: UpscalePreset = UpscalePreset.CUSTOM,
-    /** Independent post-upscale CAS-style sharpening strength. Zero disables it; official AMD CAS requires a separately validated backend. */
+    /** Independent post-upscale CAS-style sharpening strength. Zero disables it. */
     val casSharpnessPercent: Int = 0,
     val lowLatency: LowLatencyMode = LowLatencyMode.OFF,
     /** Preserve integer pixel edges when the output scale is an exact integer ratio. */
-    val integerScaling: Boolean = false
+    val integerScaling: Boolean = false,
+
+    // Section 7 — Frame Generation. These are saved profile values; they are
+    // not reported as active until a game adapter provides the required pipeline.
+    val frameGeneration: FrameGenerationMode = FrameGenerationMode.OFF,
+    val framePacing: Boolean = true,
+    val vsyncAligned: Boolean = true,
+    val lowQueue: Boolean = true,
+    val queueDepth: Int = 1,
+    val bidirectionalFlowCheck: Boolean = true,
+    val sceneCutDetection: Boolean = true,
+    val disocclusionRejection: Boolean = true,
+    val edgeAwareWarping: Boolean = true,
+    val hudGhostingSuppression: Boolean = true
 ) {
     fun normalized(): UltraScaleSettings = copy(
         renderScalePercent = renderScalePercent.coerceIn(50, 100),
         upscaleSharpnessPercent = upscaleSharpnessPercent.coerceIn(0, 100),
-        casSharpnessPercent = casSharpnessPercent.coerceIn(0, 100)
+        casSharpnessPercent = casSharpnessPercent.coerceIn(0, 100),
+        queueDepth = queueDepth.coerceIn(1, 3)
     )
 
     companion object {
@@ -101,14 +126,15 @@ data class UltraScaleSettings(
 }
 
 /**
- * Capability report supplied by a renderer/game adapter. Low-latency options
- * remain unavailable unless the adapter can actually control frame submission.
+ * Capability report supplied by a renderer/game adapter. Frame generation
+ * requires an owned render target plus frame history and presentation control.
  */
 data class UltraScaleCapabilities(
     val glesMajor: Int = 0,
     val glesMinor: Int = 0,
     val ownsRenderTarget: Boolean = false,
-    val canControlFrameQueue: Boolean = false
+    val canControlFrameQueue: Boolean = false,
+    val canGenerateFrames: Boolean = false
 ) {
     fun supports(mode: UpscaleMode): Boolean =
         glesMajor > mode.minGlesMajor ||
@@ -118,6 +144,8 @@ data class UltraScaleCapabilities(
         val s = settings.normalized()
         return ownsRenderTarget &&
             supports(s.upscaler) &&
-            (s.lowLatency == LowLatencyMode.OFF || canControlFrameQueue)
+            (s.lowLatency == LowLatencyMode.OFF || canControlFrameQueue) &&
+            (s.frameGeneration == FrameGenerationMode.OFF ||
+                (canGenerateFrames && canControlFrameQueue))
     }
 }
