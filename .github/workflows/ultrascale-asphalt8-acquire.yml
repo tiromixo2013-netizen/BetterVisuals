@@ -201,5 +201,6 @@ jobs:
             reports/asphalt8-inspection.txt
             reports/asphalt8-resource-inventory.tsv
             reports/asphalt8-ui-resource-hints.txt
+            reports/asphalt8-native-ui-options-hints.txt
           if-no-files-found: error
           retention-days: 3
