@@ -82,6 +82,7 @@ std::unordered_map<EGLContext, ContextState> g_contexts;
 std::atomic<uint64_t> g_frames{0};
 std::atomic<bool> g_hookBackendReady{false};
 std::atomic<bool> g_pltBackendReady{false};
+std::atomic<bool> g_glIdentityLogged{false};
 
 void* g_layerId = nullptr;
 GetNextProc g_getNext = nullptr;
@@ -440,6 +441,18 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
     }
 
     const EGLContext context = CurrentContext();
+    if (context != EGL_NO_CONTEXT && !g_glIdentityLogged.exchange(true, std::memory_order_acq_rel)) {
+        const auto* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+        const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+        const auto* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+        const auto* shading = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
+        GLint maxTextureSize = 0;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+        __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
+            "GL identity vendor=%s renderer=%s version=%s shading=%s max_texture=%d",
+            vendor ? vendor : "unknown", renderer ? renderer : "unknown",
+            version ? version : "unknown", shading ? shading : "unknown", maxTextureSize);
+    }
     FrameTelemetry snapshot{};
     if (sampleFrame && context != EGL_NO_CONTEXT) {
         std::lock_guard<std::mutex> lock(g_contextMutex);
