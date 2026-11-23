@@ -83,6 +83,52 @@ jobs:
           done
           echo "NOTE: No APK modifications or re-signing were performed in this acquisition job." >> reports/asphalt8-inspection.txt
 
+      - name: Inventory game UI and graphics resources (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, zipfile, hashlib
+          from pathlib import Path
+          roots = [Path("acquired/raw"), Path("acquired/extracted")]
+          out = Path("reports/asphalt8-resource-inventory.tsv")
+          wanted_ext = {".xml",".json",".bson",".jpk",".pvs",".png",".webp",".jpg",".jpeg",".ktx",".ktx2",".dds",".astc",".atlas",".fnt",".ttf",".otf",".lua",".ini",".cfg",".dat"}
+          keywords = ("menu","option","setting","graphic","quality","resolution","button","ui","hud","font","texture","shader","render","screen","language","localiz","pref","gameoption")
+          rows=[]
+          for root in roots:
+            if not root.exists(): continue
+            for p in root.rglob("*"):
+              if not p.is_file(): continue
+              try:
+                if not zipfile.is_zipfile(p): continue
+                with zipfile.ZipFile(p) as z:
+                  for info in z.infolist():
+                    if info.is_dir(): continue
+                    name=info.filename
+                    low=name.lower()
+                    ext=Path(name).suffix.lower()
+                    if ext in wanted_ext or any(k in low for k in keywords):
+                      rows.append((str(p), info.file_size, name))
+              except Exception as e:
+                rows.append((str(p), -1, "SCAN_ERROR: "+str(e)))
+          rows.sort(key=lambda r:(r[0].lower(),r[2].lower()))
+          with out.open("w", encoding="utf-8") as f:
+            f.write("container\tsize_bytes\tentry\n")
+            for row in rows: f.write("\t".join(map(str,row))+"\n")
+          print(f"Indexed {len(rows)} candidate entries into {out}")
+          PY
+          : > reports/asphalt8-ui-resource-hints.txt
+          while IFS= read -r apk; do
+            echo "===== $apk =====" >> reports/asphalt8-ui-resource-hints.txt
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump resources "$apk" 2>/dev/null |
+              grep -iE 'setting|option|graphic|quality|resolution|button|menu|language|display|effect|frame|fps|render|texture' |
+              head -n 120 >> reports/asphalt8-ui-resource-hints.txt || true
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$apk" AndroidManifest.xml 2>/dev/null |
+              grep -iE 'activity|application|surface|texture|game|launch|orientation|configChanges' |
+              head -n 100 >> reports/asphalt8-ui-resource-hints.txt || true
+          done < <(find acquired -type f -name '*.apk' | sort)
+          echo "Read-only inventory only: no game files were modified, patched, or re-signed." >> reports/asphalt8-ui-resource-hints.txt
+
       - name: Upload acquired APKs and inspection report
         uses: actions/upload-artifact@v4
         with:
