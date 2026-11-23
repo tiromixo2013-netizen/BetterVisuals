@@ -39,14 +39,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p acquired/raw acquired/extracted reports
-          docker run --rm \\
-            -v "$PWD/acquired/raw:/output" \\
-            ghcr.io/efforg/apkeep:stable \\
-            -a com.gameloft.android.ANMP.GloftA8HM \\
-            -d apk-pure \\
-            -o 'acknowledge_dangers=true' \\
+          docker run --rm \
+            -v "$PWD/acquired/raw:/output" \
+            ghcr.io/efforg/apkeep:stable \
+            -a com.gameloft.android.ANMP.GloftA8HM \
+            -d apk-pure \
+            -o 'acknowledge_dangers=true' \
             /output
-          find acquired/raw -maxdepth 2 -type f -printf '%p (%s bytes)\\n'
+          find acquired/raw -maxdepth 2 -type f -printf '%p (%s bytes)\n'
           test -n "$(find acquired/raw -type f | head -n 1)"
 
       - name: Normalize APK or XAPK and inspect
