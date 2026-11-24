@@ -293,7 +293,7 @@ jobs:
             echo "Patches: GLES layer manifest opt-in; GPU_5 FPSLimit and Specific scaleDisplay selected at build time; original GFXOption/effects preserved"
             echo "Bundled native layer: lib/arm64-v8a/libGLES_ultrascale.so"
             echo "Experimental GLES render path: ${{ inputs.upscaler || 'fsr_lite' }} spatial dispatch for qualifying low-resolution color blits; CAS default=${{ inputs.cas_enabled || 'false' }} sharpness=${{ inputs.cas_sharpness || '0.25' }}."
-            echo "Spatial blit match and runtime attachment still require on-device validation; MWSR, SGSR2 temporal reconstruction and frame generation are not implemented."
+            echo "Spatial blit match and runtime attachment still require on-device validation; SGSR2 temporal reconstruction and frame generation are not implemented."
             echo "Signing: temporary test key; original store signature is not preserved"
             echo "Runtime layer attachment and actual Asphalt 8 render-target match: NOT YET VERIFIED"
             echo "MWSR Performance spatial shader is included; SGSR2 temporal reconstruction and frame generation are not implemented in this build."
