@@ -50,3 +50,16 @@ Record the first Asset Delivery error/status code and the pack name if logged. D
 - No Google Play-delivered asset pack was acquired.
 - No missing downloader was patched.
 - No SGSR2 temporal integration or real frame generation was added by this analysis.
+## Official Play error codes relevant to this case
+
+Google's Asset Delivery API defines:
+- `APP_NOT_OWNED` (-13): the app is not owned on the device; Google defines ownership as having installed it through Play.
+- `UNRECOGNIZED_INSTALLATION` (-15): the installed app version is not recognized by Play.
+- `APP_UNAVAILABLE` (-1): the app/version is not published or the account lacks access.
+- `PLAY_STORE_NOT_FOUND` (-11): Play Store is missing or not the official app.
+
+The same API documents that a confirmation flow for an app not installed by Play may trigger an update to a valid Play-installed version and restart the app. That is **not** a safe action for this user because it could replace the modified build. Do not automatically launch this flow on the user's device.
+
+Sources:
+- https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode
+- https://developer.android.com/reference/com/google/android/play/core/assetpacks/AssetPackManager
