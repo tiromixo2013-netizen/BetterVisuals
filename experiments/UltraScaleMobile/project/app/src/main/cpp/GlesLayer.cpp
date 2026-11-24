@@ -7,6 +7,9 @@
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
+#include <fstream>
+#include <string>
+#include <cstdlib>
 
 using GetNextProc = void* (*)(void*, const char*);
 using EglSwapBuffers = EGLBoolean (*)(EGLDisplay, EGLSurface);
@@ -424,6 +427,219 @@ GLenum LayerCheckFramebufferStatus(GLenum target) {
     return status;
 }
 
+
+struct RendererConfig {
+    bool casEnabled = false;
+    float casSharpness = 0.5f;
+};
+GLuint g_postProgram = 0;
+GLuint g_postTexture = 0;
+EGLContext g_postContext = EGL_NO_CONTEXT;
+GLint g_postSharpnessLocation = -1;
+GLint g_postSizeLocation = -1;
+GLint g_postSamplerLocation = -1;
+std::atomic<bool> g_postInitLogged{false};
+
+RendererConfig ReadRendererConfig() {
+    RendererConfig config{};
+    // The game process owns this Android/data directory, so the layer reads a
+    // small sidecar deployed by the UltraScale controller via Shizuku.
+    std::ifstream input("/storage/emulated/0/Android/data/com.gameloft.android.ANMP.GloftA8HM/files/ultrascale-renderer.ini");
+    std::string line;
+    while (std::getline(input, line)) {
+        const auto split = line.find('=');
+        if (split == std::string::npos) continue;
+        const std::string key = line.substr(0, split);
+        const std::string value = line.substr(split + 1);
+        if (key == "cas") config.casEnabled = (value == "1" || value == "true");
+        else if (key == "sharpness") {
+            char* end = nullptr;
+            const float parsed = std::strtof(value.c_str(), &end);
+            if (end && *end == '\0' && parsed >= 0.0f && parsed <= 1.0f)
+                config.casSharpness = parsed;
+        }
+    }
+    return config;
+}
+
+GLuint CompilePostShader(GLenum type, const char* source) {
+    const GLuint shader = glCreateShader(type);
+    if (!shader) return 0;
+    glShaderSource(shader, 1, &source, nullptr);
+    glCompileShader(shader);
+    GLint compiled = GL_FALSE;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+    if (compiled != GL_TRUE) {
+        char log[2048]{};
+        GLsizei length = 0;
+        glGetShaderInfoLog(shader, sizeof(log), &length, log);
+        __android_log_print(ANDROID_LOG_ERROR, "UltraScaleGLES", "Post shader compile failed: %.*s", length, log);
+        glDeleteShader(shader);
+        return 0;
+    }
+    return shader;
+}
+
+bool EnsurePostProcessor(EGLContext context) {
+    if (context == EGL_NO_CONTEXT) return false;
+    if (g_postProgram && g_postTexture && g_postContext == context) return true;
+    static const char* vertexSource = R"GLSL(#version 300 es
+precision highp float;
+out vec2 vUv;
+void main() {
+    vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+    vUv = p;
+    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+})GLSL";
+    static const char* fragmentSource = R"GLSL(#version 300 es
+precision highp float;
+precision highp int;
+in vec2 vUv;
+uniform sampler2D uScene;
+uniform vec2 uInputSize;
+uniform float uSharpness;
+out vec4 oColor;
+vec3 loadCAS(ivec2 p) {
+    ivec2 size = ivec2(uInputSize);
+    return texelFetch(uScene, clamp(p, ivec2(0), size - ivec2(1)), 0).rgb;
+}
+void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    vec3 a = loadCAS(p + ivec2(-1,-1));
+    vec3 b = loadCAS(p + ivec2( 0,-1));
+    vec3 c = loadCAS(p + ivec2( 1,-1));
+    vec3 d = loadCAS(p + ivec2(-1, 0));
+    vec3 e = loadCAS(p);
+    vec3 f = loadCAS(p + ivec2( 1, 0));
+    vec3 g = loadCAS(p + ivec2(-1, 1));
+    vec3 h = loadCAS(p + ivec2( 0, 1));
+    vec3 i = loadCAS(p + ivec2( 1, 1));
+    vec3 mn = min(min(d,e),min(f,min(b,h)));
+    vec3 mx = max(max(d,e),max(f,max(b,h)));
+    float ampG = clamp(min(mn.g,1.0-mx.g)/max(mx.g,1e-4),0.0,1.0);
+    ampG = sqrt(ampG);
+    float peak = -1.0 / mix(8.0,5.0,clamp(uSharpness,0.0,1.0));
+    float w = ampG * peak;
+    float rcpWeight = 1.0 / (1.0 + 4.0*w);
+    vec3 result = clamp((b*w+d*w+f*w+h*w+e)*rcpWeight,0.0,1.0);
+    oColor = vec4(result,1.0);
+})GLSL";
+    const GLuint vs = CompilePostShader(GL_VERTEX_SHADER, vertexSource);
+    const GLuint fs = CompilePostShader(GL_FRAGMENT_SHADER, fragmentSource);
+    if (!vs || !fs) {
+        if (vs) glDeleteShader(vs);
+        if (fs) glDeleteShader(fs);
+        return false;
+    }
+    const GLuint program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    GLint linked = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        char log[2048]{};
+        GLsizei length = 0;
+        glGetProgramInfoLog(program, sizeof(log), &length, log);
+        __android_log_print(ANDROID_LOG_ERROR, "UltraScaleGLES", "Post program link failed: %.*s", length, log);
+        glDeleteProgram(program);
+        return false;
+    }
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    if (!texture) {
+        glDeleteProgram(program);
+        return false;
+    }
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    g_postProgram = program;
+    g_postTexture = texture;
+    g_postContext = context;
+    g_postSamplerLocation = glGetUniformLocation(program, "uScene");
+    g_postSizeLocation = glGetUniformLocation(program, "uInputSize");
+    g_postSharpnessLocation = glGetUniformLocation(program, "uSharpness");
+    __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES", "Final-frame CAS postprocessor compiled and initialized");
+    return true;
+}
+
+void ApplyFinalFramePostProcess(EGLDisplay display, EGLSurface surface, EGLContext context) {
+    const RendererConfig config = ReadRendererConfig();
+    if (!config.casEnabled) return;
+    if (!EnsurePostProcessor(context)) return;
+
+    EGLint width = 0, height = 0;
+    if (!g_nextQuerySurface ||
+        g_nextQuerySurface(display, surface, EGL_WIDTH, &width) != EGL_TRUE ||
+        g_nextQuerySurface(display, surface, EGL_HEIGHT, &height) != EGL_TRUE ||
+        width <= 2 || height <= 2) return;
+
+    GLint drawFbo = 0, readFbo = 0, sampleBuffers = 0;
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFbo);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFbo);
+    glGetIntegerv(GL_SAMPLE_BUFFERS, &sampleBuffers);
+    // Only touch the EGL window's completed default framebuffer. If the game
+    // leaves an off-screen FBO bound, or the surface is multisampled, skip it.
+    if (drawFbo != 0 || readFbo != 0 || sampleBuffers != 0) return;
+
+    GLint oldProgram = 0, oldActiveTexture = 0, oldTexture0 = 0;
+    GLint oldViewport[4]{}, oldVao = 0, oldArrayBuffer = 0;
+    GLint oldColorMask[4]{};
+    glGetIntegerv(GL_CURRENT_PROGRAM, &oldProgram);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &oldActiveTexture);
+    glGetIntegerv(GL_VIEWPORT, oldViewport);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &oldVao);
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldArrayBuffer);
+    glGetBooleanv(GL_COLOR_WRITEMASK, reinterpret_cast<GLboolean*>(oldColorMask));
+
+    glActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &oldTexture0);
+    const GLboolean blend = glIsEnabled(GL_BLEND);
+    const GLboolean depth = glIsEnabled(GL_DEPTH_TEST);
+    const GLboolean stencil = glIsEnabled(GL_STENCIL_TEST);
+    const GLboolean cull = glIsEnabled(GL_CULL_FACE);
+    const GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
+
+    glBindTexture(GL_TEXTURE_2D, g_postTexture);
+    glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, width, height, 0);
+
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glViewport(0, 0, width, height);
+    glUseProgram(g_postProgram);
+    glUniform1i(g_postSamplerLocation, 0);
+    glUniform2f(g_postSizeLocation, static_cast<float>(width), static_cast<float>(height));
+    glUniform1f(g_postSharpnessLocation, config.casSharpness);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    glUseProgram(static_cast<GLuint>(oldProgram));
+    glBindVertexArray(static_cast<GLuint>(oldVao));
+    glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(oldArrayBuffer));
+    glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
+    glColorMask(oldColorMask[0], oldColorMask[1], oldColorMask[2], oldColorMask[3]);
+    if (blend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+    if (depth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (stencil) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
+    if (cull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    if (scissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(oldTexture0));
+    glActiveTexture(static_cast<GLenum>(oldActiveTexture));
+    if (!g_postInitLogged.exchange(true, std::memory_order_acq_rel))
+        __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES", "Final-frame CAS pass executed at %dx%d", width, height);
+}
+
 EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
     const uint64_t frame = ++g_frames;
     if (!g_nextSwapBuffers) return EGL_FALSE;
@@ -437,6 +653,7 @@ EGLBoolean LayerSwapBuffers(EGLDisplay display, EGLSurface surface) {
     }
 
     const EGLContext context = CurrentContext();
+    if (context != EGL_NO_CONTEXT) ApplyFinalFramePostProcess(display, surface, context);
     if (context != EGL_NO_CONTEXT && !g_glIdentityLogged.exchange(true, std::memory_order_acq_rel)) {
         const auto* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
         const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
