@@ -112,3 +112,17 @@ does not receive game depth, motion vectors, jitter or temporal history.
 Pyramidal Lucas–Kanade frame generation, x2/x3/x4 presentation, in-game menu
 injection, and queue/frame-pacing controls are also not implemented. Do not
 present their saved settings as active renderer features.
+
+## Play Asset Delivery investigation — 2026-11-24
+
+A version-matched APKPure XAPK was downloaded from the separate reference branch and inspected read-only. This source is **not verified as a Google Play download**.
+
+The XAPK contains the base APK, ARM64 configuration split, HDPI configuration split and manifest only; it contains no separately delivered asset-pack archives. The base APK includes `asset-delivery.properties` (client 2.1.0). DEX string tables include Play Core Asset Delivery classes and API references such as `AssetPackManager`, `getPackStates`, `getPackLocation`, `AssetPackState` and `AssetPackLocation`. This shows that the package includes PAD client code; it does not establish the actual request call graph or the runtime pack IDs.
+
+The modified package is signed with a temporary test key. A Play-delivered PAD request may fail if Play does not recognize the installed package/signature/delivery provenance. This is a leading hypothesis for the 0% screen, but is not confirmed without a device log showing the Asset Delivery status/error code. Do not add a second PAD library: the client API surface is already present.
+
+The exact cause remains open between Play Asset Delivery ownership/recognition and a separate Gameloft download path. No direct CDN fallback, PAD downloader patch, or asset-pack acquisition has been implemented. The evidence and safe logcat checklist are recorded in [the isolated original-package triage branch](../../tree/reference/asphalt8-9.2.0i-original-analysis/reports/asphalt8-9.2.0i-pad-triage-2026-11-24.md).
+
+## Remaining temporal features — explicit implementation boundary
+
+SGSR2 source files are already bundled in the standalone app, but the Asphalt 8 external GLES layer does not receive the game depth, motion vectors, camera jitter or temporal history required by the algorithm. It therefore cannot honestly expose SGSR2 as an active Asphalt 8 upscaler yet. Real x2/x3/x4 frame generation likewise needs a motion source and a controlled presentation cadence/queue; adding a shader toggle or repeating frames would be a fake implementation. Low-latency queue and frame-pacing controls are not active in the current target-game adapter. These features remain gated until the relevant game-owned inputs and presentation path can be demonstrated.
