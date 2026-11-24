@@ -1,8 +1,6 @@
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
 #include <android/log.h>
-#include <shadowhook.h>
-#include <bytehook.h>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -80,8 +78,6 @@ struct FrameTelemetry {
 std::mutex g_contextMutex;
 std::unordered_map<EGLContext, ContextState> g_contexts;
 std::atomic<uint64_t> g_frames{0};
-std::atomic<bool> g_hookBackendReady{false};
-std::atomic<bool> g_pltBackendReady{false};
 std::atomic<bool> g_glIdentityLogged{false};
 
 void* g_layerId = nullptr;
@@ -505,14 +501,8 @@ extern "C" __attribute__((visibility("default")))
 void AndroidGLESLayer_Initialize(void* layer_id, GetNextProc get_next_layer_proc_address) {
     g_layerId = layer_id;
     g_getNext = get_next_layer_proc_address;
-    // Android's documented GLES LayerLoader is the process attachment mechanism.
-    // ShadowHook and ByteHook are optional in-process backends; they do not inject
-    // into arbitrary processes and are not required for the wrappers below.
-    const int hookInit = shadowhook_init(SHADOWHOOK_MODE_SHARED, false);
-    g_hookBackendReady.store(hookInit == 0, std::memory_order_release);
-    const int pltInit = hookInit == 0 ? bytehook_init(BYTEHOOK_MODE_AUTOMATIC, false) : -1;
-    g_pltBackendReady.store(pltInit == BYTEHOOK_STATUS_CODE_OK, std::memory_order_release);
-
+    // Android's documented GLES LayerLoader is the sole attachment mechanism.
+    // This pass-through telemetry layer has no third-party hook-engine dependency.
     if (g_getNext) {
         g_nextSwapBuffers = reinterpret_cast<EglSwapBuffers>(
             g_getNext(g_layerId, "eglSwapBuffers"));
@@ -520,9 +510,7 @@ void AndroidGLESLayer_Initialize(void* layer_id, GetNextProc get_next_layer_proc
             g_getNext(g_layerId, "eglQuerySurface"));
     }
     __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
-        "Android GLES LayerLoader attached; inline=%s (%d), PLT=%s (%d)",
-        g_hookBackendReady.load(std::memory_order_acquire) ? "ready" : "unavailable", hookInit,
-        g_pltBackendReady.load(std::memory_order_acquire) ? "ready" : "unavailable", pltInit);
+        "Android GLES LayerLoader initialized; pass-through telemetry layer ready");
 }
 
 extern "C" __attribute__((visibility("default")))
