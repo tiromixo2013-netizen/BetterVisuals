@@ -31,34 +31,39 @@ private const val ULTRASCALE_PREFS = "ultrascale_graphics_settings"
 
 internal fun readUltraScaleSettings(context: Context): UltraScaleSettings {
     val p = context.getSharedPreferences(ULTRASCALE_PREFS, Context.MODE_PRIVATE)
+    // Seed the UI from the bundled per-game JSON profile. User-edited
+    // SharedPreferences always take precedence over the bundled defaults.
+    val profileDefaults = runCatching {
+        Asphalt8GraphicsProfileReader.read(context).settings
+    }.getOrElse { UltraScaleSettings() }
     fun enumValue(key: String, fallback: String) = p.getString(key, fallback) ?: fallback
     return UltraScaleSettings(
-        renderScalePercent = p.getInt("renderScale", 70),
-        fpsLimit = p.getInt("fpsLimit", 240),
+        renderScalePercent = p.getInt("renderScale", profileDefaults.renderScalePercent),
+        fpsLimit = p.getInt("fpsLimit", profileDefaults.fpsLimit),
         upscaler = runCatching {
-            UpscaleMode.valueOf(enumValue("upscaler", UpscaleMode.BILINEAR.name))
-        }.getOrDefault(UpscaleMode.BILINEAR),
-        upscaleSharpnessPercent = p.getInt("upscaleSharpness", 20),
+            UpscaleMode.valueOf(enumValue("upscaler", profileDefaults.upscaler.name))
+        }.getOrDefault(profileDefaults.upscaler),
+        upscaleSharpnessPercent = p.getInt("upscaleSharpness", profileDefaults.upscaleSharpnessPercent),
         preset = runCatching {
-            UpscalePreset.valueOf(enumValue("preset", UpscalePreset.CUSTOM.name))
-        }.getOrDefault(UpscalePreset.CUSTOM),
-        casSharpnessPercent = p.getInt("casSharpness", 0),
+            UpscalePreset.valueOf(enumValue("preset", profileDefaults.preset.name))
+        }.getOrDefault(profileDefaults.preset),
+        casSharpnessPercent = p.getInt("casSharpness", profileDefaults.casSharpnessPercent),
         lowLatency = runCatching {
-            LowLatencyMode.valueOf(enumValue("lowLatency", LowLatencyMode.OFF.name))
-        }.getOrDefault(LowLatencyMode.OFF),
-        integerScaling = p.getBoolean("integerScaling", false),
+            LowLatencyMode.valueOf(enumValue("lowLatency", profileDefaults.lowLatency.name))
+        }.getOrDefault(profileDefaults.lowLatency),
+        integerScaling = p.getBoolean("integerScaling", profileDefaults.integerScaling),
         frameGeneration = runCatching {
-            FrameGenerationMode.valueOf(enumValue("frameGeneration", FrameGenerationMode.OFF.name))
-        }.getOrDefault(FrameGenerationMode.OFF),
-        framePacing = p.getBoolean("framePacing", true),
-        vsyncAligned = p.getBoolean("vsyncAligned", true),
-        lowQueue = p.getBoolean("lowQueue", true),
-        queueDepth = p.getInt("queueDepth", 1),
-        bidirectionalFlowCheck = p.getBoolean("bidirectionalFlowCheck", true),
-        sceneCutDetection = p.getBoolean("sceneCutDetection", true),
-        disocclusionRejection = p.getBoolean("disocclusionRejection", true),
-        edgeAwareWarping = p.getBoolean("edgeAwareWarping", true),
-        hudGhostingSuppression = p.getBoolean("hudGhostingSuppression", true)
+            FrameGenerationMode.valueOf(enumValue("frameGeneration", profileDefaults.frameGeneration.name))
+        }.getOrDefault(profileDefaults.frameGeneration),
+        framePacing = p.getBoolean("framePacing", profileDefaults.framePacing),
+        vsyncAligned = p.getBoolean("vsyncAligned", profileDefaults.vsyncAligned),
+        lowQueue = p.getBoolean("lowQueue", profileDefaults.lowQueue),
+        queueDepth = p.getInt("queueDepth", profileDefaults.queueDepth),
+        bidirectionalFlowCheck = p.getBoolean("bidirectionalFlowCheck", profileDefaults.bidirectionalFlowCheck),
+        sceneCutDetection = p.getBoolean("sceneCutDetection", profileDefaults.sceneCutDetection),
+        disocclusionRejection = p.getBoolean("disocclusionRejection", profileDefaults.disocclusionRejection),
+        edgeAwareWarping = p.getBoolean("edgeAwareWarping", profileDefaults.edgeAwareWarping),
+        hudGhostingSuppression = p.getBoolean("hudGhostingSuppression", profileDefaults.hudGhostingSuppression)
     ).normalized()
 }
 
