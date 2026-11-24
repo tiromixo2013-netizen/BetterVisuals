@@ -375,6 +375,10 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
     var deploying by remember { mutableStateOf(false) }
     var layerBusy by remember { mutableStateOf(false) }
     var layerStatus by remember { mutableStateOf("") }
+    var rendererBusy by remember { mutableStateOf(false) }
+    var rendererStatus by remember { mutableStateOf("") }
+    var casEnabled by remember { mutableStateOf(false) }
+    var casSharpness by remember { mutableStateOf(0.5f) }
     var allResolutionScale by remember { mutableStateOf(75f) }
 
     val exportPicker = rememberLauncherForActivityResult(
@@ -711,6 +715,88 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                         layerStatus,
                         color = if (layerStatus.contains("failed", true) || layerStatus.contains("not confirmed", true))
                             MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                Text(
+                    "FINAL FRAME · AMD CAS SHARPEN",
+                    color = AsphaltViolet,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Text(
+                    "This pass captures the completed EGL window frame at eglSwapBuffers and runs the CAS sharpen-only shader before presentation. It is a real final-image post-process, not render-scale upscaling. FSR/SGSR/MWSR need the game's lower-resolution scene target, which has not been safely identified.",
+                    color = AsphaltMuted,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Enable CAS on final frame", color = AsphaltMuted)
+                    Switch(checked = casEnabled, onCheckedChange = { casEnabled = it })
+                }
+                Text("CAS sharpness: ${(casSharpness * 100).toInt()}%", color = AsphaltViolet, style = MaterialTheme.typography.labelMedium)
+                Slider(
+                    value = casSharpness,
+                    onValueChange = { casSharpness = it },
+                    valueRange = 0f..1f
+                )
+                OutlinedButton(
+                    onClick = {
+                        rendererBusy = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { ShizukuBridge.readRendererConfig() }
+                            result.onSuccess { config ->
+                                casEnabled = Regex("(?m)^cas=1\\s*$").containsMatchIn(config)
+                                casSharpness = Regex("(?m)^sharpness=([0-9.]+)")
+                                    .find(config)?.groupValues?.getOrNull(1)?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.5f
+                                rendererStatus = "Loaded renderer sidecar: ${if (casEnabled) "CAS enabled" else "CAS disabled"}."
+                            }.onFailure { rendererStatus = "Read failed: ${it.message}" }
+                            rendererBusy = false
+                        }
+                    },
+                    enabled = !rendererBusy && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Read renderer settings") }
+                Button(
+                    onClick = {
+                        val config = "cas=${if (casEnabled) 1 else 0}\\nsharpness=${casSharpness.coerceIn(0f, 1f)}\\n"
+                        rendererBusy = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { ShizukuBridge.deployRendererConfig(config) }
+                            rendererStatus = result.fold(
+                                onSuccess = { it },
+                                onFailure = { "Apply failed: ${it.message}" }
+                            )
+                            rendererBusy = false
+                        }
+                    },
+                    enabled = !rendererBusy && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (rendererBusy) "Applying…" else "Apply final-frame CAS settings") }
+                OutlinedButton(
+                    onClick = {
+                        rendererBusy = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { ShizukuBridge.restoreRendererConfig() }
+                            rendererStatus = result.fold(
+                                onSuccess = { it },
+                                onFailure = { "Restore failed: ${it.message}" }
+                            )
+                            casEnabled = false
+                            rendererBusy = false
+                        }
+                    },
+                    enabled = !rendererBusy && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Remove renderer sidecar (CAS off)") }
+                if (rendererStatus.isNotBlank()) {
+                    Text(
+                        rendererStatus,
+                        color = if (rendererStatus.contains("failed", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
