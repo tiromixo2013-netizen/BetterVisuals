@@ -26,7 +26,7 @@ on:
         required: true
         type: choice
         default: "fsr_lite"
-        options: ["off", "bilinear", "nearest", "fsr_lite", "sgsr1"]
+        options: ["off", "bilinear", "nearest", "fsr_lite", "mwsr", "sgsr1"]
       cas_enabled:
         description: "Enable the final-frame CAS pass by default"
         required: true
@@ -296,7 +296,7 @@ jobs:
             echo "Spatial blit match and runtime attachment still require on-device validation; MWSR, SGSR2 temporal reconstruction and frame generation are not implemented."
             echo "Signing: temporary test key; original store signature is not preserved"
             echo "Runtime layer attachment and actual Asphalt 8 render-target match: NOT YET VERIFIED"
-            echo "MWSR, SGSR2 temporal reconstruction, and frame generation: NOT IMPLEMENTED in this build."
+            echo "MWSR Performance spatial shader is included; SGSR2 temporal reconstruction and frame generation are not implemented in this build."
             echo "FPS limit: ${{ inputs.fps_limit || '240' }} (build-time value; no in-game selector added)."
             echo "Render scale: ${{ inputs.render_scale || '70' }}% (Specific scaleDisplay overrides; build-time value; no in-game selector added)."
           } > work/BUILD-REPORT.txt
