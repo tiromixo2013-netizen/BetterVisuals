@@ -39,7 +39,7 @@ object UpscaleTechniqueCatalog {
             assetName = "amd_fsr1_easu.frag",
             graphicsProfile = "OpenGL ES 2.0+",
             license = "MIT",
-            note = "Full EASU spatial reconstruction source; higher sampling cost than the lightweight 6-tap fallback."
+            note = "Official EASU source is bundled for reference; this build uses the custom FSR Lite pass instead."
         ),
         UpscaleTechnique(
             id = "fsr_lite_6tap",
@@ -48,7 +48,7 @@ object UpscaleTechniqueCatalog {
             assetName = "fsr_lite_6tap.frag",
             graphicsProfile = "OpenGL ES 3.0",
             license = "Project custom shader",
-            note = "Lightweight EASU-inspired reconstruction; not official AMD FSR."
+            note = "Custom lightweight reconstruction wired into the experimental GLES scene-blit path; Asphalt 8 runtime activation still needs device verification."
         ),
         UpscaleTechnique(
             id = "mwsr",
@@ -57,7 +57,7 @@ object UpscaleTechniqueCatalog {
             assetName = "mwsr_up.frag",
             graphicsProfile = "OpenGL ES 3.0",
             license = "MIT",
-            note = "MoonlightWeb Super Resolution shader; parameter mapping and integration pass required."
+            note = "MWSR Performance shader and scale-derived uniform mapping are wired into the experimental GLES scene-blit path; runtime output still needs device verification."
         ),
         UpscaleTechnique(
             id = "sgsr1_mobile",
@@ -66,7 +66,7 @@ object UpscaleTechniqueCatalog {
             assetName = "sgsr1_mobile.frag",
             graphicsProfile = "OpenGL ES 3.1",
             license = "BSD-3-Clause",
-            note = "Qualcomm-derived mobile shader; GLES 3.1 shader compilation and viewport mapping required."
+            note = "SGSR1 shader and viewport mapping are wired into the experimental GLES scene-blit path; runtime output still needs device verification."
         ),
         UpscaleTechnique(
             id = "amd_cas",
