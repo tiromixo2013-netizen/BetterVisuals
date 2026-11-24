@@ -373,6 +373,8 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
     var editStatus by remember { mutableStateOf("") }
     var deployStatus by remember { mutableStateOf("") }
     var deploying by remember { mutableStateOf(false) }
+    var layerBusy by remember { mutableStateOf(false) }
+    var layerStatus by remember { mutableStateOf("") }
     var allResolutionScale by remember { mutableStateOf(75f) }
 
     val exportPicker = rememberLauncherForActivityResult(
@@ -630,6 +632,88 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+
+                Text(
+                    "OPENGL ES · GAME PROCESS ATTACH",
+                    color = AsphaltViolet,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Text(
+                    "After installing the modified Asphalt 8 9.2.0i package, enable its bundled GLES layer here through Shizuku. Fully stop and relaunch the game, then read the layer log to confirm whether Android actually loaded it.",
+                    color = AsphaltMuted,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Button(
+                    onClick = {
+                        layerBusy = true
+                        layerStatus = "Configuring Android GLES layer loading…"
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                ShizukuBridge.configureDebugLayer(
+                                    "com.gameloft.android.ANMP.GloftA8HM",
+                                    "com.gameloft.android.ANMP.GloftA8HM",
+                                    LayerApi.OPENGL_ES,
+                                    true
+                                )
+                            }
+                            layerStatus = result.fold(
+                                onSuccess = { it },
+                                onFailure = { "Layer enable failed: ${it.message}" }
+                            )
+                            layerBusy = false
+                        }
+                    },
+                    enabled = !layerBusy && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (layerBusy) "Configuring…" else "Enable Asphalt 8 GLES layer") }
+                OutlinedButton(
+                    onClick = {
+                        layerBusy = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                ShizukuBridge.configureDebugLayer(
+                                    "com.gameloft.android.ANMP.GloftA8HM",
+                                    "com.gameloft.android.ANMP.GloftA8HM",
+                                    LayerApi.OPENGL_ES,
+                                    false
+                                )
+                            }
+                            layerStatus = result.fold(
+                                onSuccess = { it },
+                                onFailure = { "Layer disable failed: ${it.message}" }
+                            )
+                            layerBusy = false
+                        }
+                    },
+                    enabled = !layerBusy && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Disable Asphalt 8 GLES layer") }
+                OutlinedButton(
+                    onClick = {
+                        layerBusy = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                ShizukuBridge.readLayerTelemetry("com.gameloft.android.ANMP.GloftA8HM")
+                            }
+                            layerStatus = result.fold(
+                                onSuccess = { it },
+                                onFailure = { "Telemetry read failed: ${it.message}" }
+                            )
+                            layerBusy = false
+                        }
+                    },
+                    enabled = !layerBusy && ShizukuBridge.granted() && ShizukuBridge.serviceConnected(),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Check Asphalt 8 GLES attachment / telemetry") }
+                if (layerStatus.isNotBlank()) {
+                    Text(
+                        layerStatus,
+                        color = if (layerStatus.contains("failed", true) || layerStatus.contains("not confirmed", true))
+                            MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
             Text(
                 status,
@@ -637,7 +721,7 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                 style = MaterialTheme.typography.bodySmall
             )
             Text(
-                "Safety: loading reads the installed file first. Apply is blocked while Asphalt 8 is running and creates a timestamped original backup before replacing gameoptions.json. The current 9.1.0i build's external-file precedence and the visual meaning of scaleDisplay still require on-device verification. This does not add in-game menu items or inject FSR/EASU/CAS/SGSR/MWSR shaders.",
+                "Safety: loading reads the installed file first. Apply is blocked while Asphalt 8 is running and creates a timestamped original backup before replacing gameoptions.json. The current 9.2.0i build's external-file precedence and the visual meaning of scaleDisplay still require on-device verification. This does not add in-game menu items or inject FSR/EASU/CAS/SGSR/MWSR shaders.",
                 color = AsphaltMuted,
                 style = MaterialTheme.typography.labelSmall
             )
