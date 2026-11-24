@@ -14,13 +14,12 @@ enum class UpscaleMode(
     val implementedInHarness: Boolean
 ) {
     OFF("Off", 2, 0, true),
-    NEAREST("Nearest Neighbor", 2, 0, true),
-    BILINEAR("Bilinear", 2, 0, true),
-    CATMULL_ROM("Catmull-Rom · experimental", 2, 0, true),
-    FSR_LITE("UltraScale FSR Lite · custom 6-tap", 2, 0, true),
     SGSR1("Qualcomm SGSR1 Mobile", 3, 1, false),
+    SGSR2("Qualcomm SGSR2 · temporal", 3, 1, false),
     MWSR("MWSR", 3, 0, false),
-    AMD_FSR1_EASU("AMD FSR1 · EASU", 2, 0, false)
+    FSR_LITE("UltraScale FSR Lite · custom 6-tap", 3, 0, true),
+    NEAREST("Nearest Neighbor", 2, 0, true),
+    BILINEAR("Bilinear", 2, 0, true)
 }
 
 enum class UpscalePreset(val title: String) {
@@ -53,6 +52,8 @@ enum class FrameGenerationAlgorithm(val title: String) {
 data class UltraScaleSettings(
     /** Internal render resolution as a percentage of the output dimensions. */
     val renderScalePercent: Int = 70,
+    /** Selectable game profile cap; 240 is the highest currently patched build target. */
+    val fpsLimit: Int = 240,
     val upscaler: UpscaleMode = UpscaleMode.BILINEAR,
     /** Reconstruction-stage sharpness; separate from CAS. */
     val upscaleSharpnessPercent: Int = 20,
@@ -78,6 +79,7 @@ data class UltraScaleSettings(
 ) {
     fun normalized(): UltraScaleSettings = copy(
         renderScalePercent = renderScalePercent.coerceIn(50, 100),
+        fpsLimit = fpsLimit.coerceIn(60, 240),
         upscaleSharpnessPercent = upscaleSharpnessPercent.coerceIn(0, 100),
         casSharpnessPercent = casSharpnessPercent.coerceIn(0, 100),
         queueDepth = queueDepth.coerceIn(1, 3)
@@ -109,7 +111,7 @@ data class UltraScaleSettings(
             )
             UpscalePreset.QUALITY -> UltraScaleSettings(
                 renderScalePercent = 85,
-                upscaler = UpscaleMode.CATMULL_ROM,
+                upscaler = UpscaleMode.FSR_LITE,
                 upscaleSharpnessPercent = 35,
                 preset = preset,
                 casSharpnessPercent = 25
