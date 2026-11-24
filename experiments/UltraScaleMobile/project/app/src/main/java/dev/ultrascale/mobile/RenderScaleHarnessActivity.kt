@@ -38,7 +38,6 @@ class RenderScaleHarnessActivity : Activity() {
         renderer.setUpscaler(
             when {
                 savedProfile.integerScaling || savedProfile.upscaler == UpscaleMode.NEAREST -> 2
-                savedProfile.upscaler == UpscaleMode.CATMULL_ROM -> 1
                 savedProfile.upscaler == UpscaleMode.FSR_LITE -> 3
                 else -> 0
             }
@@ -114,9 +113,7 @@ class RenderScaleHarnessActivity : Activity() {
         root.addView(upscalerPicker)
         val initialUpscalerIndex = when {
             savedProfile.integerScaling || savedProfile.upscaler == UpscaleMode.NEAREST -> 5
-            savedProfile.upscaler == UpscaleMode.CATMULL_ROM -> 7
             savedProfile.upscaler == UpscaleMode.FSR_LITE -> 3
-            savedProfile.upscaler == UpscaleMode.AMD_FSR1_EASU -> 4
             savedProfile.upscaler == UpscaleMode.MWSR -> 2
             savedProfile.upscaler == UpscaleMode.SGSR1 -> 1
             else -> 6
