@@ -21,6 +21,24 @@ on:
         type: choice
         default: "70"
         options: ["50", "55", "60", "65", "70", "75", "80", "85", "90", "95", "100"]
+      upscaler:
+        description: "Build-time spatial upscaler default"
+        required: true
+        type: choice
+        default: "fsr_lite"
+        options: ["off", "bilinear", "nearest", "fsr_lite", "sgsr1"]
+      cas_enabled:
+        description: "Enable the final-frame CAS pass by default"
+        required: true
+        type: choice
+        default: "false"
+        options: ["false", "true"]
+      cas_sharpness:
+        description: "CAS sharpness from 0.0 to 1.0"
+        required: true
+        type: choice
+        default: "0.25"
+        options: ["0.0", "0.25", "0.5", "0.75", "1.0"]
 
 permissions:
   contents: read
@@ -66,6 +84,10 @@ jobs:
 
       - name: Build UltraScale native GLES layer
         working-directory: experiments/UltraScaleMobile/project
+        env:
+          ULTRASCALE_DEFAULT_UPSCALER: ${{ inputs.upscaler || 'fsr_lite' }}
+          ULTRASCALE_DEFAULT_CAS: ${{ inputs.cas_enabled == 'true' && '1' || '0' }}
+          ULTRASCALE_DEFAULT_CAS_SHARPNESS: ${{ inputs.cas_sharpness || '0.25' }}
         run: gradle --no-daemon --stacktrace :app:assembleDebug
 
       - name: Verify ARM64 layer binary
@@ -270,7 +292,8 @@ jobs:
             echo "Source version: Asphalt 8 9.2.0i (pinned source artifact)"
             echo "Patches: GLES layer manifest opt-in; GPU_5 FPSLimit and Specific scaleDisplay selected at build time; original GFXOption/effects preserved"
             echo "Bundled native layer: lib/arm64-v8a/libGLES_ultrascale.so"
-            echo "Experimental GLES render path: SGSR1, FSR Lite, nearest and bilinear dispatch for qualifying low-resolution color blits; CAS final-frame pass remains opt-in via renderer sidecar."
+            echo "Experimental GLES render path: ${{ inputs.upscaler || 'fsr_lite' }} spatial dispatch for qualifying low-resolution color blits; CAS default=${{ inputs.cas_enabled || 'false' }} sharpness=${{ inputs.cas_sharpness || '0.25' }}."
+            echo "Spatial blit match and runtime attachment still require on-device validation; MWSR, SGSR2 temporal reconstruction and frame generation are not implemented."
             echo "Signing: temporary test key; original store signature is not preserved"
             echo "Runtime layer attachment and actual Asphalt 8 render-target match: NOT YET VERIFIED"
             echo "MWSR, SGSR2 temporal reconstruction, and frame generation: NOT IMPLEMENTED in this build."
