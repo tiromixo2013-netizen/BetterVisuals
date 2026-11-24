@@ -34,6 +34,7 @@ internal fun readUltraScaleSettings(context: Context): UltraScaleSettings {
     fun enumValue(key: String, fallback: String) = p.getString(key, fallback) ?: fallback
     return UltraScaleSettings(
         renderScalePercent = p.getInt("renderScale", 70),
+        fpsLimit = p.getInt("fpsLimit", 240),
         upscaler = runCatching {
             UpscaleMode.valueOf(enumValue("upscaler", UpscaleMode.BILINEAR.name))
         }.getOrDefault(UpscaleMode.BILINEAR),
@@ -64,6 +65,7 @@ internal fun readUltraScaleSettings(context: Context): UltraScaleSettings {
 private fun writeUltraScaleSettings(context: Context, settings: UltraScaleSettings) {
     context.getSharedPreferences(ULTRASCALE_PREFS, Context.MODE_PRIVATE).edit()
         .putInt("renderScale", settings.renderScalePercent)
+        .putInt("fpsLimit", settings.fpsLimit)
         .putString("upscaler", settings.upscaler.name)
         .putInt("upscaleSharpness", settings.upscaleSharpnessPercent)
         .putString("preset", settings.preset.name)
@@ -128,6 +130,14 @@ fun UltraScaleControlsCard() {
                 steps = 9
             )
 
+            SettingValue("FPS limit", "${settings.fpsLimit} FPS · selected build profile")
+            EnumPicker(
+                label = "${settings.fpsLimit} FPS",
+                values = FpsLimitOption.entries,
+                title = { "${it.value} FPS" },
+                onSelect = { update(settings.copy(fpsLimit = it.value)) }
+            )
+
             HorizontalDivider()
 
             // 2 — Upscaling
@@ -143,7 +153,7 @@ fun UltraScaleControlsCard() {
             Text(
                 when (settings.upscaler) {
                     UpscaleMode.OFF, UpscaleMode.NEAREST, UpscaleMode.BILINEAR,
-                    UpscaleMode.CATMULL_ROM, UpscaleMode.FSR_LITE ->
+                    UpscaleMode.FSR_LITE ->
                         "Available in the app-owned render test only; not yet connected to Asphalt 8's render target."
                     else ->
                         "Shader/reference is bundled, but this technique still needs a validated game render-pass backend."
