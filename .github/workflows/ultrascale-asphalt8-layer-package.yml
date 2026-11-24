@@ -113,6 +113,24 @@ jobs:
           tree.write(p,encoding="utf-8",xml_declaration=True)
           print("Added com.android.graphics.injectLayers.enable=true")
           PY
+          # Merge the agreed FPS ceiling into the game's existing GPU_5 profile.
+          # Keep every original graphics-quality/effect option unchanged.
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("work/decoded/game/assets/releaseminigame/gameoptions.json")
+          data=json.loads(p.read_text(encoding="utf-8"))
+          gpu5=data["profiles"]["GPU"]["overrides"]["GPU_5"]
+          old_quality=gpu5.get("GFXOption")
+          gpu5["FPSLimit"]=240.0
+          if gpu5.get("GFXOption") != old_quality:
+              raise SystemExit("Unexpected graphics-quality mutation")
+          p.write_text(json.dumps(data,ensure_ascii=False,separators=(",",":"))+"\\n",encoding="utf-8")
+          check=json.loads(p.read_text(encoding="utf-8"))["profiles"]["GPU"]["overrides"]["GPU_5"]
+          assert check["FPSLimit"] == 240.0
+          assert check.get("GFXOption") == old_quality
+          print(f"FPSLimit: 240; preserved GFXOption: {old_quality}")
+          PY
           mkdir -p work/decoded/game/lib/arm64-v8a
           cp work/layer/libGLES_ultrascale.so work/decoded/game/lib/arm64-v8a/
           apktool b work/decoded/game -o work/output/base-unsigned.apk
@@ -207,11 +225,11 @@ jobs:
             echo "Target package: com.gameloft.android.ANMP.GloftA8HM"
             echo "Source artifact run: 45261333997"
             echo "Source version: Asphalt 8 9.2.0i (pinned source artifact)"
-            echo "Patch: manifest meta-data com.android.graphics.injectLayers.enable=true"
+            echo "Patches: GLES layer manifest opt-in; GPU_5 FPSLimit=240; original GFXOption/effects preserved"
             echo "Bundled native layer: lib/arm64-v8a/libGLES_ultrascale.so"
             echo "Signing: temporary test key; original store signature is not preserved"
             echo "Runtime activation and in-game attachment: NOT YET VERIFIED"
-            echo "This package contains the current diagnostic GLES layer, not completed upscaling or frame generation."
+            echo "GLES layer status: diagnostic/telemetry only; renderer upscaling and frame generation are not yet active."
           } > work/BUILD-REPORT.txt
 
       - uses: actions/upload-artifact@v4
