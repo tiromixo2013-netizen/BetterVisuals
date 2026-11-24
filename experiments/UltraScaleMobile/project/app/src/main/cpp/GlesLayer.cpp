@@ -479,7 +479,7 @@ GLenum LayerCheckFramebufferStatus(GLenum target) {
 struct RendererConfig {
     bool casEnabled = false;
     float casSharpness = 0.5f;
-    std::string upscaler = "off";
+    std::string upscaler = "fsr_lite";
 };
 GLuint g_postProgram = 0;
 GLuint g_postTexture = 0;
@@ -507,7 +507,7 @@ RendererConfig ReadRendererConfig() {
         const std::string value = line.substr(split + 1);
         if (key == "cas") config.casEnabled = (value == "1" || value == "true");
         else if (key == "upscaler") {
-            if (value == "nearest" || value == "bilinear" || value == "fsr_lite" || value == "sgsr1")
+            if (value == "off" || value == "nearest" || value == "bilinear" || value == "fsr_lite" || value == "sgsr1")
                 config.upscaler = value;
         }
         else if (key == "sharpness") {
