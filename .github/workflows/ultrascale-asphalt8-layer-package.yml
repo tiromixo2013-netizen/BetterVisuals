@@ -127,7 +127,7 @@ jobs:
           apktool b work/decoded/game -o work/output/base-unsigned.apk
           # Patch the opaque gameoptions asset at ZIP level to preserve all other
           # APK entries and retain the original quality/effects settings.
-          FPS_LIMIT: ${{ inputs.fps_limit || '240' }}
+          export FPS_LIMIT="${{ inputs.fps_limit || '240' }}"
           python3 - <<'PY'
           import json, zipfile, os
           from pathlib import Path
