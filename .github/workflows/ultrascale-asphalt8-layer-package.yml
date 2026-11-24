@@ -15,6 +15,12 @@ on:
         type: choice
         default: "240"
         options: ["60", "90", "120", "144", "165", "240"]
+      render_scale:
+        description: "Build-time Asphalt 8 scaleDisplay percentage (not an in-game selector)"
+        required: true
+        type: choice
+        default: "70"
+        options: ["50", "55", "60", "65", "70", "75", "80", "85", "90", "95", "100"]
 
 permissions:
   contents: read
@@ -128,6 +134,7 @@ jobs:
           # Patch the opaque gameoptions asset at ZIP level to preserve all other
           # APK entries and retain the original quality/effects settings.
           export FPS_LIMIT="${{ inputs.fps_limit || '240' }}"
+          export RENDER_SCALE="${{ inputs.render_scale || '70' }}"
           python3 - <<'PY'
           import json, zipfile, os
           from pathlib import Path
@@ -148,12 +155,24 @@ jobs:
                       if fps_limit not in (60, 90, 120, 144, 165, 240):
                           raise SystemExit(f"Unsupported FPS limit: {fps_limit}")
                       gpu5["FPSLimit"]=float(fps_limit)
+                      render_scale=int(os.environ.get("RENDER_SCALE", "70"))
+                      if render_scale not in (50,55,60,65,70,75,80,85,90,95,100):
+                          raise SystemExit(f"Unsupported render scale: {render_scale}")
+                      specific=parsed["profiles"]["Specific"]
+                      changed=[]
+                      for profile_name, profile_values in specific["overrides"].items():
+                          if "scaleDisplay" in profile_values:
+                              profile_values["scaleDisplay"]=float(render_scale)
+                              changed.append(profile_name)
+                      if not changed:
+                          raise SystemExit("No Specific scaleDisplay overrides were found")
                       assert gpu5.get("GFXOption")==old_quality
                       data=(json.dumps(parsed,ensure_ascii=False,indent=4)+"\n").encode("utf-8")
                       verify=json.loads(data.decode("utf-8"))
                       assert verify["profiles"]["GPU"]["overrides"]["GPU_5"]["FPSLimit"]==float(fps_limit)
                       assert verify["profiles"]["GPU"]["overrides"]["GPU_5"].get("GFXOption")==old_quality
-                      print(f"FPSLimit={fps_limit}; preserved GFXOption={old_quality}")
+                      assert all(verify["profiles"]["Specific"]["overrides"][name]["scaleDisplay"]==float(render_scale) for name in changed)
+                      print(f"FPSLimit={fps_limit}; scaleDisplay={render_scale} across {len(changed)} RES profiles; preserved GFXOption={old_quality}")
                   zout.writestr(info,data)
           src.unlink()
           dst.rename(src)
@@ -249,12 +268,14 @@ jobs:
             echo "Target package: com.gameloft.android.ANMP.GloftA8HM"
             echo "Source artifact run: 45261333997"
             echo "Source version: Asphalt 8 9.2.0i (pinned source artifact)"
-            echo "Patches: GLES layer manifest opt-in; GPU_5 FPSLimit selected at build time; original GFXOption/effects preserved"
+            echo "Patches: GLES layer manifest opt-in; GPU_5 FPSLimit and Specific scaleDisplay selected at build time; original GFXOption/effects preserved"
             echo "Bundled native layer: lib/arm64-v8a/libGLES_ultrascale.so"
+            echo "Experimental GLES render path: SGSR1, FSR Lite, nearest and bilinear dispatch for qualifying low-resolution color blits; CAS final-frame pass remains opt-in via renderer sidecar."
             echo "Signing: temporary test key; original store signature is not preserved"
-            echo "Runtime activation and in-game attachment: NOT YET VERIFIED"
-            echo "GLES layer status: diagnostic/telemetry only; renderer upscaling and frame generation are not yet active."
+            echo "Runtime layer attachment and actual Asphalt 8 render-target match: NOT YET VERIFIED"
+            echo "MWSR, SGSR2 temporal reconstruction, and frame generation: NOT IMPLEMENTED in this build."
             echo "FPS limit: ${{ inputs.fps_limit || '240' }} (build-time value; no in-game selector added)."
+            echo "Render scale: ${{ inputs.render_scale || '70' }}% (Specific scaleDisplay overrides; build-time value; no in-game selector added)."
           } > work/BUILD-REPORT.txt
 
       - uses: actions/upload-artifact@v4
