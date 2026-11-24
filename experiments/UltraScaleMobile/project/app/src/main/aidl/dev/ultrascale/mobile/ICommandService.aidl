@@ -6,4 +6,7 @@ interface ICommandService {
     String readAsphalt8Config();
     String deployAsphalt8Config(String json);
     String restoreAsphalt8Config();
+    String readRendererConfig();
+    String deployRendererConfig(String configText);
+    String restoreRendererConfig();
 }
