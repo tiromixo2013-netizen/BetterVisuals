@@ -22,6 +22,10 @@ enum class UpscaleMode(
     BILINEAR("Bilinear", 2, 0, true)
 }
 
+enum class FpsLimitOption(val value: Int) {
+    FPS_60(60), FPS_90(90), FPS_120(120), FPS_144(144), FPS_165(165), FPS_240(240)
+}
+
 enum class UpscalePreset(val title: String) {
     ULTRA_PERFORMANCE("Ultra Performance"),
     PERFORMANCE("Performance"),
