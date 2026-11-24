@@ -138,7 +138,7 @@ jobs:
                       old_quality=gpu5.get("GFXOption")
                       gpu5["FPSLimit"]=240.0
                       assert gpu5.get("GFXOption")==old_quality
-                      data=(json.dumps(parsed,ensure_ascii=False,indent=4)+"\\n").encode("utf-8")
+                      data=(json.dumps(parsed,ensure_ascii=False,indent=4)+"\n").encode("utf-8")
                       verify=json.loads(data.decode("utf-8"))
                       assert verify["profiles"]["GPU"]["overrides"]["GPU_5"]["FPSLimit"]==240.0
                       assert verify["profiles"]["GPU"]["overrides"]["GPU_5"].get("GFXOption")==old_quality
