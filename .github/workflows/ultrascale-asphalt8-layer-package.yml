@@ -8,6 +8,13 @@ on:
       - ".github/workflows/ultrascale-asphalt8-layer-package.yml"
       - "experiments/UltraScaleMobile/**"
   workflow_dispatch:
+    inputs:
+      fps_limit:
+        description: "Build-time Asphalt 8 FPS limit (not an in-game selector)"
+        required: true
+        type: choice
+        default: "240"
+        options: ["60", "90", "120", "144", "165", "240"]
 
 permissions:
   contents: read
@@ -120,8 +127,9 @@ jobs:
           apktool b work/decoded/game -o work/output/base-unsigned.apk
           # Patch the opaque gameoptions asset at ZIP level to preserve all other
           # APK entries and retain the original quality/effects settings.
+          FPS_LIMIT: ${{ inputs.fps_limit || '240' }}
           python3 - <<'PY'
-          import json, zipfile
+          import json, zipfile, os
           from pathlib import Path
           src=Path("work/output/base-unsigned.apk")
           dst=Path("work/output/base-patched.apk")
@@ -136,13 +144,16 @@ jobs:
                       parsed=json.loads(data.decode("utf-8"))
                       gpu5=parsed["profiles"]["GPU"]["overrides"]["GPU_5"]
                       old_quality=gpu5.get("GFXOption")
-                      gpu5["FPSLimit"]=240.0
+                      fps_limit=int(os.environ.get("FPS_LIMIT", "240"))
+                      if fps_limit not in (60, 90, 120, 144, 165, 240):
+                          raise SystemExit(f"Unsupported FPS limit: {fps_limit}")
+                      gpu5["FPSLimit"]=float(fps_limit)
                       assert gpu5.get("GFXOption")==old_quality
                       data=(json.dumps(parsed,ensure_ascii=False,indent=4)+"\n").encode("utf-8")
                       verify=json.loads(data.decode("utf-8"))
-                      assert verify["profiles"]["GPU"]["overrides"]["GPU_5"]["FPSLimit"]==240.0
+                      assert verify["profiles"]["GPU"]["overrides"]["GPU_5"]["FPSLimit"]==float(fps_limit)
                       assert verify["profiles"]["GPU"]["overrides"]["GPU_5"].get("GFXOption")==old_quality
-                      print(f"FPSLimit=240; preserved GFXOption={old_quality}")
+                      print(f"FPSLimit={fps_limit}; preserved GFXOption={old_quality}")
                   zout.writestr(info,data)
           src.unlink()
           dst.rename(src)
@@ -238,11 +249,12 @@ jobs:
             echo "Target package: com.gameloft.android.ANMP.GloftA8HM"
             echo "Source artifact run: 45261333997"
             echo "Source version: Asphalt 8 9.2.0i (pinned source artifact)"
-            echo "Patches: GLES layer manifest opt-in; GPU_5 FPSLimit=240; original GFXOption/effects preserved"
+            echo "Patches: GLES layer manifest opt-in; GPU_5 FPSLimit selected at build time; original GFXOption/effects preserved"
             echo "Bundled native layer: lib/arm64-v8a/libGLES_ultrascale.so"
             echo "Signing: temporary test key; original store signature is not preserved"
             echo "Runtime activation and in-game attachment: NOT YET VERIFIED"
             echo "GLES layer status: diagnostic/telemetry only; renderer upscaling and frame generation are not yet active."
+            echo "FPS limit: ${{ inputs.fps_limit || '240' }} (build-time value; no in-game selector added)."
           } > work/BUILD-REPORT.txt
 
       - uses: actions/upload-artifact@v4
