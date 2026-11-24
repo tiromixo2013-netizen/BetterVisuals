@@ -438,6 +438,8 @@ EGLContext g_postContext = EGL_NO_CONTEXT;
 GLint g_postSharpnessLocation = -1;
 GLint g_postSizeLocation = -1;
 GLint g_postSamplerLocation = -1;
+GLsizei g_postWidth = 0;
+GLsizei g_postHeight = 0;
 std::atomic<bool> g_postInitLogged{false};
 
 RendererConfig ReadRendererConfig() {
@@ -611,7 +613,12 @@ void ApplyFinalFramePostProcess(EGLDisplay display, EGLSurface surface, EGLConte
     const GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
 
     glBindTexture(GL_TEXTURE_2D, g_postTexture);
-    glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, width, height, 0);
+    if (g_postWidth != width || g_postHeight != height) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        g_postWidth = width;
+        g_postHeight = height;
+    }
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
 
     glDisable(GL_BLEND);
     glDisable(GL_DEPTH_TEST);
