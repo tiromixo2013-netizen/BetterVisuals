@@ -131,31 +131,44 @@ jobs:
             --ks-pass pass:android --key-pass pass:android \
             --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true \
             --out work/output/com.gameloft.android.ANMP.GloftA8HM.apk work/output/base-aligned.apk
-          for split in work/xapk/config.*.apk; do
+          shopt -s nullglob
+          splits=(work/xapk/config.*.apk)
+          if (( ${#splits[@]} == 0 )); then
+            echo "No config split APKs found in source XAPK" >&2
+            exit 1
+          fi
+          for split in "${splits[@]}"; do
             name="$(basename "$split")"
-            # Bundletool split APKs may carry an old BNDLTOOL v1 signature.
-            # Strip signature metadata before applying the common test key.
+            echo "Preparing split: $name"
+            # Remove the complete legacy JAR-signature directory. These split
+            # APKs are verified with APK Signature Scheme v2/v3 (Android 7+).
             python3 - "$split" "work/output/$name.unsigned.apk" <<'PY'
           import sys, zipfile
           src, dst = sys.argv[1:3]
-          with zipfile.ZipFile(src, "r") as zin, zipfile.ZipFile(dst, "w") as zout:
-              for item in zin.infolist():
-                  upper = item.filename.upper()
-                  if upper.startswith("META-INF/") and (upper == "META-INF/MANIFEST.MF" or upper.endswith((".RSA", ".DSA", ".EC", ".SF"))):
-                      continue
-                  zout.writestr(item, zin.read(item.filename))
+          with zipfile.ZipFile(src, "r") as zin:
+              bad = zin.testzip()
+              if bad:
+                  raise SystemExit(f"Corrupt source split {src}: {bad}")
+              names = zin.namelist()
+              if "AndroidManifest.xml" not in names:
+                  raise SystemExit(f"Split has no AndroidManifest.xml: {src}")
+              with zipfile.ZipFile(dst, "w") as zout:
+                  for item in zin.infolist():
+                      if item.filename.upper().startswith("META-INF/"):
+                          continue
+                      zout.writestr(item, zin.read(item.filename))
           PY
             "$tools/zipalign" -f -p 4 "work/output/$name.unsigned.apk" "work/output/$name.aligned.apk"
             "$tools/apksigner" sign --ks "$key" --ks-key-alias ultrascale \
               --ks-pass pass:android --key-pass pass:android \
-              --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+              --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled true \
               --out "work/output/$name" "work/output/$name.aligned.apk"
+            echo "Verifying split: $name"
+            "$tools/apksigner" verify --min-sdk-version 24 --verbose --print-certs "work/output/$name"
+            unzip -t "work/output/$name" >/dev/null
           done
-          # Verify only final signed APKs; *-aligned.apk files are unsigned intermediates.
-          for apk in work/output/com.gameloft.android.ANMP.GloftA8HM.apk work/output/config.*.apk; do
-            test -f "$apk"
-            "$tools/apksigner" verify --min-sdk-version 24 --verbose --print-certs "$apk"
-          done
+          # Verify the base APK and every final split with the same test signer.
+          "$tools/apksigner" verify --min-sdk-version 24 --verbose --print-certs work/output/com.gameloft.android.ANMP.GloftA8HM.apk
 
       - name: Assemble installable test XAPK and verification report
         shell: bash
