@@ -526,7 +526,7 @@ RendererConfig ReadRendererConfig() {
         const std::string value = line.substr(split + 1);
         if (key == "cas") config.casEnabled = (value == "1" || value == "true");
         else if (key == "upscaler") {
-            if (value == "off" || value == "nearest" || value == "bilinear" || value == "fsr_lite" || value == "sgsr1")
+            if (value == "off" || value == "nearest" || value == "bilinear" || value == "fsr_lite" || value == "sgsr1" || value == "mwsr")
                 config.upscaler = value;
         }
         else if (key == "sharpness") {
@@ -655,6 +655,186 @@ void main() {
     return g_sgsr1Sampler >= 0 && g_sgsr1Viewport >= 0;
 }
 
+
+GLuint g_mwsrProgram = 0;
+EGLContext g_mwsrContext = EGL_NO_CONTEXT;
+GLint g_mwsrSampler = -1;
+GLint g_mwsrTexelScale = -1;
+GLint g_mwsrDimsAcross = -1;
+GLint g_mwsrKernel = -1;
+GLint g_mwsrZone = -1;
+GLint g_mwsrZoneBonus = -1;
+GLint g_mwsrBound = -1;
+
+bool EnsureMwsrProgram(EGLContext context) {
+    if (g_mwsrProgram && g_mwsrContext == context) return true;
+    static const char* vsSource = R"MWV(#version 300 es
+precision highp float;
+out vec2 vUv;
+void main() {
+    vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+    vUv = p;
+    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+})MWV";
+    static const char* fsSource = R"MWF(#version 300 es
+// MWSR — MoonlightWeb Super Resolution: the upscale, GLSL ES 3.00.
+ // Copyright (c) 2026 Bruno Martin
+ // SPDX-License-Identifier: MIT
+ // Source and parameters: https://github.com/linckosz/moonlight-web/tree/main/mwsr
+precision highp float;
+precision highp int;
+uniform sampler2D uTex;
+uniform vec4 uTexelScale;
+uniform vec4 uDimsAcross;
+uniform vec4 uKernel;
+uniform vec4 uZone;
+uniform vec4 uZoneBonus;
+uniform vec4 uBound;
+in vec2 vUv;
+out vec4 oColor;
+vec3 S(vec2 uv) { return textureLod(uTex, uv, 0.0).rgb; }
+const uint SHOW = 0u;
+const uint CHROMA444 = 0u;
+const uint GAZE = 0u;
+const vec3 LUMA = vec3(0.25, 0.625, 0.125);
+float gazeWeight(vec2 uv) {
+    if (GAZE != 1u) return 0.0;
+    float d = length((uv - uZone.xy) / uZone.zw);
+    return (1.0 - smoothstep(1.0, 1.0 + uZoneBonus.x, d)) * uZoneBonus.w;
+}
+void main() {
+    vec2 uv = vUv;
+    vec2 texel = uTexelScale.xy;
+    vec2 sp = uv * uDimsAcross.xy;
+    vec2 f0 = floor(sp - 0.5);
+    vec2 t = sp - 0.5 - f0;
+    vec2 ss = 1.0 - t;
+    vec2 ku = uKernel.x * t * ss;
+    vec2 w12 = 1.0 + ku;
+    vec2 p12 = (f0 + 0.5 + (t * t * (3.0 - 2.0 * t) + ku * ss) / w12) * texel;
+    vec3 rM = S(p12);
+    float zg = gazeWeight(uv);
+    float ft = uKernel.y;
+    if (GAZE == 1u) ft = mix(uKernel.y, uZoneBonus.y, zg);
+    vec2 gM;
+    bool isFlat;
+    if (CHROMA444 == 1u) {
+        vec3 dx = dFdx(rM) * uTexelScale.z;
+        vec3 dy = -dFdy(rM) * uTexelScale.w;
+        vec3 m = abs(dx) + abs(dy);
+        bool rg = m.g > m.r;
+        bool b = m.b > max(m.r, m.g);
+        gM = vec2(b ? dx.b : (rg ? dx.g : dx.r), b ? dy.b : (rg ? dy.g : dy.r));
+        isFlat = max(m.r, max(m.g, m.b)) < ft;
+    } else {
+        float lM = dot(rM, LUMA);
+        gM = vec2(dFdx(lM) * uTexelScale.z, -dFdy(lM) * uTexelScale.w);
+        isFlat = abs(gM.x) + abs(gM.y) < ft;
+    }
+    if (SHOW == 1u) { oColor = vec4(vec3(isFlat ? 0.0 : 1.0), 1.0); return; }
+    if (SHOW == 2u) { oColor = vec4(vec3(zg), 1.0); return; }
+    if (isFlat) { oColor = vec4(rM, 1.0); return; }
+    vec2 p0 = (f0 - 0.5) * texel;
+    vec2 p3 = (f0 + 2.5) * texel;
+    vec3 rT = S(vec2(p12.x, p0.y));
+    vec3 rL = S(vec2(p0.x, p12.y));
+    vec3 rR = S(vec2(p3.x, p12.y));
+    vec3 rB = S(vec2(p12.x, p3.y));
+    vec2 dn = gM * inversesqrt(max(dot(gM, gM), 1e-12)) * uDimsAcross.zw;
+    vec3 ra = S(uv - dn);
+    vec3 rb = S(uv + dn);
+    float kg = uKernel.z;
+    if (GAZE == 1u) kg = mix(uKernel.z, uZoneBonus.z, zg);
+    mediump vec3 hM = rM;
+    mediump vec3 hA = ra;
+    mediump vec3 hB = rb;
+    mediump vec3 hTop = rT;
+    mediump vec3 hLeft = rL;
+    mediump vec3 hRight = rR;
+    mediump vec3 hBottom = rB;
+    mediump vec2 hu = ku;
+    mediump vec2 hs = ss;
+    mediump vec2 ht = t;
+    mediump vec2 h12 = w12;
+    mediump vec3 K = (h12.x * (h12.y * hM - hu.y * (hs.y * hTop + ht.y * hBottom)) - h12.y * hu.x * (hs.x * hLeft + ht.x * hRight)) / (1.0 - hu.x * hu.y);
+    mediump vec3 D = K - 0.5 * (hA + hB);
+    mediump float hg = kg;
+    mediump float hw = uKernel.w;
+    mediump vec3 R = K + hg * D + hw * (D - vec3(dot(D, LUMA)));
+    mediump vec3 mn = min(hM, min(hA, hB));
+    mediump vec3 mx = max(hM, max(hA, hB));
+    mediump float hl = uBound.x;
+    mediump vec3 mg = (mx - mn) * hl;
+    oColor = vec4(clamp(R, max(mn - mg, vec3(0.0)), mx + mg), 1.0);
+}
+)MWF";
+    GLuint vs = CompilePostShader(GL_VERTEX_SHADER, vsSource);
+    GLuint fs = CompilePostShader(GL_FRAGMENT_SHADER, fsSource);
+    if (!vs || !fs) {
+        if (vs) glDeleteShader(vs);
+        if (fs) glDeleteShader(fs);
+        return false;
+    }
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    GLint linked = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        char log[2048]{};
+        GLsizei length = 0;
+        glGetProgramInfoLog(program, sizeof(log), &length, log);
+        __android_log_print(ANDROID_LOG_ERROR, "UltraScaleGLES", "MWSR link failed: %.*s", length, log);
+        glDeleteProgram(program);
+        return false;
+    }
+    g_mwsrProgram = program;
+    g_mwsrContext = context;
+    g_mwsrSampler = glGetUniformLocation(program, "uTex");
+    g_mwsrTexelScale = glGetUniformLocation(program, "uTexelScale");
+    g_mwsrDimsAcross = glGetUniformLocation(program, "uDimsAcross");
+    g_mwsrKernel = glGetUniformLocation(program, "uKernel");
+    g_mwsrZone = glGetUniformLocation(program, "uZone");
+    g_mwsrZoneBonus = glGetUniformLocation(program, "uZoneBonus");
+    g_mwsrBound = glGetUniformLocation(program, "uBound");
+    const bool valid = g_mwsrSampler >= 0 && g_mwsrTexelScale >= 0 &&
+        g_mwsrDimsAcross >= 0 && g_mwsrKernel >= 0 && g_mwsrZone >= 0 &&
+        g_mwsrZoneBonus >= 0 && g_mwsrBound >= 0;
+    if (valid) __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES", "MWSR Performance spatial shader compiled");
+    return valid;
+}
+
+void SetMwsrUniforms(GLsizei inW, GLsizei inH, GLsizei outW, GLsizei outH) {
+    const float sx = static_cast<float>(outW) / static_cast<float>(inW);
+    const float sy = static_cast<float>(outH) / static_cast<float>(inH);
+    const float scale = std::min(sx, sy);
+    const float clampedScale = std::max(1.07f, std::min(4.0f, scale));
+    const float x = std::log(clampedScale);
+    const auto curve = [x](float c0, float c1, float c2) {
+        return c0 + x * (c1 + x * c2);
+    };
+    const float baseForce = 1.15f;
+    const float forceT = std::max(0.0f, std::min(1.0f,
+        std::log(std::max(scale, 1e-4f) / (4.0f / 3.0f)) / std::log(2.0f / (4.0f / 3.0f))));
+    const float force = baseForce + (1.35f - baseForce) * forceT;
+    const float strength = std::max(0.0f, std::min(1.0f, (scale - 1.0f) / (1.07f - 1.0f)));
+    const float kc = curve(0.6353583202388096f, 0.021845681633595574f, 0.12781268100437676f);
+    const float kg = curve(-0.1288413863403059f, 2.5844683855070816f, -1.260092021482419f) * force * strength;
+    const float kr = curve(1.0071546009267338f, -1.0209066704914191f, 0.5699605831985769f);
+    const float kl = curve(0.33416994543071277f, -0.2962022126856069f, 0.08628272130287401f) * force;
+    const float kwc = 0.1f * strength;
+    glUniform1i(g_mwsrSampler, 0);
+    glUniform4f(g_mwsrTexelScale, 1.0f/inW, 1.0f/inH, sx, sy);
+    glUniform4f(g_mwsrDimsAcross, static_cast<float>(inW), static_cast<float>(inH), kr/inW, kr/inH);
+    glUniform4f(g_mwsrKernel, kc, 0.005f, kg, kwc);
+    glUniform4f(g_mwsrZone, 0.5f, 0.5f, 0.2f, 0.45f);
+    glUniform4f(g_mwsrZoneBonus, 0.75f, 0.005f, kg*1.5f, 0.0f);
+    glUniform4f(g_mwsrBound, kl, 1.0f, 0.0f, 0.0f);
+}
+
 GLuint g_blitUpscaleProgram = 0;
 EGLContext g_blitUpscaleContext = EGL_NO_CONTEXT;
 GLint g_blitUpscaleSampler = -1;
@@ -763,8 +943,11 @@ bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHei
         dstWidth <= sourceWidth || dstHeight <= sourceHeight || dstWidth <= 0 || dstHeight <= 0)
         return false;
     const bool useSgsr1 = config.upscaler == "sgsr1";
-    if (useSgsr1 ? !EnsureSgsr1Program(context) : !EnsureBlitUpscaleProgram(context)) return false;
-    const GLuint selectedProgram = useSgsr1 ? g_sgsr1Program : g_blitUpscaleProgram;
+    const bool useMwsr = config.upscaler == "mwsr";
+    if (useMwsr ? !EnsureMwsrProgram(context) :
+        useSgsr1 ? !EnsureSgsr1Program(context) : !EnsureBlitUpscaleProgram(context)) return false;
+    const GLuint selectedProgram = useMwsr ? g_mwsrProgram :
+        useSgsr1 ? g_sgsr1Program : g_blitUpscaleProgram;
 
     GLint oldDrawFbo = 0, oldReadFbo = 0, oldProgram = 0, oldActiveTexture = 0;
     GLint oldTexture0 = 0, oldViewport[4]{}, oldVao = 0, oldArrayBuffer = 0;
@@ -803,7 +986,9 @@ bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHei
     glUseProgram(selectedProgram);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, sourceTexture);
-    if (useSgsr1) {
+    if (useMwsr) {
+        SetMwsrUniforms(sourceWidth, sourceHeight, dstWidth, dstHeight);
+    } else if (useSgsr1) {
         glUniform1i(g_sgsr1Sampler, 0);
         glUniform4f(g_sgsr1Viewport, 1.0f / sourceWidth, 1.0f / sourceHeight,
                     static_cast<float>(sourceWidth), static_cast<float>(sourceHeight));
