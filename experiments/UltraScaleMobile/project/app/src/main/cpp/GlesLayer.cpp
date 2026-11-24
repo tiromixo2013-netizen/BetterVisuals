@@ -485,10 +485,20 @@ GLenum LayerCheckFramebufferStatus(GLenum target) {
 }
 
 
+#ifndef ULTRASCALE_DEFAULT_UPSCALER
+#define ULTRASCALE_DEFAULT_UPSCALER "fsr_lite"
+#endif
+#ifndef ULTRASCALE_DEFAULT_CAS
+#define ULTRASCALE_DEFAULT_CAS 0
+#endif
+#ifndef ULTRASCALE_DEFAULT_CAS_SHARPNESS
+#define ULTRASCALE_DEFAULT_CAS_SHARPNESS 0.25f
+#endif
+
 struct RendererConfig {
-    bool casEnabled = false;
-    float casSharpness = 0.5f;
-    std::string upscaler = "fsr_lite";
+    bool casEnabled = (ULTRASCALE_DEFAULT_CAS != 0);
+    float casSharpness = ULTRASCALE_DEFAULT_CAS_SHARPNESS;
+    std::string upscaler = ULTRASCALE_DEFAULT_UPSCALER;
 };
 GLuint g_postProgram = 0;
 GLuint g_postTexture = 0;
