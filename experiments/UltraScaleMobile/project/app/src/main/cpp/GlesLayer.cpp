@@ -521,6 +521,8 @@ RendererConfig ReadRendererConfig() {
     return cached;
 }
 
+GLuint CompilePostShader(GLenum type, const char* source);
+
 GLuint g_blitUpscaleProgram = 0;
 EGLContext g_blitUpscaleContext = EGL_NO_CONTEXT;
 GLint g_blitUpscaleSampler = -1;
@@ -632,6 +634,7 @@ bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHei
 
     GLint oldDrawFbo = 0, oldReadFbo = 0, oldProgram = 0, oldActiveTexture = 0;
     GLint oldTexture0 = 0, oldViewport[4]{}, oldVao = 0, oldArrayBuffer = 0;
+    GLint oldMinFilter = GL_LINEAR, oldMagFilter = GL_LINEAR;
     GLboolean oldColorMask[4]{};
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldDrawFbo);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldReadFbo);
@@ -649,6 +652,12 @@ bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHei
 
     glActiveTexture(GL_TEXTURE0);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &oldTexture0);
+    glBindTexture(GL_TEXTURE_2D, sourceTexture);
+    glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, &oldMinFilter);
+    glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, &oldMagFilter);
+    const GLint sampleFilter = config.upscaler == "nearest" ? GL_NEAREST : GL_LINEAR;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sampleFilter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sampleFilter);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glViewport(dstX0, dstY0, dstWidth, dstHeight);
     glDisable(GL_BLEND);
@@ -678,6 +687,9 @@ bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHei
     if (stencil) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
     if (cull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
     if (scissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    glBindTexture(GL_TEXTURE_2D, sourceTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, oldMinFilter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, oldMagFilter);
     glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(oldTexture0));
     glActiveTexture(static_cast<GLenum>(oldActiveTexture));
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(oldDrawFbo));
