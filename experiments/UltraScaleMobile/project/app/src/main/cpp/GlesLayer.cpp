@@ -2,6 +2,8 @@
 #include <GLES3/gl3.h>
 #include <android/log.h>
 #include <atomic>
+#include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -681,6 +683,21 @@ void main() {
  // Copyright (c) 2026 Bruno Martin
  // SPDX-License-Identifier: MIT
  // Source and parameters: https://github.com/linckosz/moonlight-web/tree/main/mwsr
+ // Permission is hereby granted, free of charge, to any person obtaining a copy
+ // of this software and associated documentation files (the "Software"), to deal
+ // in the Software without restriction, including without limitation the rights
+ // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ // copies of the Software, and to permit persons to whom the Software is
+ // furnished to do so, subject to the following conditions:
+ // The above copyright notice and this permission notice shall be included in all
+ // copies or substantial portions of the Software.
+ // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ // SOFTWARE.
 precision highp float;
 precision highp int;
 uniform sampler2D uTex;
@@ -800,9 +817,10 @@ void main() {
     g_mwsrZone = glGetUniformLocation(program, "uZone");
     g_mwsrZoneBonus = glGetUniformLocation(program, "uZoneBonus");
     g_mwsrBound = glGetUniformLocation(program, "uBound");
+    // GAZE is compiled as zero in the bundled Performance shader, so the
+    // zone uniforms may be optimized out by the GLES compiler.
     const bool valid = g_mwsrSampler >= 0 && g_mwsrTexelScale >= 0 &&
-        g_mwsrDimsAcross >= 0 && g_mwsrKernel >= 0 && g_mwsrZone >= 0 &&
-        g_mwsrZoneBonus >= 0 && g_mwsrBound >= 0;
+        g_mwsrDimsAcross >= 0 && g_mwsrKernel >= 0 && g_mwsrBound >= 0;
     if (valid) __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES", "MWSR Performance spatial shader compiled");
     return valid;
 }
