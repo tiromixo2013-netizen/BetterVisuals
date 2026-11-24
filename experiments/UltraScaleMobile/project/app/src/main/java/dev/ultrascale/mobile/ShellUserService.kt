@@ -313,7 +313,7 @@ class ShellUserService : ICommandService.Stub() {
         require(values.keys.all { it == "cas" || it == "sharpness" }) {
             "Only the supported final-frame CAS settings can be written."
         }
-        require(values["cas"] in setOf("0", "1")) { "cas must be 0 or 1." }
+        require(values["cas"]?.let { it == "0" || it == "1" } == true) { "cas must be 0 or 1." }
         val sharpness = values["sharpness"]?.toFloatOrNull()
             ?: error("sharpness must be a number from 0.0 to 1.0.")
         require(sharpness.isFinite() && sharpness in 0.0f..1.0f) {
