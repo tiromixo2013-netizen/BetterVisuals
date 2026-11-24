@@ -46,3 +46,36 @@ The packaging workflow now removes stale `META-INF` BNDLTOOL/JAR signature metad
 
 
 The split-signature cleanup predicate was corrected to match `.RSA`, `.DSA`, `.EC`, `.SF`, and `MANIFEST.MF` entries using case-insensitive filename suffix checks; a fresh CI run is triggered for this revision.
+
+
+## Native engine identification — Asphalt 8 9.2.0i (ARM64)
+
+The pinned split APK was inspected directly. `config.arm64_v8a.apk` contains
+`libAsphalt8.so`, whose ELF dependencies include `libEGL.so` and
+`libGLESv2.so`; its exported JNI entry points include
+`GL2JNILib_initGL`, `resize`, and `step`. This is a native Gameloft
+C/C++ renderer using EGL/OpenGL ES, not a Unity or Unreal title. The
+`libAsphalt8.so` binary is stripped, so the engine's internal render-pass
+callbacks and render-target ownership are not exposed by symbols.
+
+The game's own `gameoptions.json` contains a recognized `Specific` profile
+with `scaleDisplay` and `scaleAABuffer` values, including multiple
+`RES_*` overrides. These are the correct engine-owned resolution controls
+to investigate before attempting to override GLES viewports. Their live
+effect and active resolution-profile selection still require on-device
+measurement; do not treat the values as a proven UltraScale adapter.
+
+The safe external integration boundary remains the Android GLES layer's
+`eglSwapBuffers` chain. A final-frame post-process can be attached there
+only after confirming the layer is loaded and the default framebuffer is
+the game's final scene. It cannot by itself recover a lower-resolution
+internal scene or provide motion vectors/depth for SGSR2. The current layer
+is still telemetry/pass-through; no upscaler or frame-generation mode is
+reported active.
+
+Android's documented GLES layer eligibility includes target-app manifest
+opt-in metadata for apps targeting API 30+, debuggable apps, or supported
+userdebug/root lab devices. The metadata must be placed in Asphalt 8's own
+manifest, not the UltraScale controller app. The user's re-signed APK path
+permits editing that manifest, but the target SDK and runtime loader attach
+must be verified on the phone.
