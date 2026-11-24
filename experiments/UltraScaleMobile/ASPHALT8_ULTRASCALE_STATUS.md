@@ -79,3 +79,36 @@ userdebug/root lab devices. The metadata must be placed in Asphalt 8's own
 manifest, not the UltraScale controller app. The user's re-signed APK path
 permits editing that manifest, but the target SDK and runtime loader attach
 must be verified on the phone.
+
+
+## Experimental GLES spatial pass integration — 2026-11-24
+
+The ARM64 GLES layer now has an experimental scene-blit dispatch in
+`glBlitFramebuffer`. It only substitutes a full-image color blit from a
+tracked texture-backed off-screen framebuffer to the default window framebuffer
+when the destination is larger than the source. Other blits continue through
+the game's original function.
+
+Implemented spatial modes in this dispatch:
+
+- Bilinear and nearest sampling.
+- UltraScale FSR Lite (custom six-tap, not official AMD FSR).
+- Qualcomm-derived SGSR1 fragment pass with GLES 3.1 shader compilation.
+- MWSR Performance fragment pass, with scale-derived uniforms from the
+  upstream MIT implementation; the copyright and MIT notice are retained.
+
+The CAS final-frame pass remains independently selectable at build time and
+runs only when enabled. The build workflow also accepts a render-scale value
+and patches the game's recognized `Specific.scaleDisplay` overrides while
+preserving `GFXOption` and other graphics effects.
+
+These are code-path integrations, not yet proof of successful interception in
+the retail Asphalt 8 process. Android GLES layer attachment, the game's actual
+render-target pattern, shader compilation on Adreno 610, output correctness
+and frame-time cost still require device logs and visual testing.
+
+SGSR2 temporal reconstruction is not implemented: the current generic layer
+does not receive game depth, motion vectors, jitter or temporal history.
+Pyramidal Lucas–Kanade frame generation, x2/x3/x4 presentation, in-game menu
+injection, and queue/frame-pacing controls are also not implemented. Do not
+present their saved settings as active renderer features.
