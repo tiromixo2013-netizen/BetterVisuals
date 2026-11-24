@@ -553,6 +553,9 @@ void main() {
         glDeleteProgram(program);
         return false;
     }
+    GLint previousActiveTexture = 0, previousTextureBinding = 0;
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTextureBinding);
     GLuint texture = 0;
     glGenTextures(1, &texture);
     if (!texture) {
@@ -564,6 +567,8 @@ void main() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTextureBinding));
+    glActiveTexture(static_cast<GLenum>(previousActiveTexture));
 
     g_postProgram = program;
     g_postTexture = texture;
@@ -595,13 +600,14 @@ void ApplyFinalFramePostProcess(EGLDisplay display, EGLSurface surface, EGLConte
     if (drawFbo != 0 || readFbo != 0 || sampleBuffers != 0) return;
 
     GLint oldProgram = 0, oldActiveTexture = 0, oldTexture0 = 0;
-    GLint oldViewport[4]{}, oldVao = 0, oldArrayBuffer = 0;
+    GLint oldViewport[4]{}, oldVao = 0, oldArrayBuffer = 0, oldPixelUnpackBuffer = 0;
     GLboolean oldColorMask[4]{};
     glGetIntegerv(GL_CURRENT_PROGRAM, &oldProgram);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &oldActiveTexture);
     glGetIntegerv(GL_VIEWPORT, oldViewport);
     glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &oldVao);
     glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldArrayBuffer);
+    glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &oldPixelUnpackBuffer);
     glGetBooleanv(GL_COLOR_WRITEMASK, oldColorMask);
 
     glActiveTexture(GL_TEXTURE0);
@@ -614,7 +620,9 @@ void ApplyFinalFramePostProcess(EGLDisplay display, EGLSurface surface, EGLConte
 
     glBindTexture(GL_TEXTURE_2D, g_postTexture);
     if (g_postWidth != width || g_postHeight != height) {
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, static_cast<GLuint>(oldPixelUnpackBuffer));
         g_postWidth = width;
         g_postHeight = height;
     }
