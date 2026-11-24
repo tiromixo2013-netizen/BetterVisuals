@@ -507,7 +507,7 @@ RendererConfig ReadRendererConfig() {
         const std::string value = line.substr(split + 1);
         if (key == "cas") config.casEnabled = (value == "1" || value == "true");
         else if (key == "upscaler") {
-            if (value == "nearest" || value == "bilinear" || value == "fsr_lite")
+            if (value == "nearest" || value == "bilinear" || value == "fsr_lite" || value == "sgsr1")
                 config.upscaler = value;
         }
         else if (key == "sharpness") {
@@ -522,6 +522,119 @@ RendererConfig ReadRendererConfig() {
 }
 
 GLuint CompilePostShader(GLenum type, const char* source);
+
+GLuint g_sgsr1Program = 0;
+EGLContext g_sgsr1Context = EGL_NO_CONTEXT;
+GLint g_sgsr1Sampler = -1;
+GLint g_sgsr1Viewport = -1;
+
+bool EnsureSgsr1Program(EGLContext context) {
+    if (g_sgsr1Program && g_sgsr1Context == context) return true;
+    static const char* vsSource = R"SGSRVS(#version 310 es
+precision highp float;
+out highp vec4 in_TEXCOORD0;
+void main() {
+    vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+    in_TEXCOORD0 = vec4(p, 0.0, 1.0);
+    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+})SGSRVS";
+    static const char* fsSource = R"SGSRFS(#version 310 es
+precision mediump float;
+precision highp int;
+#define OperationMode 1
+#define EdgeThreshold (8.0 / 255.0)
+#define EdgeSharpness 2.0
+uniform highp vec4 ViewportInfo[1];
+uniform mediump sampler2D ps0;
+layout(location=0) in highp vec4 in_TEXCOORD0;
+layout(location=0) out vec4 out_Target0;
+float fastLanczos2(float x) {
+    float wA = x - 4.0;
+    float wB = x * wA - wA;
+    wA *= wA;
+    return wB * wA;
+}
+vec2 weightY(float dx, float dy, float c, float std) {
+    float x = ((dx * dx) + (dy * dy)) * 0.55 + clamp(abs(c) * std, 0.0, 1.0);
+    float w = fastLanczos2(x);
+    return vec2(w, w * c);
+}
+void main() {
+    const int mode = OperationMode;
+    vec4 color = textureLod(ps0, in_TEXCOORD0.xy, 0.0);
+    highp vec2 imgCoord = (in_TEXCOORD0.xy * ViewportInfo[0].zw) + vec2(-0.5, 0.5);
+    highp vec2 imgCoordPixel = floor(imgCoord);
+    highp vec2 coord = imgCoordPixel * ViewportInfo[0].xy;
+    vec2 pl = imgCoord - imgCoordPixel;
+    vec4 left = textureGather(ps0, coord, mode);
+    float edgeVote = abs(left.z - left.y) + abs(color[mode] - left.y) + abs(color[mode] - left.z);
+    if (edgeVote > EdgeThreshold) {
+        coord.x += ViewportInfo[0].x;
+        vec4 right = textureGather(ps0, coord + vec2(ViewportInfo[0].x, 0.0), mode);
+        vec4 upDown;
+        upDown.xy = textureGather(ps0, coord + vec2(0.0, -ViewportInfo[0].y), mode).wz;
+        upDown.zw = textureGather(ps0, coord + vec2(0.0, ViewportInfo[0].y), mode).yx;
+        float mean = (left.y + left.z + right.x + right.w) * 0.25;
+        left -= vec4(mean);
+        right -= vec4(mean);
+        upDown -= vec4(mean);
+        color.w = color[mode] - mean;
+        float sum = abs(left.x)+abs(left.y)+abs(left.z)+abs(left.w)
+                  + abs(right.x)+abs(right.y)+abs(right.z)+abs(right.w)
+                  + abs(upDown.x)+abs(upDown.y)+abs(upDown.z)+abs(upDown.w);
+        float std = 2.181818 / max(sum, 0.00001);
+        vec2 aWY = weightY(pl.x, pl.y+1.0, upDown.x, std);
+        aWY += weightY(pl.x-1.0, pl.y+1.0, upDown.y, std);
+        aWY += weightY(pl.x-1.0, pl.y-2.0, upDown.z, std);
+        aWY += weightY(pl.x, pl.y-2.0, upDown.w, std);
+        aWY += weightY(pl.x+1.0, pl.y-1.0, left.x, std);
+        aWY += weightY(pl.x, pl.y-1.0, left.y, std);
+        aWY += weightY(pl.x, pl.y, left.z, std);
+        aWY += weightY(pl.x+1.0, pl.y, left.w, std);
+        aWY += weightY(pl.x-1.0, pl.y-1.0, right.x, std);
+        aWY += weightY(pl.x-2.0, pl.y-1.0, right.y, std);
+        aWY += weightY(pl.x-2.0, pl.y, right.z, std);
+        aWY += weightY(pl.x-1.0, pl.y, right.w, std);
+        float finalY = aWY.y / max(aWY.x, 0.00001);
+        float maxY = max(max(left.y, left.z), max(right.x, right.w));
+        float minY = min(min(left.y, left.z), min(right.x, right.w));
+        finalY = clamp(EdgeSharpness * finalY, minY, maxY);
+        float deltaY = clamp(finalY - color.w, -23.0/255.0, 23.0/255.0);
+        color.rgb = clamp(color.rgb + vec3(deltaY), 0.0, 1.0);
+    }
+    color.a = 1.0;
+    out_Target0 = color;
+})SGSRFS";
+    GLuint vs = CompilePostShader(GL_VERTEX_SHADER, vsSource);
+    GLuint fs = CompilePostShader(GL_FRAGMENT_SHADER, fsSource);
+    if (!vs || !fs) {
+        if (vs) glDeleteShader(vs);
+        if (fs) glDeleteShader(fs);
+        return false;
+    }
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    GLint linked = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        char log[2048]{};
+        GLsizei length = 0;
+        glGetProgramInfoLog(program, sizeof(log), &length, log);
+        __android_log_print(ANDROID_LOG_ERROR, "UltraScaleGLES", "SGSR1 link failed: %.*s", length, log);
+        glDeleteProgram(program);
+        return false;
+    }
+    g_sgsr1Program = program;
+    g_sgsr1Context = context;
+    g_sgsr1Sampler = glGetUniformLocation(program, "ps0");
+    g_sgsr1Viewport = glGetUniformLocation(program, "ViewportInfo[0]");
+    __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES", "Qualcomm SGSR1 spatial pass compiled");
+    return g_sgsr1Sampler >= 0 && g_sgsr1Viewport >= 0;
+}
 
 GLuint g_blitUpscaleProgram = 0;
 EGLContext g_blitUpscaleContext = EGL_NO_CONTEXT;
@@ -630,7 +743,9 @@ bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHei
     if (srcX0 != 0 || srcY0 != 0 || srcWidth != sourceWidth || srcHeight != sourceHeight ||
         dstWidth <= sourceWidth || dstHeight <= sourceHeight || dstWidth <= 0 || dstHeight <= 0)
         return false;
-    if (!EnsureBlitUpscaleProgram(context)) return false;
+    const bool useSgsr1 = config.upscaler == "sgsr1";
+    if (useSgsr1 ? !EnsureSgsr1Program(context) : !EnsureBlitUpscaleProgram(context)) return false;
+    const GLuint selectedProgram = useSgsr1 ? g_sgsr1Program : g_blitUpscaleProgram;
 
     GLint oldDrawFbo = 0, oldReadFbo = 0, oldProgram = 0, oldActiveTexture = 0;
     GLint oldTexture0 = 0, oldViewport[4]{}, oldVao = 0, oldArrayBuffer = 0;
@@ -666,13 +781,19 @@ bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHei
     glDisable(GL_CULL_FACE);
     glDisable(GL_SCISSOR_TEST);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glUseProgram(g_blitUpscaleProgram);
+    glUseProgram(selectedProgram);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, sourceTexture);
-    glUniform1i(g_blitUpscaleSampler, 0);
-    glUniform2f(g_blitUpscaleSize, static_cast<float>(sourceWidth), static_cast<float>(sourceHeight));
-    const GLint mode = config.upscaler == "nearest" ? 1 : (config.upscaler == "fsr_lite" ? 2 : 0);
-    glUniform1i(g_blitUpscaleMode, mode);
+    if (useSgsr1) {
+        glUniform1i(g_sgsr1Sampler, 0);
+        glUniform4f(g_sgsr1Viewport, 1.0f / sourceWidth, 1.0f / sourceHeight,
+                    static_cast<float>(sourceWidth), static_cast<float>(sourceHeight));
+    } else {
+        glUniform1i(g_blitUpscaleSampler, 0);
+        glUniform2f(g_blitUpscaleSize, static_cast<float>(sourceWidth), static_cast<float>(sourceHeight));
+        const GLint mode = config.upscaler == "nearest" ? 1 : (config.upscaler == "fsr_lite" ? 2 : 0);
+        glUniform1i(g_blitUpscaleMode, mode);
+    }
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glDrawArrays(GL_TRIANGLES, 0, 3);
