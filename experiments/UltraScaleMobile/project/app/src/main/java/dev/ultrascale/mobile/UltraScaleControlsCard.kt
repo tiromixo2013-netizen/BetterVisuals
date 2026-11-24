@@ -152,11 +152,12 @@ fun UltraScaleControlsCard() {
             )
             Text(
                 when (settings.upscaler) {
-                    UpscaleMode.OFF, UpscaleMode.NEAREST, UpscaleMode.BILINEAR,
-                    UpscaleMode.FSR_LITE ->
-                        "Available in the app-owned render test only; not yet connected to Asphalt 8's render target."
-                    else ->
-                        "Shader/reference is bundled, but this technique still needs a validated game render-pass backend."
+                    UpscaleMode.OFF -> "Pass-through mode; no spatial reconstruction is applied."
+                    UpscaleMode.NEAREST, UpscaleMode.BILINEAR, UpscaleMode.FSR_LITE,
+                    UpscaleMode.MWSR, UpscaleMode.SGSR1 ->
+                        "Experimental GLES layer path is wired for qualifying low-resolution color blits; actual Asphalt 8 attachment and visual output still need device verification."
+                    UpscaleMode.SGSR2 ->
+                        "Temporal SGSR2 still requires game motion vectors, depth, jitter and history buffers; not active in Asphalt 8."
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
