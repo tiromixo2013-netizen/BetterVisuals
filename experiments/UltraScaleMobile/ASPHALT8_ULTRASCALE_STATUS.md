@@ -126,3 +126,19 @@ The exact cause remains open between Play Asset Delivery ownership/recognition a
 ## Remaining temporal features — explicit implementation boundary
 
 SGSR2 source files are already bundled in the standalone app, but the Asphalt 8 external GLES layer does not receive the game depth, motion vectors, camera jitter or temporal history required by the algorithm. It therefore cannot honestly expose SGSR2 as an active Asphalt 8 upscaler yet. Real x2/x3/x4 frame generation likewise needs a motion source and a controlled presentation cadence/queue; adding a shader toggle or repeating frames would be a fake implementation. Low-latency queue and frame-pacing controls are not active in the current target-game adapter. These features remain gated until the relevant game-owned inputs and presentation path can be demonstrated.
+
+## Direct original-vs-modified APK comparison — 2026-11-24
+
+The original APKPure XAPK and the UltraScale test XAPK were downloaded from their archived workflow artifacts and compared directly.
+
+- All 11 `classes*.dex` files in the base APK are byte-identical between the two builds.
+- `asset-delivery.properties` is byte-identical (PAD client 2.1.0).
+- PAD API symbols and error strings are identical in both DEX sets. The game's Java/Kotlin PAD downloader was not removed or modified by the UltraScale patch.
+- ABI and density split APK payloads are identical apart from signing metadata.
+- The modified base APK adds `libGLES_ultrascale.so` and `com.android.graphics.injectLayers.enable=true`.
+- Manifest differences also include `android:isSplitRequired=true` and one deep-link scheme serialized as its resolved literal.
+- The only semantic gameoptions JSON changes are GPU_5 FPSLimit 60 -> 240 and existing Specific profile scaleDisplay values -> 70. No PAD-related gameoptions key changed.
+
+The comparison source called "original" is APKPure, not an authenticated Google Play delivery. Both available artifacts are sideloaded; neither proves Play ownership/recognition. Google PAD error codes `APP_NOT_OWNED (-13)` and `UNRECOGNIZED_INSTALLATION (-15)` are the leading explanation to verify on-device. The graphics-layer manifest flag is an unrelated isolation candidate, not a confirmed PAD cause.
+
+Detailed comparison: [reports/asphalt8-9.2.0i-pad-comparison-2026-11-24.md](../../../../reports/asphalt8-9.2.0i-pad-comparison-2026-11-24.md)
