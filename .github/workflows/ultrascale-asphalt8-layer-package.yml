@@ -113,9 +113,6 @@ jobs:
           tree.write(p,encoding="utf-8",xml_declaration=True)
           print("Added com.android.graphics.injectLayers.enable=true")
           PY
-          mkdir -p work/decoded/game/lib/arm64-v8a
-          cp work/layer/libGLES_ultrascale.so work/decoded/game/lib/arm64-v8a/
-          apktool b work/decoded/game -o work/output/base-unsigned.apk
           # Patch the opaque gameoptions asset directly in the rebuilt APK.
           # Apktool's asset decode path can alter this large JSON payload; ZIP-level
           # replacement preserves every unrelated APK entry and original options.
