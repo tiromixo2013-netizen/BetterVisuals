@@ -174,9 +174,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp work/xapk/manifest.json work/output/manifest.json
-          (cd work/output && zip -q -9 ../UltraScale-Asphalt8-9.2.0i-GLES-layer-test.xapk \
+          mkdir -p work/package
+          cp work/output/com.gameloft.android.ANMP.GloftA8HM.apk work/package/
+          cp work/xapk/manifest.json work/package/manifest.json
+          # Package ONLY the final signed split APKs. Never include intermediate
+          # *.aligned.apk or *.unsigned.apk files: XAPK installers may try to
+          # install those unsigned intermediates and fail with NO_CERTIFICATES.
+          for source_split in work/xapk/config.*.apk; do
+            split_name="$(basename "$source_split")"
+            final_split="work/output/$split_name"
+            test -s "$final_split"
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 24 --verbose "$final_split"
+            cp "$final_split" "work/package/$split_name"
+          done
+          test "$(find work/package -maxdepth 1 -name 'config.*.apk' | wc -l)" -gt 0
+          (cd work/package && zip -q -9 ../UltraScale-Asphalt8-9.2.0i-GLES-layer-test.xapk \
             com.gameloft.android.ANMP.GloftA8HM.apk config.*.apk manifest.json)
+          # Assert the XAPK contains no intermediate/unsigned APKs.
+          python3 - <<'PY'
+          import zipfile
+          p="work/UltraScale-Asphalt8-9.2.0i-GLES-layer-test.xapk"
+          with zipfile.ZipFile(p) as z:
+              names=z.namelist()
+              assert len(names)==len(set(names)), "Duplicate archive entries detected"
+              apks=[n for n in names if n.endswith(".apk")]
+              assert all(".aligned." not in n and ".unsigned." not in n for n in apks), apks
+              assert len(apks)>=2, apks
+              print("Final XAPK APK entries:", *apks, sep="\\n  ")
+          PY
           sha256sum work/UltraScale-Asphalt8-9.2.0i-GLES-layer-test.xapk | tee work/SHA256SUMS.txt
           {
             echo "Target package: com.gameloft.android.ANMP.GloftA8HM"
