@@ -113,9 +113,13 @@ jobs:
           tree.write(p,encoding="utf-8",xml_declaration=True)
           print("Added com.android.graphics.injectLayers.enable=true")
           PY
-          # Patch the opaque gameoptions asset directly in the rebuilt APK.
-          # Apktool's asset decode path can alter this large JSON payload; ZIP-level
-          # replacement preserves every unrelated APK entry and original options.
+          mkdir -p work/decoded/game/lib/arm64-v8a
+          cp work/layer/libGLES_ultrascale.so work/decoded/game/lib/arm64-v8a/
+          # Rebuild first: the patched manifest and native library must exist in
+          # base-unsigned.apk before the ZIP-preserving gameoptions edit runs.
+          apktool b work/decoded/game -o work/output/base-unsigned.apk
+          # Patch the opaque gameoptions asset at ZIP level to preserve all other
+          # APK entries and retain the original quality/effects settings.
           python3 - <<'PY'
           import json, zipfile
           from pathlib import Path
@@ -143,9 +147,6 @@ jobs:
           src.unlink()
           dst.rename(src)
           PY
-          mkdir -p work/decoded/game/lib/arm64-v8a
-          cp work/layer/libGLES_ultrascale.so work/decoded/game/lib/arm64-v8a/
-          apktool b work/decoded/game -o work/output/base-unsigned.apk
 
       - name: Align and sign every split with one test key
         shell: bash
