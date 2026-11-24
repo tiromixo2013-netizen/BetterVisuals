@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "target": {
+    "packageName": "com.gameloft.android.ANMP.GloftA8HM",
+    "versionName": "9.2.0i",
+    "deviceModel": "SM-M145F"
+  },
+  "status": "profile_only_not_runtime_injection",
+  "renderScalePercent": 70,
+  "fpsLimit": 60,
+  "upscaler": "SGSR1",
+  "upscaleSharpnessPercent": 20,
+  "preset": "BALANCED",
+  "casEnabled": false,
+  "casSharpnessPercent": 0,
+  "lowLatency": "OFF",
+  "framePacing": true,
+  "frameGeneration": "OFF",
+  "frameGenerationAlgorithm": "PYRAMIDAL_LUCAS_KANADE",
+  "queueDepth": 1,
+  "integerScaling": false,
+  "capabilityGates": {
+    "sgsr2RequiresMotionVectorsDepthJitterAndHistory": true,
+    "frameGenerationRequiresMotionSourceAndPresentationControl": true,
+    "lowLatencyRequiresFrameQueueControl": true,
+    "doNotClaimActiveWithoutGameAdapter": true
+  }
+}
