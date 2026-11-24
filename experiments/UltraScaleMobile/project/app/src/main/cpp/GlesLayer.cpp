@@ -573,6 +573,8 @@ void main() {
     g_postProgram = program;
     g_postTexture = texture;
     g_postContext = context;
+    g_postWidth = 0;
+    g_postHeight = 0;
     g_postSamplerLocation = glGetUniformLocation(program, "uScene");
     g_postSizeLocation = glGetUniformLocation(program, "uInputSize");
     g_postSharpnessLocation = glGetUniformLocation(program, "uSharpness");
