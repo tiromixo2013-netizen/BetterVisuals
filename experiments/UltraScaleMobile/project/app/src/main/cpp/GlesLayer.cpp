@@ -19,7 +19,7 @@ using GlBindFramebuffer = void (*)(GLenum, GLuint);
 using GlBindTexture = void (*)(GLenum, GLuint);
 using GlViewport = void (*)(GLint, GLint, GLsizei, GLsizei);
 using GlDrawArrays = void (*)(GLenum, GLint, GLsizei);
-using GlDrawElements = void (*)(GLenum, GLsizei, GLenum, const void*);
+using GlDrawElements = void (*)(GLenum, GLsizei, GLenum, const void*);\nusing GlBlitFramebuffer = void (*)(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
 using GlFramebufferTexture2D = void (*)(GLenum, GLenum, GLenum, GLuint, GLint);
 using GlCheckFramebufferStatus = GLenum (*)(GLenum);
 using GlTexImage2D = void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*);
@@ -92,7 +92,7 @@ GlBindFramebuffer g_nextBindFramebuffer = nullptr;
 GlBindTexture g_nextBindTexture = nullptr;
 GlViewport g_nextViewport = nullptr;
 GlDrawArrays g_nextDrawArrays = nullptr;
-GlDrawElements g_nextDrawElements = nullptr;
+GlDrawElements g_nextDrawElements = nullptr;\nGlBlitFramebuffer g_nextBlitFramebuffer = nullptr;\nstd::atomic<uint64_t> g_defaultBlitSamples{0};
 GlFramebufferTexture2D g_nextFramebufferTexture2D = nullptr;
 GlCheckFramebufferStatus g_nextCheckFramebufferStatus = nullptr;
 GlTexImage2D g_nextTexImage2D = nullptr;
@@ -356,6 +356,40 @@ void LayerViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
     state.viewportY = y;
     state.viewportWidth = width;
     state.viewportHeight = height;
+}
+
+void LayerBlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
+                          GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
+                          GLbitfield mask, GLenum filter) {
+    if (g_nextBlitFramebuffer)
+        g_nextBlitFramebuffer(srcX0, srcY0, srcX1, srcY1,
+            dstX0, dstY0, dstX1, dstY1, mask, filter);
+    if (!g_nextBlitFramebuffer || (mask & GL_COLOR_BUFFER_BIT) == 0) return;
+    const EGLContext context = CurrentContext();
+    if (context == EGL_NO_CONTEXT) return;
+    GLuint readFbo = 0, drawFbo = 0;
+    TextureInfo source{};
+    {
+        std::lock_guard<std::mutex> lock(g_contextMutex);
+        auto found = g_contexts.find(context);
+        if (found == g_contexts.end()) return;
+        readFbo = found->second.boundReadFramebuffer;
+        drawFbo = found->second.boundFramebuffer;
+        if (readFbo == 0 || drawFbo != 0) return;
+        const auto framebuffer = found->second.framebufferAttachments.find(readFbo);
+        if (framebuffer == found->second.framebufferAttachments.end()) return;
+        const auto color = framebuffer->second.find(GL_COLOR_ATTACHMENT0);
+        if (color == framebuffer->second.end() || color->second.isRenderbuffer) return;
+        source = color->second;
+    }
+    const uint64_t sample = ++g_defaultBlitSamples;
+    if (sample <= 16 || (sample % 120) == 0) {
+        __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
+            "Final blit candidate #%llu read_fbo=%u draw_fbo=%u texture=%u source=%dx%d src_rect=%d,%d-%d,%d dst_rect=%d,%d-%d,%d filter=0x%x",
+            static_cast<unsigned long long>(sample), readFbo, drawFbo, source.texture,
+            source.width, source.height, srcX0, srcY0, srcX1, srcY1,
+            dstX0, dstY0, dstX1, dstY1, filter);
+    }
 }
 
 void RecordDrawForCurrentContext() {
@@ -807,6 +841,9 @@ void* AndroidGLESLayer_GetProcAddress(
     } else if (std::strcmp(funcName, "glDrawElements") == 0) {
         if (next) g_nextDrawElements = reinterpret_cast<GlDrawElements>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerDrawElements));
+    } else if (std::strcmp(funcName, "glBlitFramebuffer") == 0) {
+        if (next) g_nextBlitFramebuffer = reinterpret_cast<GlBlitFramebuffer>(next);
+        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerBlitFramebuffer));
     } else if (std::strcmp(funcName, "glFramebufferTexture2D") == 0) {
         if (next) g_nextFramebufferTexture2D = reinterpret_cast<GlFramebufferTexture2D>(next);
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(&LayerFramebufferTexture2D));
