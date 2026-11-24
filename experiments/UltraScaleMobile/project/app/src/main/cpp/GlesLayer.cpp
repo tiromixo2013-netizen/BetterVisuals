@@ -441,6 +441,9 @@ GLint g_postSamplerLocation = -1;
 std::atomic<bool> g_postInitLogged{false};
 
 RendererConfig ReadRendererConfig() {
+    static RendererConfig cached{};
+    static uint64_t reads = 0;
+    if ((++reads % 120) != 1) return cached;
     RendererConfig config{};
     // The game process owns this Android/data directory, so the layer reads a
     // small sidecar deployed by the UltraScale controller via Shizuku.
@@ -459,7 +462,8 @@ RendererConfig ReadRendererConfig() {
                 config.casSharpness = parsed;
         }
     }
-    return config;
+    cached = config;
+    return cached;
 }
 
 GLuint CompilePostShader(GLenum type, const char* source) {
@@ -590,13 +594,13 @@ void ApplyFinalFramePostProcess(EGLDisplay display, EGLSurface surface, EGLConte
 
     GLint oldProgram = 0, oldActiveTexture = 0, oldTexture0 = 0;
     GLint oldViewport[4]{}, oldVao = 0, oldArrayBuffer = 0;
-    GLint oldColorMask[4]{};
+    GLboolean oldColorMask[4]{};
     glGetIntegerv(GL_CURRENT_PROGRAM, &oldProgram);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &oldActiveTexture);
     glGetIntegerv(GL_VIEWPORT, oldViewport);
     glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &oldVao);
     glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldArrayBuffer);
-    glGetBooleanv(GL_COLOR_WRITEMASK, reinterpret_cast<GLboolean*>(oldColorMask));
+    glGetBooleanv(GL_COLOR_WRITEMASK, oldColorMask);
 
     glActiveTexture(GL_TEXTURE0);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &oldTexture0);
