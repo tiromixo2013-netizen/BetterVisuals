@@ -288,6 +288,84 @@ class ShellUserService : ICommandService.Stub() {
         return "Restored gameoptions.json from ${backup.name}."
     }
 
+    override fun readRendererConfig(): String {
+        val directory = File(
+            "/storage/emulated/0/Android/data/com.gameloft.android.ANMP.GloftA8HM/files"
+        ).canonicalFile
+        require(directory.isDirectory && directory.canRead()) {
+            "Asphalt 8 files folder is unavailable."
+        }
+        val config = File(directory, "ultrascale-renderer.ini").canonicalFile
+        require(config.parentFile == directory) { "Invalid renderer config path." }
+        return if (config.isFile) config.readText(Charsets.UTF_8) else "cas=0\nsharpness=0.5\n"
+    }
+
+    override fun deployRendererConfig(configText: String): String {
+        requireAsphalt8Stopped()
+        require(configText.toByteArray(Charsets.UTF_8).size <= 1024) {
+            "Renderer config exceeds the 1 KiB safety limit."
+        }
+        val lines = configText.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+        val values = lines.mapNotNull { line ->
+            val split = line.indexOf('=')
+            if (split <= 0) null else line.substring(0, split).trim() to line.substring(split + 1).trim()
+        }.toMap()
+        require(values.keys.all { it == "cas" || it == "sharpness" }) {
+            "Only the supported final-frame CAS settings can be written."
+        }
+        require(values["cas"] in setOf("0", "1")) { "cas must be 0 or 1." }
+        val sharpness = values["sharpness"]?.toFloatOrNull()
+            ?: error("sharpness must be a number from 0.0 to 1.0.")
+        require(sharpness.isFinite() && sharpness in 0.0f..1.0f) {
+            "sharpness must be from 0.0 to 1.0."
+        }
+        val canonical = "cas=${values["cas"]}\nsharpness=${sharpness}\n"
+        val directory = File(
+            "/storage/emulated/0/Android/data/com.gameloft.android.ANMP.GloftA8HM/files"
+        ).canonicalFile
+        require(directory.isDirectory && directory.canWrite()) {
+            "Asphalt 8 files folder is unavailable or not writable through Shizuku."
+        }
+        val destination = File(directory, "ultrascale-renderer.ini").canonicalFile
+        require(destination.parentFile == directory) { "Invalid renderer config destination." }
+        val temporary = File(directory, ".ultrascale-renderer.ini.tmp")
+        try {
+            FileOutputStream(temporary, false).use { output ->
+                output.write(canonical.toByteArray(Charsets.UTF_8))
+                output.flush()
+                output.fd.sync()
+            }
+            try {
+                Files.move(temporary.toPath(), destination.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temporary.toPath(), destination.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING)
+            }
+        } finally {
+            temporary.delete()
+        }
+        check(destination.isFile && destination.readText(Charsets.UTF_8) == canonical) {
+            "Renderer config failed verification."
+        }
+        return "Applied final-frame CAS config (cas=${values["cas"]}, sharpness=${sharpness}). Relaunch Asphalt 8; the layer reads the sidecar while rendering."
+    }
+
+    override fun restoreRendererConfig(): String {
+        requireAsphalt8Stopped()
+        val directory = File(
+            "/storage/emulated/0/Android/data/com.gameloft.android.ANMP.GloftA8HM/files"
+        ).canonicalFile
+        val destination = File(directory, "ultrascale-renderer.ini").canonicalFile
+        require(destination.parentFile == directory) { "Invalid renderer config path." }
+        if (destination.exists()) {
+            require(destination.isFile && destination.delete()) {
+                "Could not remove UltraScale renderer config."
+            }
+        }
+        return "Removed UltraScale renderer config. The GLES layer is pass-through until CAS is configured again."
+    }
+
     private fun requireAsphalt8Stopped() {
         val process = ProcessBuilder(
             "pidof",
