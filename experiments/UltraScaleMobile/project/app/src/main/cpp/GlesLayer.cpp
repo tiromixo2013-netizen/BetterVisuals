@@ -970,6 +970,7 @@ bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHei
     GLint oldDrawFbo = 0, oldReadFbo = 0, oldProgram = 0, oldActiveTexture = 0;
     GLint oldTexture0 = 0, oldViewport[4]{}, oldVao = 0, oldArrayBuffer = 0;
     GLint oldMinFilter = GL_LINEAR, oldMagFilter = GL_LINEAR;
+    GLint oldWrapS = GL_CLAMP_TO_EDGE, oldWrapT = GL_CLAMP_TO_EDGE, oldSampler = 0;
     GLboolean oldColorMask[4]{};
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldDrawFbo);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldReadFbo);
@@ -987,12 +988,18 @@ bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHei
 
     glActiveTexture(GL_TEXTURE0);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &oldTexture0);
+    glGetIntegerv(GL_SAMPLER_BINDING, &oldSampler);
+    glBindSampler(0, 0);
     glBindTexture(GL_TEXTURE_2D, sourceTexture);
     glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, &oldMinFilter);
     glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, &oldMagFilter);
+    glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, &oldWrapS);
+    glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, &oldWrapT);
     const GLint sampleFilter = config.upscaler == "nearest" ? GL_NEAREST : GL_LINEAR;
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sampleFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sampleFilter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glViewport(dstX0, dstY0, dstWidth, dstHeight);
     glDisable(GL_BLEND);
@@ -1033,7 +1040,10 @@ bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHei
     glBindTexture(GL_TEXTURE_2D, sourceTexture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, oldMinFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, oldMagFilter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, oldWrapS);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, oldWrapT);
     glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(oldTexture0));
+    glBindSampler(0, static_cast<GLuint>(oldSampler));
     glActiveTexture(static_cast<GLenum>(oldActiveTexture));
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(oldDrawFbo));
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(oldReadFbo));
