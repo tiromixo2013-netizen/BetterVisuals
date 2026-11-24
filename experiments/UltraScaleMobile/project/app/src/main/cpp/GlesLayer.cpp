@@ -371,31 +371,40 @@ void LayerBlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
                           GLbitfield mask, GLenum filter) {
     if (!g_nextBlitFramebuffer) return;
     const EGLContext context = CurrentContext();
-    if (context == EGL_NO_CONTEXT) return;
+    if (context == EGL_NO_CONTEXT) {
+        g_nextBlitFramebuffer(srcX0, srcY0, srcX1, srcY1,
+            dstX0, dstY0, dstX1, dstY1, mask, filter);
+        return;
+    }
     GLuint readFbo = 0, drawFbo = 0;
     TextureInfo source{};
+    bool candidate = false;
     {
         std::lock_guard<std::mutex> lock(g_contextMutex);
         auto found = g_contexts.find(context);
-        if (found == g_contexts.end()) return;
-        readFbo = found->second.boundReadFramebuffer;
-        drawFbo = found->second.boundFramebuffer;
-        if (readFbo == 0 || drawFbo != 0) return;
-        const auto framebuffer = found->second.framebufferAttachments.find(readFbo);
-        if (framebuffer == found->second.framebufferAttachments.end()) return;
-        const auto color = framebuffer->second.find(GL_COLOR_ATTACHMENT0);
-        if (color == framebuffer->second.end() || color->second.isRenderbuffer) return;
-        source = color->second;
+        if (found != g_contexts.end()) {
+            readFbo = found->second.boundReadFramebuffer;
+            drawFbo = found->second.boundFramebuffer;
+            if (readFbo != 0 && drawFbo == 0) {
+                const auto framebuffer = found->second.framebufferAttachments.find(readFbo);
+                if (framebuffer != found->second.framebufferAttachments.end()) {
+                    const auto color = framebuffer->second.find(GL_COLOR_ATTACHMENT0);
+                    if (color != framebuffer->second.end() && !color->second.isRenderbuffer) {
+                        source = color->second;
+                        candidate = source.texture != 0;
+                    }
+                }
+            }
+        }
     }
-    if (mask == GL_COLOR_BUFFER_BIT && drawFbo == 0 && readFbo != 0 &&
-        !source.isRenderbuffer && source.texture != 0 &&
+    if (candidate && mask == GL_COLOR_BUFFER_BIT &&
         TryUpscaleBlit(source.texture, source.width, source.height,
             srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, context)) {
         return;
     }
     g_nextBlitFramebuffer(srcX0, srcY0, srcX1, srcY1,
         dstX0, dstY0, dstX1, dstY1, mask, filter);
-    if ((mask & GL_COLOR_BUFFER_BIT) == 0) return;
+    if (!candidate || (mask & GL_COLOR_BUFFER_BIT) == 0) return;
     const uint64_t sample = ++g_defaultBlitSamples;
     if (sample <= 16 || (sample % 120) == 0) {
         __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
