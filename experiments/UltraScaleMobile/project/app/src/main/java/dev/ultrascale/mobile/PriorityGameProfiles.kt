@@ -42,14 +42,14 @@ object PriorityGameProfiles {
 
     val all: List<GameResearchProfile> = listOf(
         GameResearchProfile(
-            id = "asphalt8-91009",
+            id = "asphalt8-92009",
             title = "Asphalt 8",
             packageName = "com.gameloft.android.ANMP.GloftA8HM",
-            versionPrefixes = setOf("9.1.0i"),
-            candidateAbis = arm32And64,
-            apiCandidates = setOf("OpenGL ES", "Vulkan"),
-            state = GameProfileState.BLOCKED_BY_PLATFORM,
-            integrationNotes = "The inspected 9.1.0i (91009) base APK had no native ABI entries and the installed target was not eligible for external graphics layers. Inspect the complete installed split set and determine the active renderer before designing an engine adapter. No Asphalt render-pass adapter exists."
+            versionPrefixes = setOf("9.2.0i"),
+            candidateAbis = setOf("arm64-v8a"),
+            apiCandidates = setOf("OpenGL ES"),
+            state = GameProfileState.RESEARCH_ONLY,
+            integrationNotes = "The inspected 9.2.0i (92009) ARM64 split contains native libAsphalt8.so linked to EGL and GLESv2, with JNI GL2JNILib initGL/resize/step entry points. This is a native Gameloft C/C++ renderer, not Unity. gameoptions.json exposes existing Specific.scaleDisplay and scaleAABuffer resolution controls. No validated final-scene render target or Asphalt-specific shader pass is implemented yet; Android GLES layer opt-in and runtime attach must be verified."
         ),
         GameResearchProfile(
             id = "geometry-dash-2081-2091",
