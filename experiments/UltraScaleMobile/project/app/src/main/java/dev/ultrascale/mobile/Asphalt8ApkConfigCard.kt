@@ -763,7 +763,7 @@ fun Asphalt8ApkConfigCard(selectedApkUri: Uri?) {
                 ) { Text("Read renderer settings") }
                 Button(
                     onClick = {
-                        val config = "cas=${if (casEnabled) 1 else 0}\\nsharpness=${casSharpness.coerceIn(0f, 1f)}\\n"
+                        val config = "cas=${if (casEnabled) 1 else 0}\nsharpness=${casSharpness.coerceIn(0f, 1f)}\n"
                         rendererBusy = true
                         scope.launch {
                             val result = withContext(Dispatchers.IO) { ShizukuBridge.deployRendererConfig(config) }
