@@ -361,13 +361,15 @@ void LayerViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
     state.viewportHeight = height;
 }
 
+bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHeight,
+                    GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
+                    GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
+                    EGLContext context);
+
 void LayerBlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
                           GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
                           GLbitfield mask, GLenum filter) {
-    if (g_nextBlitFramebuffer)
-        g_nextBlitFramebuffer(srcX0, srcY0, srcX1, srcY1,
-            dstX0, dstY0, dstX1, dstY1, mask, filter);
-    if (!g_nextBlitFramebuffer || (mask & GL_COLOR_BUFFER_BIT) == 0) return;
+    if (!g_nextBlitFramebuffer) return;
     const EGLContext context = CurrentContext();
     if (context == EGL_NO_CONTEXT) return;
     GLuint readFbo = 0, drawFbo = 0;
@@ -385,6 +387,15 @@ void LayerBlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
         if (color == framebuffer->second.end() || color->second.isRenderbuffer) return;
         source = color->second;
     }
+    if (mask == GL_COLOR_BUFFER_BIT && drawFbo == 0 && readFbo != 0 &&
+        !source.isRenderbuffer && source.texture != 0 &&
+        TryUpscaleBlit(source.texture, source.width, source.height,
+            srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, context)) {
+        return;
+    }
+    g_nextBlitFramebuffer(srcX0, srcY0, srcX1, srcY1,
+        dstX0, dstY0, dstX1, dstY1, mask, filter);
+    if ((mask & GL_COLOR_BUFFER_BIT) == 0) return;
     const uint64_t sample = ++g_defaultBlitSamples;
     if (sample <= 16 || (sample % 120) == 0) {
         __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
@@ -468,6 +479,7 @@ GLenum LayerCheckFramebufferStatus(GLenum target) {
 struct RendererConfig {
     bool casEnabled = false;
     float casSharpness = 0.5f;
+    std::string upscaler = "off";
 };
 GLuint g_postProgram = 0;
 GLuint g_postTexture = 0;
@@ -494,6 +506,10 @@ RendererConfig ReadRendererConfig() {
         const std::string key = line.substr(0, split);
         const std::string value = line.substr(split + 1);
         if (key == "cas") config.casEnabled = (value == "1" || value == "true");
+        else if (key == "upscaler") {
+            if (value == "nearest" || value == "bilinear" || value == "fsr_lite")
+                config.upscaler = value;
+        }
         else if (key == "sharpness") {
             char* end = nullptr;
             const float parsed = std::strtof(value.c_str(), &end);
@@ -503,6 +519,178 @@ RendererConfig ReadRendererConfig() {
     }
     cached = config;
     return cached;
+}
+
+GLuint g_blitUpscaleProgram = 0;
+EGLContext g_blitUpscaleContext = EGL_NO_CONTEXT;
+GLint g_blitUpscaleSampler = -1;
+GLint g_blitUpscaleSize = -1;
+GLint g_blitUpscaleMode = -1;
+std::atomic<uint64_t> g_blitUpscaleFrames{0};
+
+bool EnsureBlitUpscaleProgram(EGLContext context) {
+    if (g_blitUpscaleProgram && g_blitUpscaleContext == context) return true;
+    static const char* vsSource = R"GLSL(#version 300 es
+precision highp float;
+out vec2 vUv;
+void main() {
+    vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+    vUv = p;
+    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+})GLSL";
+    static const char* fsSource = R"GLSL(#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform sampler2D uScene;
+uniform vec2 uInputSize;
+uniform int uMode;
+out vec4 oColor;
+float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+vec3 fsrLite(vec2 uv) {
+    vec2 t = 1.0 / uInputSize;
+    vec2 hi = vec2(1.0) - t * 0.5;
+    vec3 c = texture(uScene, clamp(uv, t * 0.5, hi)).rgb;
+    vec3 l = texture(uScene, clamp(uv-vec2(t.x,0.0),t*0.5,hi)).rgb;
+    vec3 r = texture(uScene, clamp(uv+vec2(t.x,0.0),t*0.5,hi)).rgb;
+    vec3 u = texture(uScene, clamp(uv+vec2(0.0,t.y),t*0.5,hi)).rgb;
+    vec3 d = texture(uScene, clamp(uv-vec2(0.0,t.y),t*0.5,hi)).rgb;
+    vec3 q = texture(uScene, clamp(uv+t,t*0.5,hi)).rgb;
+    float gx = abs(luma(r)-luma(l));
+    float gy = abs(luma(u)-luma(d));
+    float edge = clamp(max(gx,gy)*3.0,0.0,1.0);
+    vec3 along = gx > gy ? (u+d)*0.5 : (l+r)*0.5;
+    vec3 diagonal = (c*3.0+l+r+u+d+q)*0.125;
+    vec3 outColor = mix(diagonal,along,edge*0.35);
+    float mn = min(min(luma(l),luma(r)),min(luma(u),luma(d)));
+    float mx = max(max(luma(l),luma(r)),max(luma(u),luma(d)));
+    float detail = clamp(luma(c)-luma(diagonal),-0.08,0.08);
+    outColor += vec3(detail*0.35);
+    float y = clamp(luma(outColor),mn-0.02,mx+0.02);
+    return clamp(outColor*(y/max(luma(outColor),0.0001)),0.0,1.0);
+}
+void main() {
+    vec2 uv = clamp(vUv, vec2(0.5)/uInputSize, vec2(1.0)-vec2(0.5)/uInputSize);
+    vec3 c;
+    if (uMode == 1) {
+        ivec2 p = clamp(ivec2(uv*uInputSize), ivec2(0), ivec2(uInputSize)-ivec2(1));
+        c = texelFetch(uScene,p,0).rgb;
+    } else if (uMode == 2) {
+        c = fsrLite(uv);
+    } else {
+        c = texture(uScene,uv).rgb;
+    }
+    oColor = vec4(c,1.0);
+})GLSL";
+    GLuint vs = CompilePostShader(GL_VERTEX_SHADER, vsSource);
+    GLuint fs = CompilePostShader(GL_FRAGMENT_SHADER, fsSource);
+    if (!vs || !fs) {
+        if (vs) glDeleteShader(vs);
+        if (fs) glDeleteShader(fs);
+        return false;
+    }
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    GLint linked = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        char log[2048]{};
+        GLsizei length = 0;
+        glGetProgramInfoLog(program, sizeof(log), &length, log);
+        __android_log_print(ANDROID_LOG_ERROR, "UltraScaleGLES", "Upscale shader link failed: %.*s", length, log);
+        glDeleteProgram(program);
+        return false;
+    }
+    g_blitUpscaleProgram = program;
+    g_blitUpscaleContext = context;
+    g_blitUpscaleSampler = glGetUniformLocation(program, "uScene");
+    g_blitUpscaleSize = glGetUniformLocation(program, "uInputSize");
+    g_blitUpscaleMode = glGetUniformLocation(program, "uMode");
+    __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES", "Spatial blit upscaler compiled");
+    return true;
+}
+
+bool TryUpscaleBlit(GLuint sourceTexture, GLsizei sourceWidth, GLsizei sourceHeight,
+                    GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1,
+                    GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
+                    EGLContext context) {
+    const RendererConfig config = ReadRendererConfig();
+    if (config.upscaler == "off" || sourceWidth <= 0 || sourceHeight <= 0) return false;
+    const GLsizei srcWidth = srcX1 - srcX0;
+    const GLsizei srcHeight = srcY1 - srcY0;
+    const GLsizei dstWidth = dstX1 - dstX0;
+    const GLsizei dstHeight = dstY1 - dstY0;
+    // Only replace a full-image, low-resolution scene-to-window color blit.
+    // Unknown rectangles, same-size copies and downscales stay on the game's path.
+    if (srcX0 != 0 || srcY0 != 0 || srcWidth != sourceWidth || srcHeight != sourceHeight ||
+        dstWidth <= sourceWidth || dstHeight <= sourceHeight || dstWidth <= 0 || dstHeight <= 0)
+        return false;
+    if (!EnsureBlitUpscaleProgram(context)) return false;
+
+    GLint oldDrawFbo = 0, oldReadFbo = 0, oldProgram = 0, oldActiveTexture = 0;
+    GLint oldTexture0 = 0, oldViewport[4]{}, oldVao = 0, oldArrayBuffer = 0;
+    GLboolean oldColorMask[4]{};
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &oldDrawFbo);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldReadFbo);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &oldProgram);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &oldActiveTexture);
+    glGetIntegerv(GL_VIEWPORT, oldViewport);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &oldVao);
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &oldArrayBuffer);
+    glGetBooleanv(GL_COLOR_WRITEMASK, oldColorMask);
+    const GLboolean blend = glIsEnabled(GL_BLEND);
+    const GLboolean depth = glIsEnabled(GL_DEPTH_TEST);
+    const GLboolean stencil = glIsEnabled(GL_STENCIL_TEST);
+    const GLboolean cull = glIsEnabled(GL_CULL_FACE);
+    const GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
+
+    glActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &oldTexture0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glViewport(dstX0, dstY0, dstWidth, dstHeight);
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glUseProgram(g_blitUpscaleProgram);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, sourceTexture);
+    glUniform1i(g_blitUpscaleSampler, 0);
+    glUniform2f(g_blitUpscaleSize, static_cast<float>(sourceWidth), static_cast<float>(sourceHeight));
+    const GLint mode = config.upscaler == "nearest" ? 1 : (config.upscaler == "fsr_lite" ? 2 : 0);
+    glUniform1i(g_blitUpscaleMode, mode);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    glUseProgram(static_cast<GLuint>(oldProgram));
+    glBindVertexArray(static_cast<GLuint>(oldVao));
+    glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(oldArrayBuffer));
+    glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
+    glColorMask(oldColorMask[0], oldColorMask[1], oldColorMask[2], oldColorMask[3]);
+    if (blend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+    if (depth) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (stencil) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
+    if (cull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    if (scissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(oldTexture0));
+    glActiveTexture(static_cast<GLenum>(oldActiveTexture));
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(oldDrawFbo));
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(oldReadFbo));
+
+    const uint64_t count = ++g_blitUpscaleFrames;
+    if (count <= 8 || count % 300 == 0) {
+        __android_log_print(ANDROID_LOG_INFO, "UltraScaleGLES",
+            "Spatial upscale applied mode=%s source=%dx%d output=%dx%d frame=%llu",
+            config.upscaler.c_str(), sourceWidth, sourceHeight, dstWidth, dstHeight,
+            static_cast<unsigned long long>(count));
+    }
+    return true;
 }
 
 GLuint CompilePostShader(GLenum type, const char* source) {
