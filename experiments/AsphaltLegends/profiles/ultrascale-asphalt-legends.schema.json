@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultrascale.dev/schemas/asphalt-legends-profile-v1.json",
+  "title": "UltraScale Asphalt Legends profile",
+  "description": "Unified settings contract. This profile is not read by the retail game unless an authorized game adapter is installed.",
+  "type": "object",
+  "required": ["schemaVersion", "target", "renderScalePercent", "upscaler", "upscaleSharpnessPercent", "preset", "casEnabled", "lowLatency", "framePacing", "frameGeneration"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "target": {
+      "type": "object",
+      "required": ["packageName", "platform"],
+      "properties": {
+        "packageName": { "const": "com.gameloft.android.ANMP.GloftA9HM" },
+        "platform": { "const": "android" },
+        "testedGameVersion": { "type": ["string", "null"], "default": null },
+        "deviceProfile": { "type": "string", "default": "galaxy-m14-adreno-610" }
+      },
+      "additionalProperties": false
+    },
+    "renderScalePercent": { "type": "integer", "minimum": 50, "maximum": 100, "default": 75 },
+    "upscaler": {
+      "type": "string",
+      "enum": ["sgsr1_mobile", "sgsr2_temporal", "mwsr", "fsr_lite_6tap", "nearest", "bilinear"],
+      "default": "bilinear"
+    },
+    "upscaleSharpnessPercent": { "type": "integer", "minimum": 0, "maximum": 100, "default": 20 },
+    "preset": {
+      "type": "string",
+      "enum": ["ultra_performance", "performance", "balanced", "quality", "ultra_quality", "custom"],
+      "default": "custom"
+    },
+    "casEnabled": { "type": "boolean", "default": false },
+    "casSharpnessPercent": { "type": "integer", "minimum": 0, "maximum": 100, "default": 0 },
+    "lowLatency": { "type": "string", "enum": ["off", "on", "ultra"], "default": "off" },
+    "framePacing": { "type": "boolean", "default": true },
+    "frameGeneration": { "type": "string", "enum": ["off", "x2", "x3", "x4"], "default": "off" },
+    "frameGenerationAlgorithm": { "const": "pyramidal_lucas_kanade_optical_flow" },
+    "performanceOverlay": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "showFps": { "type": "boolean", "default": true },
+        "showOnePercentLow": { "type": "boolean", "default": true },
+        "showFrameTimeMs": { "type": "boolean", "default": true },
+        "showCpuUsage": { "type": "boolean", "default": true },
+        "showGpuUsage": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    },
+    "carDetail": { "type": "string", "enum": ["low", "medium", "high"], "default": "high" },
+    "carShadowQuality": { "type": "string", "enum": ["off", "low", "medium", "high"], "default": "high" },
+    "capabilityStatus": {
+      "type": "object",
+      "properties": {
+        "gameConfigReader": { "const": "unverified" },
+        "rendererHook": { "const": "unverified" },
+        "frameGeneration": { "const": "unavailable_until_motion_and_present_inputs_are_verified" },
+        "lowLatency": { "const": "unavailable_until_queue_control_is_verified" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

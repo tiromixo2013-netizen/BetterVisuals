@@ -1,0 +1,8 @@
+{
+  "_readme": "EXAMPLE FRAGMENT ONLY. Do not replace the full GameOptions_debug.json with this file. Historical candidate keys reported for the Urban GT19 / Gameloft Store 1.0.8 mod. Only edit a key after confirming it exists in that exact build's original config.",
+  "render_scene3DResolutionScale": 0.75,
+  "render_scene2DResolutionScale": 1.0,
+  "models_carHighestQualityLODIngame": 0,
+  "models_carHighestQualityLODMenu": 0,
+  "render_focusedVehicleShadowQuality": 3
+}
