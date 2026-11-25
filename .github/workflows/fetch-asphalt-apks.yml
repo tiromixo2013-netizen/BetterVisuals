@@ -4,11 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       download_url:
-        description: "Direct HTTPS URL to the official-signed 53.5.3a ARM64 APKS archive"
-        required: true
-        type: string
-      expected_sha256:
-        description: "Expected SHA-256 of the downloaded archive (required; do not guess)"
+        description: "Direct HTTPS URL to the 53.5.3a ARM64 APKS archive"
         required: true
         type: string
 
@@ -20,35 +16,32 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - name: Validate inputs
+      - name: Validate download URL
         shell: bash
-        run: |
-          python3 - <<'PY'
-          import os, re
-          from urllib.parse import urlparse
-          u = os.environ["DOWNLOAD_URL"]
-          h = os.environ["EXPECTED_SHA256"].strip().lower()
-          p = urlparse(u)
-          if p.scheme != "https" or not p.hostname:
-              raise SystemExit("Only a direct HTTPS URL is accepted")
-          if not re.fullmatch(r"[0-9a-f]{64}", h):
-              raise SystemExit("Expected SHA-256 must be exactly 64 hex characters")
-          PY
         env:
           DOWNLOAD_URL: ${{ inputs.download_url }}
-          EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          p = urlparse(os.environ["DOWNLOAD_URL"])
+          if p.scheme != "https" or not p.hostname:
+              raise SystemExit("Only a direct HTTPS URL is accepted")
+          PY
 
       - name: Download archive
         shell: bash
+        env:
+          DOWNLOAD_URL: ${{ inputs.download_url }}
         run: |
           set -euo pipefail
           curl --fail --location --retry 3 --retry-all-errors \
             --connect-timeout 30 --max-time 5400 \
-            "${{ inputs.download_url }}" -o Asphalt-53.5.3a-arm64.apks
+            "$DOWNLOAD_URL" -o Asphalt-53.5.3a-arm64.apks
           test "$(stat -c%s Asphalt-53.5.3a-arm64.apks)" -gt 1000000000
-          echo "${{ inputs.expected_sha256 }}  Asphalt-53.5.3a-arm64.apks" | sha256sum --check -
+          sha256sum Asphalt-53.5.3a-arm64.apks | tee archive-sha256.txt
 
-      - name: Check archive structure and inspect APK signatures
+      - name: Check archive and every APK signature
         shell: bash
         run: |
           set -euo pipefail
@@ -59,13 +52,16 @@ jobs:
           test "${#apks[@]}" -gt 0
           sudo apt-get update
           sudo apt-get install -y apksigner
+          expected="2173a248e2b11f9760b9167f398b183c92816cf8fc74afd3c64b22eddf50481d"
           : > signature-report.txt
           for apk in "${apks[@]}"; do
             echo "===== $apk =====" | tee -a signature-report.txt
-            apksigner verify --verbose --print-certs "$apk" 2>&1 | tee -a signature-report.txt
+            output="$(apksigner verify --verbose --print-certs "$apk" 2>&1)"
+            printf '%s\n' "$output" | tee -a signature-report.txt
+            cert="$(printf '%s\n' "$output" | awk '/Signer #1 certificate SHA-256 digest:/ {print $NF; exit}' | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+            test "$cert" = "$expected" || { echo "Unexpected or missing signer for $apk"; exit 1; }
           done
-          grep -qi "2173a248e2b11f9760b9167f398b183c92816cf8fc74afd3c64b22eddf50481d" signature-report.txt
-          echo "At least one APK matches the published Gameloft certificate fingerprint."
+          echo "All APK files match the published Gameloft certificate fingerprint."
 
       - name: Publish verified archive as a short-lived artifact
         uses: actions/upload-artifact@v4
@@ -73,6 +69,7 @@ jobs:
           name: asphalt-legends-53.5.3a-arm64-apks
           path: |
             Asphalt-53.5.3a-arm64.apks
+            archive-sha256.txt
             signature-report.txt
           retention-days: 3
           compression-level: 0
