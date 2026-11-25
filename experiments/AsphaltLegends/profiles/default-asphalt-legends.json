@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "target": {
+    "packageName": "com.gameloft.android.ANMP.GloftA9HM",
+    "platform": "android",
+    "testedGameVersion": null,
+    "deviceProfile": "galaxy-m14-adreno-610"
+  },
+  "renderScalePercent": 75,
+  "upscaler": "bilinear",
+  "upscaleSharpnessPercent": 20,
+  "preset": "custom",
+  "casEnabled": false,
+  "casSharpnessPercent": 0,
+  "lowLatency": "off",
+  "framePacing": true,
+  "frameGeneration": "off",
+  "frameGenerationAlgorithm": "pyramidal_lucas_kanade_optical_flow",
+  "performanceOverlay": {
+    "enabled": false,
+    "showFps": true,
+    "showOnePercentLow": true,
+    "showFrameTimeMs": true,
+    "showCpuUsage": true,
+    "showGpuUsage": true
+  },
+  "carDetail": "high",
+  "carShadowQuality": "high",
+  "capabilityStatus": {
+    "gameConfigReader": "unverified",
+    "rendererHook": "unverified",
+    "frameGeneration": "unavailable_until_motion_and_present_inputs_are_verified",
+    "lowLatency": "unavailable_until_queue_control_is_verified"
+  }
+}
